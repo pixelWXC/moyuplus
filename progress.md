@@ -171,6 +171,29 @@
   - `findings.md` updated
   - `progress.md` updated
 
+### Phase 4: 开发执行 / Phase 4 DOM 动态分页
+- **Status:** complete
+- Actions taken:
+  - 重读实施计划、设计规格、任务计划、发现记录和进度日志，确认 Phase 4 范围为替换阅读器临时分页估算、接入 DOM 实际高度测量、维护 pageHistory、响应 resize/font 变化。
+  - 读取 `src/reader/webviewHtml.ts`、`src/reader/ReaderViewProvider.ts` 和现有 reader 单测，确认 Phase 4 可以主要收敛在 Webview 脚本，主进程消息协议和 session 存储可复用。
+  - 按 TDD 流程先创建 `src/test/unit/readerWebviewHtml.test.ts`，约束 Webview 必须包含隐藏测量容器、`findMeasuredPageEnd`、`ResizeObserver`、`pageRendered` 回传，并禁止旧的 `estimatePageSize`/`charsPerLine` 固定字符估算。
+  - 执行 `npm test`，确认 RED 失败于旧 Webview HTML 缺少 `id="measure"`。
+  - 更新 `src/reader/webviewHtml.ts`，新增隐藏测量容器，复制正文宽度、字体、字号、字重、行高、字距、tab size 和内边距作为测量样式。
+  - 将旧的字符数估算分页替换为指数扩展 + 二分 DOM 测量，使用隐藏容器 `scrollHeight` 与阅读器可见高度比较，支持长中文/英文自动换行计入高度。
+  - 渲染当前页后回传 `pageRendered` 与 viewport 快照，使用签名去重避免重复 state/render 循环；下一页/上一页继续复用既有 `ReaderSession.pageHistory` 行为。
+  - 接入 `ResizeObserver` 与 window resize，尺寸变化后通过 requestAnimationFrame 重新测量分页；字体变化继续通过 session state 触发重渲染。
+  - 执行 `npm test`，确认 7 个测试文件、26 个测试全部通过。
+  - 执行 `npm run compile`，确认 TypeScript 编译通过。
+  - 用户完成 Phase 4 人工 Extension Development Host 验证，确认动态分页、上一页/下一页、长行换行、字体变化、侧边栏宽度变化和 Reload 恢复均无异常。
+  - 更新实施计划、任务计划、发现记录和进度日志。
+- Files created/modified:
+  - `src/reader/webviewHtml.ts` updated
+  - `src/test/unit/readerWebviewHtml.test.ts` created
+  - `docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md` updated
+  - `task_plan.md` updated
+  - `findings.md` updated
+  - `progress.md` updated
+
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
@@ -192,6 +215,10 @@
 | Phase 3 单元测试 | `npm test` | Reader Webview provider、package contribution 和既有测试通过 | 6 个测试文件、25 个测试通过，退出码 0 | pass |
 | Phase 3 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
 | Phase 2/3 人工验证 | Extension Development Host | Smoke Test、UTF-8/GBK 导入与显示、Reader 翻页、字体调整、Reload 恢复、失效文件检查/移除均通过 | 用户反馈所有人工验证项均通过 | pass |
+| Phase 4 RED 测试 | `npm test` | 因旧 Webview 未使用 DOM 测量分页失败 | Vitest 失败于 `expected ... to contain 'id="measure"'` | pass |
+| Phase 4 单元测试 | `npm test` | Webview DOM 分页合约和既有测试通过 | 7 个测试文件、26 个测试通过，退出码 0 | pass |
+| Phase 4 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
+| Phase 4 人工验证 | Extension Development Host | 动态分页、上一页/下一页、长行换行、字体变化、侧边栏宽度变化、Reload 恢复均无异常 | 用户反馈无异常 | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -207,11 +234,11 @@
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版已完成；当前目录已初始化 Git |
-| Where am I going? | 下一步执行 Phase 4，将阅读器分页替换为 Webview DOM 实际高度测量 |
+| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页已完成；当前目录已初始化 Git |
+| Where am I going? | 下一步执行 Phase 5，打通练习文件选择、物理行进度、Inline Completion ghost text 和状态栏 |
 | What's the goal? | 根据 `指导文档.md` 启动可执行的开发计划 |
-| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 2/3 已通过人工 Extension Development Host 验证 |
-| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版 |
+| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 4 可用 Webview HTML 合约测试防止动态分页退化为固定字符估算 |
+| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页 |
 
 ---
 *后续每完成阶段或遇到错误都会更新。*

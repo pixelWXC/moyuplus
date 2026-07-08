@@ -36,6 +36,7 @@ Phase 4: 开发执行
 - [x] Phase 1：数据模型与存储层
 - [x] Phase 2：TXT 文件服务与导入命令
 - [x] Phase 3：阅读器 Webview 基础版
+- [x] Phase 4：DOM 动态分页
 - **Status:** in_progress
 
 ### Phase 5: 验证与交付
@@ -84,7 +85,8 @@ Phase 4: 开发执行
 | Phase 1 使用独立 domain/storage 模块 | 让后续 UI、命令和 TXT 服务通过稳定接口读写状态，避免直接操作 VS Code state |
 | Phase 2 TXT 文件服务与导入命令已完成 | 已接入文件读取、编码、导入/移除命令和失效检查 |
 | Phase 3 阅读器 Webview 基础版已完成 | 已注册侧边栏 Webview View，接入导入文件列表、全文读取、翻页、字体大小和 ReaderSession 持久化 |
-| 下一步进入 Phase 4 DOM 动态分页 | 当前阅读器基础版使用临时页面估算，下一阶段需要替换为 Webview DOM 实际高度测量 |
+| Phase 4 DOM 动态分页已完成 | 阅读器 Webview 已使用隐藏 DOM 测量容器和二分测量替换固定字符估算，并接入 resize/font 变化后的重分页 |
+| 下一步进入 Phase 5 打字练习核心 | 阅读链路已完成首轮关键风险验证，下一阶段实现练习文件、ghost text 和状态栏 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已执行 `git init`，后续可按阶段提交 |
 
 ## Errors Encountered
@@ -104,4 +106,4 @@ Phase 4: 开发执行
 - 测试、错误和阶段动作记录在 `progress.md`。
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
-- 下一步：Phase 4 DOM 动态分页。
+- 下一步：Phase 5 打字练习核心。

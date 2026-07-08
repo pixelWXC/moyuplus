@@ -78,6 +78,21 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       word-break: break-word;
     }
 
+    .measure {
+      position: absolute;
+      top: 0;
+      left: -10000px;
+      box-sizing: border-box;
+      height: auto;
+      min-height: 0;
+      max-height: none;
+      overflow: visible;
+      visibility: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     .footer {
       display: grid;
       grid-template-columns: auto auto 1fr auto auto;
@@ -116,6 +131,7 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     <span id="source"></span>
   </div>
   <main id="reader" class="reader"></main>
+  <div id="measure" class="measure" aria-hidden="true"></div>
   <div class="footer">
     <button id="previousPage">Previous</button>
     <button id="nextPage">Next</button>
@@ -134,10 +150,13 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       title: document.getElementById('title'),
       source: document.getElementById('source'),
       reader: document.getElementById('reader'),
+      measure: document.getElementById('measure'),
       status: document.getElementById('status')
     };
     let payload = undefined;
     let currentRange = { startOffset: 0, endOffset: 0 };
+    let lastRenderedSignature = undefined;
+    let renderFrame = 0;
 
     window.addEventListener('message', (event) => {
       const message = event.data;
@@ -182,9 +201,14 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       vscode.postMessage({ type: 'ready' });
     });
 
-    window.addEventListener('resize', () => {
-      renderPage();
-    });
+    window.addEventListener('resize', scheduleRenderPage);
+
+    if (typeof ResizeObserver === 'function') {
+      const readerResizeObserver = new ResizeObserver(() => {
+        scheduleRenderPage();
+      });
+      readerResizeObserver.observe(elements.reader);
+    }
 
     function render() {
       renderFileSelect();
@@ -220,6 +244,7 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
         elements.reader.className = 'reader error';
         elements.reader.textContent = payload.error;
         elements.status.textContent = payload.error;
+        lastRenderedSignature = undefined;
         return;
       }
 
@@ -228,6 +253,7 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
         elements.reader.textContent = 'No imported TXT files. Run "MoyuPlus: Import TXT" first.';
         elements.status.textContent = '';
         currentRange = { startOffset: 0, endOffset: 0 };
+        lastRenderedSignature = undefined;
         return;
       }
 
@@ -236,41 +262,116 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
         elements.reader.textContent = 'Select a TXT file to start reading.';
         elements.status.textContent = '';
         currentRange = { startOffset: 0, endOffset: 0 };
+        lastRenderedSignature = undefined;
         return;
       }
 
       const startOffset = clamp(session.offset, 0, text.length);
-      const pageSize = estimatePageSize(session.fontSize, session.lineHeight);
-      const endOffset = findPageEnd(text, startOffset, pageSize);
-      currentRange = { startOffset, endOffset };
       elements.reader.className = 'reader';
+      syncMeasureStyles();
+      const endOffset = findMeasuredPageEnd(text, startOffset);
+      currentRange = { startOffset, endOffset };
       elements.reader.textContent = text.slice(startOffset, endOffset);
       const percent = text.length ? Math.round((startOffset / text.length) * 100) : 0;
       elements.status.className = 'status';
       elements.status.textContent = percent + '% · ' + startOffset + '/' + text.length;
+      postPageRendered(currentRange);
     }
 
-    function estimatePageSize(fontSize, lineHeight) {
-      const width = Math.max(elements.reader.clientWidth - 20, 160);
-      const height = Math.max(elements.reader.clientHeight - 20, 180);
-      const charsPerLine = Math.max(12, Math.floor(width / Math.max(fontSize * 0.56, 1)));
-      const visibleLines = Math.max(6, Math.floor(height / Math.max(fontSize * lineHeight, 1)));
-      return Math.max(1, charsPerLine * visibleLines);
+    function scheduleRenderPage() {
+      if (renderFrame) {
+        return;
+      }
+
+      renderFrame = requestAnimationFrame(() => {
+        renderFrame = 0;
+        renderPage();
+      });
     }
 
-    function findPageEnd(text, startOffset, pageSize) {
+    function syncMeasureStyles() {
+      const computed = window.getComputedStyle(elements.reader);
+      elements.measure.style.width = Math.max(elements.reader.clientWidth, 1) + 'px';
+      elements.measure.style.padding = computed.padding;
+      elements.measure.style.fontFamily = computed.fontFamily;
+      elements.measure.style.fontSize = computed.fontSize;
+      elements.measure.style.fontWeight = computed.fontWeight;
+      elements.measure.style.fontStyle = computed.fontStyle;
+      elements.measure.style.lineHeight = computed.lineHeight;
+      elements.measure.style.letterSpacing = computed.letterSpacing;
+      elements.measure.style.tabSize = computed.tabSize;
+    }
+
+    function findMeasuredPageEnd(text, startOffset) {
       if (startOffset >= text.length) {
         return text.length;
       }
-      const hardEnd = Math.min(text.length, startOffset + pageSize);
-      if (hardEnd === text.length) {
-        return hardEnd;
+
+      const maxHeight = Math.max(elements.reader.clientHeight, 1);
+      let high = Math.min(text.length, startOffset + 256);
+      let best = startOffset;
+
+      while (high < text.length && measureRangeFits(text, startOffset, high, maxHeight)) {
+        best = high;
+        high = Math.min(text.length, startOffset + Math.max((high - startOffset) * 2, 1));
       }
-      const newline = text.lastIndexOf('\\n', hardEnd);
-      if (newline > startOffset + Math.floor(pageSize * 0.5)) {
+
+      if (high === text.length && measureRangeFits(text, startOffset, high, maxHeight)) {
+        return text.length;
+      }
+
+      let low = best + 1;
+      while (low <= high) {
+        const middle = low + Math.floor((high - low) / 2);
+        if (measureRangeFits(text, startOffset, middle, maxHeight)) {
+          best = middle;
+          low = middle + 1;
+        } else {
+          high = middle - 1;
+        }
+      }
+
+      if (best <= startOffset) {
+        return Math.min(text.length, startOffset + 1);
+      }
+
+      return refinePageEndToBoundary(text, startOffset, best);
+    }
+
+    function measureRangeFits(text, startOffset, endOffset, maxHeight) {
+      elements.measure.textContent = text.slice(startOffset, endOffset);
+      return elements.measure.scrollHeight <= maxHeight;
+    }
+
+    function refinePageEndToBoundary(text, startOffset, endOffset) {
+      const minimum = startOffset + Math.max(1, Math.floor((endOffset - startOffset) * 0.6));
+      const newline = text.lastIndexOf('\\n', endOffset - 1);
+      if (newline >= minimum) {
         return newline + 1;
       }
-      return hardEnd;
+
+      for (let index = endOffset - 1; index >= minimum; index--) {
+        if (/[\t .,;:!?)]/.test(text[index])) {
+          return index + 1;
+        }
+      }
+
+      return endOffset;
+    }
+
+    function postPageRendered(range) {
+      const viewportSnapshot = getViewportSnapshot();
+      const signature = JSON.stringify({ range, viewportSnapshot });
+      if (signature === lastRenderedSignature) {
+        return;
+      }
+
+      lastRenderedSignature = signature;
+      vscode.postMessage({
+        type: 'pageRendered',
+        range,
+        viewportSnapshot
+      });
     }
 
     function getViewportSnapshot() {

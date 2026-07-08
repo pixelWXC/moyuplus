@@ -132,6 +132,17 @@
 - 上一页能回到历史页面。
 - 改变字体或侧边栏宽度后仍恢复到 offset 附近。
 
+执行状态：
+
+- 2026-07-08 已将阅读器 Webview 的临时字符数估算分页替换为 DOM 实际高度测量分页。
+- 已在 Webview 中创建隐藏测量容器，并同步正文宽度、字体、字号、字重、行高、字距、tab size 和内边距。
+- 已实现从当前 offset 开始的指数扩展 + 二分测量，使用 `scrollHeight` 与正文可见高度比较，长中文/英文自动换行会计入高度。
+- 已在页面渲染后回传 `pageRendered`，主进程继续保存 `ReaderSession.offset`、`viewportSnapshot` 和 `pageHistory`；上一页仍优先使用历史页范围。
+- 已接入 `ResizeObserver` 和 window resize，侧边栏尺寸变化后重新测量分页；字体变化通过 session state 重新渲染并恢复到当前 offset 附近。
+- 已新增 `src/test/unit/readerWebviewHtml.test.ts`，约束 Webview 必须使用 DOM 测量分页并禁止回退到旧的固定字符估算。
+- 已通过自动验证：`npm test`、`npm run compile`。
+- 2026-07-08 已通过人工 Extension Development Host 验证：动态分页、上一页/下一页、长行换行、字体变化、侧边栏宽度变化和 Reload 恢复均无异常。
+
 ## Phase 5: 打字练习核心
 
 目标：打通练习文件、行号、ghost text 和状态栏。
@@ -216,7 +227,7 @@
 2. [x] Phase 1 数据模型与存储层。
 3. [x] Phase 2 TXT 文件服务与导入命令。
 4. [x] Phase 3 阅读器基础版。
-5. [ ] Phase 4 动态分页。
+5. [x] Phase 4 动态分页。
 
 原因：先完成阅读链路可以尽早验证 Webview DOM 分页，这是整个项目最大的不确定性。打字练习依赖同一套 TXT 文件和状态层，放在阅读链路之后实现更稳。
 
@@ -232,4 +243,4 @@
 
 ## 下一步执行入口
 
-下一步进入 Phase 4：将阅读器基础版中的临时分页估算替换为 Webview DOM 实际高度测量分页，并完善 resize/font change 后的 offset 恢复。
+下一步进入 Phase 5：实现打字练习核心，包括练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏显示。
