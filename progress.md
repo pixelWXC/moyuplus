@@ -115,6 +115,62 @@
   - `findings.md` updated
   - `docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md` updated
 
+### Phase 4: 开发执行 / Phase 2 TXT 文件服务与导入命令
+- **Status:** complete
+- Actions taken:
+  - 重读实施计划、设计规格、任务计划、发现记录和进度日志，确认 Phase 2 范围为 TXT 解码、来源识别、导入/移除命令、失效检查、全文读取和物理行读取 API。
+  - 读取现有 `models.ts`、`txtLibraryStore.ts`、`workspaceSessionStore.ts`、`extension.ts` 和单元测试，确认 Phase 2 应新增 TXT 服务层与命令注册层，继续保持 `extension.ts` 只做组合注册。
+  - 按 TDD 流程先创建 `src/test/unit/txtFileService.test.ts` 和 `src/test/unit/txtCommands.test.ts`，覆盖 UTF-8/GBK 解码、来源识别、全文读取、物理行读取、文件失效检查、移除记录和命令注册/导入/移除流程。
+  - 执行 `npm test`，确认 RED 失败于缺少 `src/txt/txtFileService`、未注册 Phase 2 命令和 shim 尚无 URI/open dialog 能力。
+  - 创建 `src/txt/txtFileService.ts`，实现 TXT 导入、UTF-8/GBK 解码、workspace/external 来源判断、全文读取、物理行切分、失效文件检查和移除导入记录。
+  - 创建 `src/commands/txtCommands.ts`，注册 `moyuplus.importTxt`、`moyuplus.removeImportedTxt`、`moyuplus.checkImportedTxtFiles`，并接入 VS Code open dialog、quick pick 和提示入口。
+  - 更新 `src/extension.ts` 和 `package.json`，将 Phase 2 命令接入 activation events 与 contributes commands。
+  - 扩展 VS Code 测试 shim，支持 `Uri.file`、workspace folders、open dialog、quick pick、warning/error messages。
+  - 执行 `npm test`，确认 4 个测试文件、20 个测试全部通过。
+  - 执行 `npm run compile`，确认 TypeScript 编译通过。
+- Files created/modified:
+  - `src/txt/txtFileService.ts` created
+  - `src/commands/txtCommands.ts` created
+  - `src/test/unit/txtFileService.test.ts` created
+  - `src/test/unit/txtCommands.test.ts` created
+  - `src/extension.ts` updated
+  - `src/test/unit/extension.test.ts` updated
+  - `src/test/shims/vscode.ts` updated
+  - `package.json` updated
+  - `docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md` updated
+  - `task_plan.md` updated
+  - `findings.md` updated
+  - `progress.md` updated
+
+### Phase 4: 开发执行 / Phase 3 阅读器 Webview 基础版
+- **Status:** complete
+- Actions taken:
+  - 重读实施计划、设计规格、任务计划、发现记录和进度日志，确认 Phase 3 范围为 Webview View Provider、阅读器基础 HTML/CSS/JS、消息协议、已导入 TXT 选择、文本显示、上一页/下一页、字体按钮和 `ReaderSession` offset 持久化。
+  - 按 TDD 流程先创建 `src/test/unit/readerViewProvider.test.ts` 和 `src/test/unit/packageContributions.test.ts`，并更新 activation 测试，覆盖 Webview provider 注册、package 视图贡献、Webview bootstrap、文件选择、翻页历史、offset 保存和字体大小保存。
+  - 执行 `npm test`，确认 RED 失败于缺少 `../../reader/readerMessages` 和 `../../reader/ReaderViewProvider`。
+  - 创建 `src/reader/readerMessages.ts`，定义 `moyuplus.readerView` 和 Webview/扩展主进程消息协议。
+  - 创建 `src/reader/ReaderViewProvider.ts`，实现 Webview View Provider、状态 bootstrap、选择文件、读取全文、下一页/上一页、字体大小更新、错误消息和 workspace `ReaderSession` 持久化。
+  - 创建 `src/reader/webviewHtml.ts`，提供阅读器基础 HTML/CSS/JS，支持导入文件下拉选择、文本显示、上一页/下一页、字体增大/减小和刷新。
+  - 更新 `src/extension.ts` 和 `package.json`，将 reader view 接入 activation 与 `contributes.views.explorer`。
+  - 扩展 VS Code 测试 shim，支持 `registerWebviewViewProvider`、Webview HTML/options、`postMessage`、`onDidReceiveMessage` 和测试侧消息模拟。
+  - 执行 `npm test`，初次 GREEN 尝试发现 Webview message callback 丢弃 Promise，测试无法等待异步 session 写入；改为返回 `handleMessage` Promise 后通过。
+  - 执行 `npm test`，确认 6 个测试文件、25 个测试全部通过。
+  - 执行 `npm run compile`，确认 TypeScript 编译通过。
+- Files created/modified:
+  - `src/reader/readerMessages.ts` created
+  - `src/reader/ReaderViewProvider.ts` created
+  - `src/reader/webviewHtml.ts` created
+  - `src/test/unit/readerViewProvider.test.ts` created
+  - `src/test/unit/packageContributions.test.ts` created
+  - `src/extension.ts` updated
+  - `src/test/unit/extension.test.ts` updated
+  - `src/test/shims/vscode.ts` updated
+  - `package.json` updated
+  - `docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md` updated
+  - `task_plan.md` updated
+  - `findings.md` updated
+  - `progress.md` updated
+
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
@@ -129,6 +185,13 @@
 | Phase 1 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
 | Git 初始化 | `git init` | 当前目录成为 Git 仓库 | 成功初始化 `.git/` | pass |
 | Git 状态检查 | `git status --short` | 能列出未跟踪文件 | 项目文件均显示为未跟踪 | pass |
+| Phase 2 RED 测试 | `npm test` | 因缺少 TXT 服务和命令注册失败 | Vitest 失败于缺少 `../../txt/txtFileService`、只注册 smoke command、shim 无 `Uri.file` | pass |
+| Phase 2 单元测试 | `npm test` | TXT 服务和命令测试通过 | 4 个测试文件、20 个测试通过，退出码 0 | pass |
+| Phase 2 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
+| Phase 3 RED 测试 | `npm test` | 因缺少 reader message/provider 模块失败 | Vitest 失败于缺少 `../../reader/readerMessages` 和 `../../reader/ReaderViewProvider` | pass |
+| Phase 3 单元测试 | `npm test` | Reader Webview provider、package contribution 和既有测试通过 | 6 个测试文件、25 个测试通过，退出码 0 | pass |
+| Phase 3 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
+| Phase 2/3 人工验证 | Extension Development Host | Smoke Test、UTF-8/GBK 导入与显示、Reader 翻页、字体调整、Reload 恢复、失效文件检查/移除均通过 | 用户反馈所有人工验证项均通过 | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -138,15 +201,17 @@
 | 2026-07-08 | `git status --short` 返回当前目录不是 Git 仓库 | 1 | 记录项目当前状态，开发计划暂不依赖 Git |
 | 2026-07-08 | 设计文档 commit 步骤不可执行 | 1 | 当前目录不是 Git 仓库，未强行初始化 |
 | 2026-07-08 | `npm install` 报告 node_modules 清理目录 EBUSY 警告 | 1 | 依赖安装成功，后续编译和测试通过，未影响 Phase 0 |
+| 2026-07-08 | Phase 3 测试初次 GREEN 尝试中 Webview message callback 丢弃 Promise，导致测试无法等待异步状态写入 | 1 | 让 `onDidReceiveMessage` 回调返回 `handleMessage` Promise 后，测试通过 |
+| 2026-07-08 | 人工验证中 `MOYUPLUS READER` 显示“没有可提供视图数据的已注册数据提供程序” | 1 | `package.json` 的 reader view contribution 缺少 `type: "webview"`，VS Code 将其当作 Tree View；已补测试并添加 `type: "webview"` |
 
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架和 Phase 1 数据模型/存储层已完成；当前目录已初始化 Git |
-| Where am I going? | 下一步执行 Phase 2，实现 TXT 文件服务与导入命令 |
+| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版已完成；当前目录已初始化 Git |
+| Where am I going? | 下一步执行 Phase 4，将阅读器分页替换为 Webview DOM 实际高度测量 |
 | What's the goal? | 根据 `指导文档.md` 启动可执行的开发计划 |
-| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；当前仍未做人工 Extension Development Host 启动验证 |
-| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架和 Phase 1 数据模型与存储层 |
+| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 2/3 已通过人工 Extension Development Host 验证 |
+| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版 |
 
 ---
 *后续每完成阶段或遇到错误都会更新。*

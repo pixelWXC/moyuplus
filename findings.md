@@ -28,6 +28,14 @@
 - Phase 1 已完成 domain/storage 边界：`models.ts` 提供核心类型、默认值和归一化保护，`txtLibraryStore` 负责全局 TXT 索引，`workspaceSessionStore` 负责 workspace 阅读/练习 session。
 - 已确认通过内存 Memento 可单元测试 VS Code `globalState`/`workspaceState` 风格的读写逻辑，不需要启动 VS Code。
 - 损坏或旧形状状态采用“读时恢复默认/过滤非法项”的策略，不抛出异常阻断插件启动。
+- Phase 2 入口已确认：新增 TXT 服务层应接入 Phase 1 的 `TxtLibraryStore`，提供 UTF-8/GBK 解码、workspace/external 来源判断、文件失效检查、全文读取和物理行读取；命令层负责 VS Code UI 交互与 store 更新。
+- Phase 2 已完成：`TxtFileService` 提供 TXT 导入、读取、物理行切分、失效检查和移除记录；命令层注册 `moyuplus.importTxt`、`moyuplus.removeImportedTxt`、`moyuplus.checkImportedTxtFiles`。
+- UTF-8 解码使用 fatal `TextDecoder`，避免非法字节被替换字符静默吞掉；GBK 解码使用已安装的 `iconv-lite`。
+- 导入文件 ID 使用 file URI 的 SHA-1 派生值，同一路径重复导入会更新现有记录而不是创建重复项。
+- Phase 3 已完成阅读器基础链路：`ReaderViewProvider` 复用 `TxtFileService.readFullText` 和 `WorkspaceSessionStore`，Webview 负责基础展示与交互，扩展主进程负责文件读取和 session 持久化。
+- 阅读器基础版已支持从已导入 TXT 列表选择阅读文件、显示全文切片、上一页/下一页、字体大小调整，并保存 `ReaderSession.fileId`、`offset`、`fontSize`、`viewportSnapshot` 和 `pageHistory`。
+- Phase 3 的分页仍是基础估算，用于跑通阅读链路；Phase 4 必须替换为基于 Webview DOM 实际高度测量的动态分页。
+- 2026-07-08 人工验证确认 Phase 2/3 基础链路可用：Smoke Test、UTF-8/GBK 导入与显示、Reader 翻页、字体调整、Reload 恢复、失效文件检查/移除均通过。
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -44,6 +52,9 @@
 | Reader/Typing session 分 key 存储 | 满足阅读状态与练习状态互不影响的核心约束 |
 | 下一步进入 Phase 2 TXT 文件服务与导入命令 | 存储和模型已可承载导入文件索引与 session 状态 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已初始化为 Git 仓库 |
+| Phase 2 采用服务层 + 命令层拆分 | 文件读取、解码和路径判断可脱离 VS Code UI 单元测试；命令层只承担 `showOpenDialog`、提示和注册职责 |
+| Phase 3 可以直接复用 `TxtFileService.readFullText` | 阅读器基础版不需要重新处理编码或文件失效判断 |
+| Phase 3 采用 `readerMessages` + `ReaderViewProvider` + `webviewHtml` 三段拆分 | 消息协议、扩展主进程状态处理和 Webview UI 分离，便于 Phase 4 替换分页算法而不改存储/文件读取边界 |
 
 ## Issues Encountered
 | Issue | Resolution |
@@ -53,6 +64,8 @@
 | Phase 0/Phase 1 时当前目录不是 Git 仓库 | 当时计划不依赖 Git；2026-07-08 用户要求启动 Git 后已执行 `git init` |
 | 设计文档无法按流程提交 commit | 当时当前目录不是 Git 仓库，已跳过 commit 并记录；后续可按用户要求提交 |
 | `npm install` 报告清理 node_modules 目录 EBUSY 警告 | 安装实际成功，`npm run compile` 和 `npm test` 后续均通过 |
+| Phase 3 测试初次 GREEN 尝试中 Webview 消息异步处理未被测试等待 | `onDidReceiveMessage` 回调返回 `handleMessage` Promise 后，`receiveMessage` 可等待 session 写入完成 |
+| 人工验证中 `MOYUPLUS READER` 显示“没有可提供视图数据的已注册数据提供程序” | `package.json` 中 Webview View contribution 必须声明 `type: "webview"`；缺失时 VS Code 会按 Tree View 处理并寻找 TreeDataProvider |
 
 ## Resources
 - [指导文档.md](D:/wxc_work_file/projects/harnessplace/moyuplus/指导文档.md)
@@ -63,7 +76,16 @@
 - [src/domain/models.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/domain/models.ts)
 - [src/storage/txtLibraryStore.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/storage/txtLibraryStore.ts)
 - [src/storage/workspaceSessionStore.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/storage/workspaceSessionStore.ts)
+- [src/txt/txtFileService.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/txt/txtFileService.ts)
+- [src/commands/txtCommands.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/commands/txtCommands.ts)
+- [src/reader/readerMessages.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/readerMessages.ts)
+- [src/reader/ReaderViewProvider.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/ReaderViewProvider.ts)
+- [src/reader/webviewHtml.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/webviewHtml.ts)
 - [src/test/unit/storage.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/storage.test.ts)
+- [src/test/unit/txtFileService.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/txtFileService.test.ts)
+- [src/test/unit/txtCommands.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/txtCommands.test.ts)
+- [src/test/unit/readerViewProvider.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/readerViewProvider.test.ts)
+- [src/test/unit/packageContributions.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/packageContributions.test.ts)
 - `C:\Users\Purvar\.agents\skills\ok-skills\planning-with-files\SKILL.md`
 - `C:\Users\Purvar\.agents\skills\ok-skills\brainstorming\SKILL.md`
 

@@ -34,7 +34,8 @@ Phase 4: 开发执行
 - [x] 为 smoke-test command 增加最小单元测试
 - [x] 增量验证：`npm run compile` 和 `npm test` 通过
 - [x] Phase 1：数据模型与存储层
-- [ ] Phase 2：TXT 文件服务与导入命令
+- [x] Phase 2：TXT 文件服务与导入命令
+- [x] Phase 3：阅读器 Webview 基础版
 - **Status:** in_progress
 
 ### Phase 5: 验证与交付
@@ -57,8 +58,8 @@ Phase 4: 开发执行
 ### Recommended Path: MVP 垂直切片
 1. [x] 初始化 TypeScript VS Code extension 项目骨架。
 2. [x] 建立核心数据模型和本地存储层：导入 TXT 文件索引、全局文件列表、workspace 级阅读/练习状态。
-3. [ ] 实现文件导入与文件列表：支持工作区内外 TXT、UTF-8/GBK 编码、失效文件处理。
-4. 实现侧边栏阅读器 Webview：先完成基本渲染、字体设置、上一页/下一页，再接入 DOM 测量动态分页。
+3. [x] 实现文件导入与文件列表：支持工作区内外 TXT、UTF-8/GBK 编码、失效文件处理。
+4. [x] 实现侧边栏阅读器 Webview：先完成基本渲染、字体设置、上一页/下一页，再接入 DOM 测量动态分页。
 5. 实现打字练习核心：练习文件选择、物理行进度、行内 ghost text、状态栏显示。
 6. 实现 Enter/Tab 路由与快捷键设置：优先保护 VS Code 原生行为，再启用组合动作。
 7. 补齐测试、异常处理和用户提示。
@@ -81,7 +82,9 @@ Phase 4: 开发执行
 | 设计规格和实施计划已落盘 | 用户确认 MVP 路线后，已生成设计规格和分阶段实施计划 |
 | Phase 0 采用 TypeScript + Vitest | 用最小测试先约束扩展 activation 和 smoke command，再实现可编译骨架 |
 | Phase 1 使用独立 domain/storage 模块 | 让后续 UI、命令和 TXT 服务通过稳定接口读写状态，避免直接操作 VS Code state |
-| 下一步进入 Phase 2 TXT 文件服务与导入命令 | 存储边界已完成，可以开始接入文件读取、编码和导入流程 |
+| Phase 2 TXT 文件服务与导入命令已完成 | 已接入文件读取、编码、导入/移除命令和失效检查 |
+| Phase 3 阅读器 Webview 基础版已完成 | 已注册侧边栏 Webview View，接入导入文件列表、全文读取、翻页、字体大小和 ReaderSession 持久化 |
+| 下一步进入 Phase 4 DOM 动态分页 | 当前阅读器基础版使用临时页面估算，下一阶段需要替换为 Webview DOM 实际高度测量 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已执行 `git init`，后续可按阶段提交 |
 
 ## Errors Encountered
@@ -92,6 +95,8 @@ Phase 4: 开发执行
 | `git status --short` 返回当前目录不是 Git 仓库 | 1 | 记录现状，后续计划不依赖 Git |
 | 设计流程中的 commit 步骤不可执行 | 1 | 当前目录不是 Git 仓库，已记录原因，未强行初始化 Git |
 | `npm install` 报告 node_modules 清理目录 EBUSY 警告 | 1 | 依赖安装成功，后续 `npm run compile` 和 `npm test` 均通过；该警告不影响当前 Phase 0 |
+| Phase 3 reader 测试初次 GREEN 尝试中，Webview message callback 丢弃 Promise，导致测试无法等待异步状态写入 | 1 | 让 `onDidReceiveMessage` 回调返回 `handleMessage` Promise，测试和状态写入均可可靠等待 |
+| 人工验证中 reader 视图被 VS Code 当作 Tree View，显示无数据提供程序 | 1 | 补充 package contribution 测试并在 `package.json` 添加 `type: "webview"` |
 
 ## Notes
 - 每完成一个阶段后更新本文件。
@@ -99,4 +104,4 @@ Phase 4: 开发执行
 - 测试、错误和阶段动作记录在 `progress.md`。
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
-- 下一步：Phase 2 TXT 文件服务与导入命令。
+- 下一步：Phase 4 DOM 动态分页。

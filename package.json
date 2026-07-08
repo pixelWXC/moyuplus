@@ -12,7 +12,11 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:moyuplus.smokeTest"
+    "onCommand:moyuplus.smokeTest",
+    "onCommand:moyuplus.importTxt",
+    "onCommand:moyuplus.removeImportedTxt",
+    "onCommand:moyuplus.checkImportedTxtFiles",
+    "onView:moyuplus.readerView"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -20,8 +24,29 @@
       {
         "command": "moyuplus.smokeTest",
         "title": "MoyuPlus: Smoke Test"
+      },
+      {
+        "command": "moyuplus.importTxt",
+        "title": "MoyuPlus: Import TXT"
+      },
+      {
+        "command": "moyuplus.removeImportedTxt",
+        "title": "MoyuPlus: Remove Imported TXT"
+      },
+      {
+        "command": "moyuplus.checkImportedTxtFiles",
+        "title": "MoyuPlus: Check Imported TXT Files"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "moyuplus.readerView",
+          "type": "webview",
+          "name": "MoyuPlus Reader"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p ./",

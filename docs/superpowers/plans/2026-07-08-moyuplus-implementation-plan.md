@@ -77,6 +77,13 @@
 - 可读取 UTF-8/GBK。
 - 删除或移动原文件后有明确错误，不静默失败。
 
+执行状态：
+
+- 2026-07-08 已完成 `TxtFileService`，支持 TXT 导入索引、UTF-8/GBK 解码、workspace/external 来源判断、全文读取、物理行读取、失效文件检查和移除导入记录。
+- 已注册 `moyuplus.importTxt`、`moyuplus.removeImportedTxt`、`moyuplus.checkImportedTxtFiles` 命令，并接入扩展 activation。
+- 已通过自动验证：`npm test`、`npm run compile`。
+- 2026-07-08 已通过人工 Extension Development Host 验证：Smoke Test、UTF-8/GBK 导入和显示、失效文件检查与移除。
+
 ## Phase 3: 阅读器 Webview 基础版
 
 目标：先让侧边栏阅读器跑起来。
@@ -95,6 +102,15 @@
 - 能选择已导入 TXT 作为阅读文件。
 - 能显示文本内容。
 - 关闭/重开后能恢复阅读文件和 offset。
+
+执行状态：
+
+- 2026-07-08 已完成 `ReaderViewProvider`，注册 `moyuplus.readerView` Webview View Provider，并接入 VS Code Explorer 侧边栏视图贡献。
+- 已创建阅读器 Webview HTML/CSS/JS，支持导入文件下拉选择、文本显示、上一页/下一页、字体增大/减小和刷新。
+- 已建立 Webview 与扩展主进程消息协议：`ready`、`selectFile`、`nextPage`、`previousPage`、`pageRendered`、`setFontSize`。
+- 已将阅读文件、offset、字体大小、viewport 快照和 pageHistory 保存到 workspace `ReaderSession`。
+- 已通过自动验证：`npm test`、`npm run compile`。
+- 2026-07-08 已通过人工 Extension Development Host 验证：侧边栏 Webview 打开、选择文件、文本显示、上一页/下一页、字体调整、Reload 后恢复文件/offset/font。
 
 ## Phase 4: DOM 动态分页
 
@@ -198,9 +214,9 @@
 
 1. [x] Phase 0 初始化插件骨架。
 2. [x] Phase 1 数据模型与存储层。
-3. [ ] Phase 2 TXT 文件服务与导入命令。
-4. Phase 3 阅读器基础版。
-5. Phase 4 动态分页。
+3. [x] Phase 2 TXT 文件服务与导入命令。
+4. [x] Phase 3 阅读器基础版。
+5. [ ] Phase 4 动态分页。
 
 原因：先完成阅读链路可以尽早验证 Webview DOM 分页，这是整个项目最大的不确定性。打字练习依赖同一套 TXT 文件和状态层，放在阅读链路之后实现更稳。
 
@@ -216,4 +232,4 @@
 
 ## 下一步执行入口
 
-下一步进入 Phase 2：实现 TXT 文件服务与导入命令，接入 Phase 1 的全局 TXT 文件索引。
+下一步进入 Phase 4：将阅读器基础版中的临时分页估算替换为 Webview DOM 实际高度测量分页，并完善 resize/font change 后的 offset 恢复。
