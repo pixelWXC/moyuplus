@@ -6,6 +6,7 @@ import {
   CHECK_IMPORTED_TXT_COMMAND_ID,
   IMPORT_TXT_COMMAND_ID,
   REMOVE_IMPORTED_TXT_COMMAND_ID,
+  START_TYPING_PRACTICE_COMMAND_ID,
   activate
 } from '../../extension';
 import {
@@ -49,17 +50,21 @@ describe('TXT command registration', () => {
   it('registers import, remove, and invalid-file check commands on activation', () => {
     const context = {
       globalState: new MemoryMemento(),
+      workspaceState: new MemoryMemento(),
       subscriptions: [] as Disposable[]
     };
 
     activate(context);
 
-    expect(commands.registeredCommandIds()).toEqual([
-      'moyuplus.smokeTest',
-      IMPORT_TXT_COMMAND_ID,
-      REMOVE_IMPORTED_TXT_COMMAND_ID,
-      CHECK_IMPORTED_TXT_COMMAND_ID
-    ]);
+    expect(commands.registeredCommandIds()).toEqual(
+      expect.arrayContaining([
+        'moyuplus.smokeTest',
+        IMPORT_TXT_COMMAND_ID,
+        REMOVE_IMPORTED_TXT_COMMAND_ID,
+        CHECK_IMPORTED_TXT_COMMAND_ID,
+        START_TYPING_PRACTICE_COMMAND_ID
+      ])
+    );
   });
 
   it('imports a selected TXT file with the chosen encoding', async () => {
@@ -68,6 +73,7 @@ describe('TXT command registration', () => {
     await writeFile(filePath, 'picked', 'utf8');
     const context = {
       globalState: new MemoryMemento(),
+      workspaceState: new MemoryMemento(),
       subscriptions: [] as Disposable[]
     };
     workspace.workspaceFolders = [{ uri: Uri.file(workspaceDir) }];
@@ -91,6 +97,7 @@ describe('TXT command registration', () => {
     await writeFile(filePath, 'picked', 'utf8');
     const context = {
       globalState: new MemoryMemento(),
+      workspaceState: new MemoryMemento(),
       subscriptions: [] as Disposable[]
     };
     window.openDialogResult = [Uri.file(filePath)];

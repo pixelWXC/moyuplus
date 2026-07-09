@@ -4,7 +4,7 @@
 根据 `指导文档.md` 梳理并启动项目开发计划，形成可持续更新的阶段计划、发现记录和进度日志；在用户确认设计前不进行业务代码实现。
 
 ## Current Phase
-Phase 4: 开发执行
+Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动验证和人工验证）
 
 ## Phases
 
@@ -37,6 +37,7 @@ Phase 4: 开发执行
 - [x] Phase 2：TXT 文件服务与导入命令
 - [x] Phase 3：阅读器 Webview 基础版
 - [x] Phase 4：DOM 动态分页
+- [x] Phase 5：打字练习核心
 - **Status:** in_progress
 
 ### Phase 5: 验证与交付
@@ -61,7 +62,7 @@ Phase 4: 开发执行
 2. [x] 建立核心数据模型和本地存储层：导入 TXT 文件索引、全局文件列表、workspace 级阅读/练习状态。
 3. [x] 实现文件导入与文件列表：支持工作区内外 TXT、UTF-8/GBK 编码、失效文件处理。
 4. [x] 实现侧边栏阅读器 Webview：先完成基本渲染、字体设置、上一页/下一页，再接入 DOM 测量动态分页。
-5. 实现打字练习核心：练习文件选择、物理行进度、行内 ghost text、状态栏显示。
+5. [x] 实现打字练习核心：练习文件选择、物理行进度、行内 ghost text、状态栏显示。
 6. 实现 Enter/Tab 路由与快捷键设置：优先保护 VS Code 原生行为，再启用组合动作。
 7. 补齐测试、异常处理和用户提示。
 
@@ -86,7 +87,8 @@ Phase 4: 开发执行
 | Phase 2 TXT 文件服务与导入命令已完成 | 已接入文件读取、编码、导入/移除命令和失效检查 |
 | Phase 3 阅读器 Webview 基础版已完成 | 已注册侧边栏 Webview View，接入导入文件列表、全文读取、翻页、字体大小和 ReaderSession 持久化 |
 | Phase 4 DOM 动态分页已完成 | 阅读器 Webview 已使用隐藏 DOM 测量容器和二分测量替换固定字符估算，并接入 resize/font 变化后的重分页 |
-| 下一步进入 Phase 5 打字练习核心 | 阅读链路已完成首轮关键风险验证，下一阶段实现练习文件、ghost text 和状态栏 |
+| Phase 5 打字练习核心已完成自动验证和人工验证 | 已实现练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏菜单；人工验证发现首尾空白裁剪配置缺失，已补齐开关命令和菜单入口并复测通过 |
+| 下一步进入 Phase 6 Enter/Tab 路由与设置 | 打字练习核心已具备状态和 ghost text，下一阶段再处理高风险特殊键路由 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已执行 `git init`，后续可按阶段提交 |
 
 ## Errors Encountered
@@ -106,4 +108,4 @@ Phase 4: 开发执行
 - 测试、错误和阶段动作记录在 `progress.md`。
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
-- 下一步：Phase 5 打字练习核心。
+- 下一步：Phase 6 Enter/Tab 路由与设置。

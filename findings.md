@@ -41,6 +41,15 @@
 - Phase 4 已接入 `ResizeObserver` 和 window resize，侧边栏宽度变化后重新测量；字体调整通过 session state 重新渲染并保持当前 offset 附近恢复。
 - Phase 4 已新增 Webview HTML 合约测试，防止后续回退到 `estimatePageSize`/`charsPerLine` 一类固定字符估算。
 - 2026-07-08 人工验证确认 Phase 4 动态分页无异常：下一页无明显重叠、上一页可回到历史页、长行换行计入分页高度、字体和侧边栏宽度变化后仍恢复到当前位置附近。
+- Phase 5 入口已确认：`TypingPracticeSession` 类型和 `WorkspaceSessionStore` 已存在，`TxtFileService.readPracticePhysicalLines` 已提供物理行读取，新增实现应集中在打字练习控制器、命令注册、Inline Completion Provider 和状态栏。
+- Phase 5 测试需要扩展 `src/test/shims/vscode.ts`：当前 shim 只覆盖 command、webview、quick pick 和消息，尚无 inline completion provider、status bar item、input box 或文本编辑器位置模型。
+- Phase 5 不需要修改 `manual-gbk.txt`、`manual-utf8.txt` 两个当前未跟踪文件；它们应保留给人工验证或用户用途。
+- Phase 5 已实现的 ghost text 策略：Inline Completion Provider 读取当前编辑器光标前文本；如果练习行以该前缀开头，则只返回剩余部分，否则返回整条处理后的练习行。
+- Phase 5 状态栏策略：仅练习开启且当前练习行可用时显示 `Typing: file.txt 当前物理行/总物理行`；点击状态栏打开菜单，支持下一行、重置、跳转和停止。
+- Phase 5 对残留失效 session 的处理：如果 workspace 中保存的练习 `fileId` 已不在导入列表中，状态栏隐藏，Inline Completion Provider 返回空结果，不向 VS Code 抛出异常。
+- Phase 5 人工验证反馈：除首尾空白裁剪配置缺失外，其余练习核心场景均无问题。已新增 `trimTrailingSpaces` session 字段和 `moyuplus.toggleTypingPracticeLineEdgeTrim`，状态栏菜单可切换首尾空白裁剪。
+- 2026-07-09 用户复测确认首尾空白裁剪开关功能正常，Phase 5 打字练习核心人工验证通过。
+- Phase 5 命令范围刻意不包含 Enter/Tab 路由；特殊键处理仍按实施计划留给 Phase 6，避免提前改变 VS Code 原生编辑行为。
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -62,6 +71,9 @@
 | Phase 3 采用 `readerMessages` + `ReaderViewProvider` + `webviewHtml` 三段拆分 | 消息协议、扩展主进程状态处理和 Webview UI 分离，便于 Phase 4 替换分页算法而不改存储/文件读取边界 |
 | Phase 4 分页继续放在 Webview 内 | 只有 Webview 能拿到真实 DOM 尺寸和换行高度；扩展主进程只保存 Webview 回传的 page range |
 | Phase 4 保留 `ReaderSession` 数据结构 | 现有 `offset`、`viewportSnapshot` 和 `pageHistory` 足够支撑 DOM 分页恢复，不需要新增存储模型 |
+| Phase 5 使用独立 `TypingPracticeController` | 控制器只依赖 TXT 服务和 workspace session，便于在不启动 VS Code 的情况下测试物理行进度和过滤逻辑 |
+| Phase 5 Inline Completion 返回剩余文本 | 用户已经输入练习行前缀时，ghost text 不重复显示已输入部分 |
+| Phase 5 首尾空白裁剪作为显式开关 | 默认保留 TXT 原文空白；需要忽略每行首尾空白时，通过命令或状态栏菜单切换，避免改变现有练习文本语义 |
 
 ## Issues Encountered
 | Issue | Resolution |

@@ -164,6 +164,18 @@
 - 状态栏显示文件名、当前行号、总行数。
 - 关闭练习后不再显示 ghost text。
 
+执行状态：
+
+- 2026-07-08 继续 Phase 5：已确认本阶段范围为练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏显示；当前工作区已有未跟踪 `manual-gbk.txt`、`manual-utf8.txt`，本阶段实现不主动修改这两个文件。
+- 2026-07-08 已完成 `TypingPracticeController`，支持练习文件列表、开始/停止、当前行读取、下一行、重置、跳转指定物理行、默认跳过空行、首尾空白裁剪和全空白移除配置。
+- 已注册 `moyuplus.startTypingPractice`、`moyuplus.stopTypingPractice`、`moyuplus.nextTypingPracticeLine`、`moyuplus.resetTypingPracticeProgress`、`moyuplus.jumpToTypingPracticeLine` 和状态栏菜单命令，并接入扩展 activation。
+- 已注册 Inline Completion Provider；练习开启时根据当前编辑器行前缀返回当前练习行的剩余 ghost text，练习关闭后不再返回提示。
+- 已实现打字练习状态栏，显示 `Typing: file.txt 当前物理行/总物理行`，点击后可执行下一行、重置、跳转、切换首尾空白裁剪和停止。
+- 已处理残留失效练习 session：当保存的练习 `fileId` 已不在导入列表中时，状态栏隐藏且 Inline Completion Provider 返回空结果。
+- 已通过自动验证：`npm test`、`npm run compile`。
+- 2026-07-08 用户人工验证反馈：Import TXT、Start Typing Practice、ghost text 前缀补全、Next Line 跳过空行、Jump/Reset、切换编辑器不重置、Stop 后隐藏 ghost text 和状态栏均无问题；发现首尾空白裁剪配置缺失，已补充 `moyuplus.toggleTypingPracticeLineEdgeTrim` 和状态栏菜单入口。
+- 2026-07-09 用户复测确认：首尾空白裁剪开关功能正常，Phase 5 人工验证通过。
+
 ## Phase 6: Enter/Tab 路由与设置
 
 目标：在不破坏 VS Code 原生体验的前提下增加快捷操作。

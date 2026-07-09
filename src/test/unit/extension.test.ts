@@ -3,12 +3,19 @@ import {
   activate,
   CHECK_IMPORTED_TXT_COMMAND_ID,
   IMPORT_TXT_COMMAND_ID,
+  JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
+  NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
   REMOVE_IMPORTED_TXT_COMMAND_ID,
+  RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
+  SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
   SMOKE_COMMAND_ID,
-  SMOKE_MESSAGE
+  SMOKE_MESSAGE,
+  START_TYPING_PRACTICE_COMMAND_ID,
+  STOP_TYPING_PRACTICE_COMMAND_ID,
+  TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID
 } from '../../extension';
 import { READER_VIEW_ID } from '../../reader/readerMessages';
-import { commands, resetVSCodeShim, type Disposable, window } from '../shims/vscode';
+import { commands, languages, resetVSCodeShim, type Disposable, window } from '../shims/vscode';
 
 class MemoryMemento {
   get<T>(): T | undefined {
@@ -36,10 +43,18 @@ describe('extension activation', () => {
       SMOKE_COMMAND_ID,
       IMPORT_TXT_COMMAND_ID,
       REMOVE_IMPORTED_TXT_COMMAND_ID,
-      CHECK_IMPORTED_TXT_COMMAND_ID
+      CHECK_IMPORTED_TXT_COMMAND_ID,
+      START_TYPING_PRACTICE_COMMAND_ID,
+      STOP_TYPING_PRACTICE_COMMAND_ID,
+      NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
+      RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
+      JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
+      TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
+      SHOW_TYPING_PRACTICE_MENU_COMMAND_ID
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
-    expect(context.subscriptions).toHaveLength(5);
+    expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
+    expect(context.subscriptions).toHaveLength(14);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 

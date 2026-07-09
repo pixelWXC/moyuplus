@@ -61,6 +61,7 @@ describe('domain model defaults', () => {
       totalLines: 0,
       skipEmptyLines: true,
       trimLeadingSpaces: false,
+      trimTrailingSpaces: false,
       ignoreAllSpaces: false,
       tabMode: 'completeRest',
       enterBehavior: {
@@ -182,6 +183,7 @@ describe('WorkspaceSessionStore', () => {
           fileId: 'typing-file',
           lineIndex: -2,
           totalLines: -100,
+          trimTrailingSpaces: true,
           tabMode: 'unknown'
         }
       })
@@ -196,7 +198,8 @@ describe('WorkspaceSessionStore', () => {
     expect(store.getTypingPracticeSession()).toEqual({
       ...createDefaultTypingPracticeSession(),
       active: true,
-      fileId: 'typing-file'
+      fileId: 'typing-file',
+      trimTrailingSpaces: true
     });
   });
 

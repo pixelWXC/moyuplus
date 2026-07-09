@@ -5,6 +5,14 @@ export interface Disposable {
 type CommandCallback = (...args: unknown[]) => unknown;
 type QuickPickItem = { label: string; [key: string]: unknown };
 type MessageCallback = (message: unknown) => unknown;
+type InlineCompletionProvider = {
+  provideInlineCompletionItems(
+    document: TextDocument,
+    position: Position,
+    context?: unknown,
+    token?: unknown
+  ): unknown;
+};
 type WebviewViewProvider = {
   resolveWebviewView(webviewView: WebviewView): unknown;
 };
@@ -23,6 +31,21 @@ export interface WebviewView {
   webview: Webview;
 }
 
+export interface TextLine {
+  text: string;
+}
+
+export interface TextDocument {
+  lineAt(line: number): TextLine;
+}
+
+export class Position {
+  constructor(
+    readonly line: number,
+    readonly character: number
+  ) {}
+}
+
 export class Uri {
   private constructor(private readonly value: string) {}
 
@@ -39,6 +62,7 @@ export class Uri {
 
 const registeredCommands = new Map<string, CommandCallback>();
 const registeredWebviewViewProviders = new Map<string, WebviewViewProvider>();
+const registeredInlineCompletionProviders: Array<{ selector: unknown; provider: InlineCompletionProvider }> = [];
 
 export const commands = {
   registerCommand(commandId: string, callback: CommandCallback): Disposable {
@@ -71,6 +95,8 @@ export const window = {
   errorMessages: [] as string[],
   openDialogResult: undefined as Uri[] | undefined,
   quickPickResult: undefined as QuickPickItem | undefined,
+  inputBoxResult: undefined as string | undefined,
+  statusBarItems: [] as TestStatusBarItem[],
 
   async showInformationMessage(message: string): Promise<string> {
     window.informationMessages.push(message);
@@ -93,6 +119,16 @@ export const window = {
 
   async showQuickPick<T extends QuickPickItem>(): Promise<T | undefined> {
     return window.quickPickResult as T | undefined;
+  },
+
+  async showInputBox(): Promise<string | undefined> {
+    return window.inputBoxResult;
+  },
+
+  createStatusBarItem(): TestStatusBarItem {
+    const item = new TestStatusBarItem();
+    window.statusBarItems.push(item);
+    return item;
   },
 
   registerWebviewViewProvider(viewId: string, provider: WebviewViewProvider): Disposable {
@@ -118,15 +154,59 @@ export const workspace = {
   workspaceFolders: undefined as { uri: Uri }[] | undefined
 };
 
+export const languages = {
+  registerInlineCompletionItemProvider(selector: unknown, provider: InlineCompletionProvider): Disposable {
+    registeredInlineCompletionProviders.push({ selector, provider });
+
+    return {
+      dispose(): void {
+        const index = registeredInlineCompletionProviders.findIndex((entry) => entry.provider === provider);
+        if (index >= 0) {
+          registeredInlineCompletionProviders.splice(index, 1);
+        }
+      }
+    };
+  },
+
+  registeredInlineCompletionSelectors(): unknown[] {
+    return registeredInlineCompletionProviders.map((entry) => entry.selector);
+  },
+
+  async provideInlineCompletionItems(document: TextDocument, position: Position): Promise<unknown> {
+    const provider = registeredInlineCompletionProviders.at(-1)?.provider;
+    if (!provider) {
+      throw new Error('No inline completion provider is registered.');
+    }
+
+    return provider.provideInlineCompletionItems(document, position);
+  }
+};
+
+export const StatusBarAlignment = {
+  Left: 1,
+  Right: 2
+} as const;
+
 export function resetVSCodeShim(): void {
   registeredCommands.clear();
   registeredWebviewViewProviders.clear();
+  registeredInlineCompletionProviders.length = 0;
   window.informationMessages.length = 0;
   window.warningMessages.length = 0;
   window.errorMessages.length = 0;
   window.openDialogResult = undefined;
   window.quickPickResult = undefined;
+  window.inputBoxResult = undefined;
+  window.statusBarItems.length = 0;
   workspace.workspaceFolders = undefined;
+}
+
+export function createTextDocument(lines: string[]): TextDocument {
+  return {
+    lineAt(line: number): TextLine {
+      return { text: lines[line] ?? '' };
+    }
+  };
 }
 
 export function createWebviewView(): WebviewView {
@@ -164,5 +244,24 @@ class TestWebview implements Webview {
     for (const callback of this.messageCallbacks) {
       await callback(message);
     }
+  }
+}
+
+class TestStatusBarItem implements Disposable {
+  text = '';
+  tooltip: string | undefined;
+  command: string | undefined;
+  visible = false;
+
+  show(): void {
+    this.visible = true;
+  }
+
+  hide(): void {
+    this.visible = false;
+  }
+
+  dispose(): void {
+    this.visible = false;
   }
 }

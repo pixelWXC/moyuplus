@@ -50,6 +50,7 @@ export interface TypingPracticeSession {
   totalLines: number;
   skipEmptyLines: boolean;
   trimLeadingSpaces: boolean;
+  trimTrailingSpaces: boolean;
   ignoreAllSpaces: boolean;
   tabMode: TypingTabMode;
   enterBehavior: EnterBehavior;
@@ -86,6 +87,7 @@ export function createDefaultTypingPracticeSession(): TypingPracticeSession {
     totalLines: 0,
     skipEmptyLines: true,
     trimLeadingSpaces: false,
+    trimTrailingSpaces: false,
     ignoreAllSpaces: false,
     tabMode: 'completeRest',
     enterBehavior: {
@@ -173,6 +175,7 @@ export function normalizeTypingPracticeSession(value: unknown): TypingPracticeSe
     totalLines: isNonNegativeNumber(value.totalLines) ? value.totalLines : defaults.totalLines,
     skipEmptyLines: typeof value.skipEmptyLines === 'boolean' ? value.skipEmptyLines : defaults.skipEmptyLines,
     trimLeadingSpaces: typeof value.trimLeadingSpaces === 'boolean' ? value.trimLeadingSpaces : defaults.trimLeadingSpaces,
+    trimTrailingSpaces: typeof value.trimTrailingSpaces === 'boolean' ? value.trimTrailingSpaces : defaults.trimTrailingSpaces,
     ignoreAllSpaces: typeof value.ignoreAllSpaces === 'boolean' ? value.ignoreAllSpaces : defaults.ignoreAllSpaces,
     tabMode: isTypingTabMode(value.tabMode) ? value.tabMode : defaults.tabMode,
     enterBehavior: normalizeEnterBehavior(value.enterBehavior)

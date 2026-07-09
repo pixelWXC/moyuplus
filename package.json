@@ -16,6 +16,12 @@
     "onCommand:moyuplus.importTxt",
     "onCommand:moyuplus.removeImportedTxt",
     "onCommand:moyuplus.checkImportedTxtFiles",
+    "onCommand:moyuplus.startTypingPractice",
+    "onCommand:moyuplus.stopTypingPractice",
+    "onCommand:moyuplus.nextTypingPracticeLine",
+    "onCommand:moyuplus.resetTypingPracticeProgress",
+    "onCommand:moyuplus.jumpToTypingPracticeLine",
+    "onCommand:moyuplus.toggleTypingPracticeLineEdgeTrim",
     "onView:moyuplus.readerView"
   ],
   "main": "./out/extension.js",
@@ -36,6 +42,30 @@
       {
         "command": "moyuplus.checkImportedTxtFiles",
         "title": "MoyuPlus: Check Imported TXT Files"
+      },
+      {
+        "command": "moyuplus.startTypingPractice",
+        "title": "MoyuPlus: Start Typing Practice"
+      },
+      {
+        "command": "moyuplus.stopTypingPractice",
+        "title": "MoyuPlus: Stop Typing Practice"
+      },
+      {
+        "command": "moyuplus.nextTypingPracticeLine",
+        "title": "MoyuPlus: Next Typing Practice Line"
+      },
+      {
+        "command": "moyuplus.resetTypingPracticeProgress",
+        "title": "MoyuPlus: Reset Typing Practice Progress"
+      },
+      {
+        "command": "moyuplus.jumpToTypingPracticeLine",
+        "title": "MoyuPlus: Jump to Typing Practice Line"
+      },
+      {
+        "command": "moyuplus.toggleTypingPracticeLineEdgeTrim",
+        "title": "MoyuPlus: Toggle Typing Practice Line Edge Trim"
       }
     ],
     "views": {
