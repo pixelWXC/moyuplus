@@ -39,11 +39,36 @@ export interface TextDocument {
   lineAt(line: number): TextLine;
 }
 
+export interface TextEditor {
+  document: TextDocument;
+  selection: Selection;
+  edit(callback: (editBuilder: TextEditorEdit) => void): Promise<boolean>;
+}
+
+export interface TextEditorEdit {
+  insert(position: Position, text: string): void;
+  replace(range: Range, text: string): void;
+}
+
 export class Position {
   constructor(
     readonly line: number,
     readonly character: number
   ) {}
+}
+
+export class Range {
+  readonly start: Position;
+  readonly end: Position;
+
+  constructor(startLine: number, startCharacter: number, endLine: number, endCharacter: number) {
+    this.start = new Position(startLine, startCharacter);
+    this.end = new Position(endLine, endCharacter);
+  }
+}
+
+export class Selection {
+  constructor(readonly active: Position) {}
 }
 
 export class Uri {
@@ -63,6 +88,8 @@ export class Uri {
 const registeredCommands = new Map<string, CommandCallback>();
 const registeredWebviewViewProviders = new Map<string, WebviewViewProvider>();
 const registeredInlineCompletionProviders: Array<{ selector: unknown; provider: InlineCompletionProvider }> = [];
+const executedBuiltinCommandCalls: Array<{ commandId: string; args: unknown[] }> = [];
+const contextValues = new Map<string, unknown>();
 
 export const commands = {
   registerCommand(commandId: string, callback: CommandCallback): Disposable {
@@ -73,6 +100,21 @@ export const commands = {
         registeredCommands.delete(commandId);
       }
     };
+  },
+
+  async executeCommand(commandId: string, ...args: unknown[]): Promise<unknown> {
+    const callback = registeredCommands.get(commandId);
+    if (callback) {
+      return callback(...args);
+    }
+
+    if (commandId === 'setContext') {
+      contextValues.set(String(args[0]), args[1]);
+      return undefined;
+    }
+
+    executedBuiltinCommandCalls.push({ commandId, args });
+    return undefined;
   },
 
   async executeRegisteredCommand(commandId: string, ...args: unknown[]): Promise<unknown> {
@@ -86,6 +128,14 @@ export const commands = {
 
   registeredCommandIds(): string[] {
     return [...registeredCommands.keys()];
+  },
+
+  executedBuiltinCommands(): Array<{ commandId: string; args: unknown[] }> {
+    return [...executedBuiltinCommandCalls];
+  },
+
+  contextValue(key: string): unknown {
+    return contextValues.get(key);
   }
 };
 
@@ -97,6 +147,7 @@ export const window = {
   quickPickResult: undefined as QuickPickItem | undefined,
   inputBoxResult: undefined as string | undefined,
   statusBarItems: [] as TestStatusBarItem[],
+  activeTextEditor: undefined as TextEditor | undefined,
 
   async showInformationMessage(message: string): Promise<string> {
     window.informationMessages.push(message);
@@ -151,7 +202,21 @@ export const window = {
 };
 
 export const workspace = {
-  workspaceFolders: undefined as { uri: Uri }[] | undefined
+  workspaceFolders: undefined as { uri: Uri }[] | undefined,
+  configurationValues: {} as Record<string, unknown>,
+
+  getConfiguration(section?: string): { get<T>(key: string, defaultValue?: T): T } {
+    return {
+      get<T>(key: string, defaultValue?: T): T {
+        const fullKey = section ? `${section}.${key}` : key;
+        if (Object.prototype.hasOwnProperty.call(workspace.configurationValues, fullKey)) {
+          return workspace.configurationValues[fullKey] as T;
+        }
+
+        return defaultValue as T;
+      }
+    };
+  }
 };
 
 export const languages = {
@@ -191,6 +256,8 @@ export function resetVSCodeShim(): void {
   registeredCommands.clear();
   registeredWebviewViewProviders.clear();
   registeredInlineCompletionProviders.length = 0;
+  executedBuiltinCommandCalls.length = 0;
+  contextValues.clear();
   window.informationMessages.length = 0;
   window.warningMessages.length = 0;
   window.errorMessages.length = 0;
@@ -198,7 +265,9 @@ export function resetVSCodeShim(): void {
   window.quickPickResult = undefined;
   window.inputBoxResult = undefined;
   window.statusBarItems.length = 0;
+  window.activeTextEditor = undefined;
   workspace.workspaceFolders = undefined;
+  workspace.configurationValues = {};
 }
 
 export function createTextDocument(lines: string[]): TextDocument {
@@ -207,6 +276,10 @@ export function createTextDocument(lines: string[]): TextDocument {
       return { text: lines[line] ?? '' };
     }
   };
+}
+
+export function createTextEditor(lines: string[], active: Position): TextEditor {
+  return new TestTextEditor(lines, active);
 }
 
 export function createWebviewView(): WebviewView {
@@ -244,6 +317,57 @@ class TestWebview implements Webview {
     for (const callback of this.messageCallbacks) {
       await callback(message);
     }
+  }
+}
+
+class TestTextEditor implements TextEditor {
+  readonly document: TextDocument;
+  selection: Selection;
+
+  constructor(
+    private readonly lines: string[],
+    active: Position
+  ) {
+    this.selection = new Selection(active);
+    this.document = {
+      lineAt: (line: number): TextLine => {
+        return { text: this.lines[line] ?? '' };
+      }
+    };
+  }
+
+  async edit(callback: (editBuilder: TextEditorEdit) => void): Promise<boolean> {
+    const editBuilder = new TestTextEditorEdit(this.lines, (position) => {
+      this.selection = new Selection(position);
+    });
+    callback(editBuilder);
+    return true;
+  }
+}
+
+class TestTextEditorEdit implements TextEditorEdit {
+  constructor(
+    private readonly lines: string[],
+    private readonly updateSelection: (position: Position) => void
+  ) {}
+
+  insert(position: Position, text: string): void {
+    const currentLine = this.lines[position.line] ?? '';
+    const character = Math.max(0, Math.min(position.character, currentLine.length));
+    this.lines[position.line] = `${currentLine.slice(0, character)}${text}${currentLine.slice(character)}`;
+    this.updateSelection(new Position(position.line, character + text.length));
+  }
+
+  replace(range: Range, text: string): void {
+    if (range.start.line !== range.end.line) {
+      throw new Error('TestTextEditorEdit only supports single-line replacements.');
+    }
+
+    const currentLine = this.lines[range.start.line] ?? '';
+    const start = Math.max(0, Math.min(range.start.character, currentLine.length));
+    const end = Math.max(start, Math.min(range.end.character, currentLine.length));
+    this.lines[range.start.line] = `${currentLine.slice(0, start)}${text}${currentLine.slice(end)}`;
+    this.updateSelection(new Position(range.start.line, start + text.length));
   }
 }
 

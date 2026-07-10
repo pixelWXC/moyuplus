@@ -12,4 +12,11 @@ describe('reader webview html', () => {
     expect(html).not.toContain('estimatePageSize');
     expect(html).not.toContain('charsPerLine');
   });
+
+  it('provides a shortcut settings entry in the reader webview', () => {
+    const html = getReaderWebviewHtml({ cspSource: 'vscode-resource:' } as never);
+
+    expect(html).toContain('id="shortcutSettings"');
+    expect(html).toContain("type: 'openShortcutSettings'");
+  });
 });

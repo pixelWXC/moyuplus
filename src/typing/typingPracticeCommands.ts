@@ -53,9 +53,11 @@ export function registerTypingPractice(
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusBarItem.command = SHOW_TYPING_PRACTICE_MENU_COMMAND_ID;
   context.subscriptions.push(statusBarItem);
+  void vscode.commands.executeCommand('setContext', 'moyuplus.typingPracticeActive', false);
 
   const updateStatusBar = async (): Promise<void> => {
     const currentLine = await getCurrentLineIfAvailable(controller);
+    await vscode.commands.executeCommand('setContext', 'moyuplus.typingPracticeActive', Boolean(currentLine));
     if (!currentLine) {
       statusBarItem.hide();
       return;

@@ -1,5 +1,6 @@
 import {
   type ImportedTxtFile,
+  type TypingTabMode,
   type TypingPracticeSession
 } from '../domain/models';
 import { type WorkspaceSessionStore } from '../storage/workspaceSessionStore';
@@ -16,6 +17,12 @@ export interface TypingPracticeLine {
   lineNumber: number;
   totalLines: number;
   text: string;
+}
+
+export interface TypingTabCompletion {
+  mode: TypingTabMode;
+  text: string;
+  replaceCurrentLine: boolean;
 }
 
 export class TypingPracticeFileNotFoundError extends Error {
@@ -98,6 +105,42 @@ export class TypingPracticeController {
     }
 
     return this.toPracticeLine(file, lines[lineIndex], normalizedSession);
+  }
+
+  async getTabCompletion(
+    editorLineText: string,
+    cursorCharacter: number,
+    tabMode?: TypingTabMode
+  ): Promise<TypingTabCompletion | undefined> {
+    const currentLine = await this.getCurrentLine();
+    if (!currentLine) {
+      return undefined;
+    }
+
+    const session = this.sessionStore.getTypingPracticeSession();
+    const mode = tabMode ?? session.tabMode;
+    if (mode === 'replaceLine') {
+      return {
+        mode,
+        text: currentLine.text,
+        replaceCurrentLine: true
+      };
+    }
+
+    const prefixEnd = Math.max(0, Math.min(Math.trunc(cursorCharacter), editorLineText.length));
+    const linePrefix = editorLineText.slice(0, prefixEnd);
+    const text = currentLine.text.startsWith(linePrefix)
+      ? currentLine.text.slice(linePrefix.length)
+      : currentLine.text;
+    if (text.length === 0) {
+      return undefined;
+    }
+
+    return {
+      mode,
+      text,
+      replaceCurrentLine: false
+    };
   }
 
   async nextLine(): Promise<TypingPracticeLine | undefined> {

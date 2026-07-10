@@ -244,6 +244,48 @@
   - `findings.md` updated
   - `progress.md` updated
 
+### Phase 6: 开发执行 / Phase 6 Enter/Tab 路由与设置
+- **Status:** complete
+- Actions taken:
+  - 重读实施计划、设计规格、任务计划、发现记录和进度日志，确认 Phase 6 范围为 `moyuplus.routeEnter`、`moyuplus.routeTab`、Tab 两种补全模式、Enter 组合行为、安全 `when` 条件、VS Code Settings 高级配置和阅读器常用设置入口。
+  - 按 TDD 流程先更新 `src/test/unit/typingPracticeController.test.ts`，约束 `TypingPracticeController.getTabCompletion` 必须按 `completeRest` 返回剩余文本、按 `replaceLine` 返回整行替换文本。
+  - 更新 `src/test/unit/typingPracticeIntegration.test.ts`，约束 activation 注册路由命令、同步 `moyuplus.typingPracticeActive` context key、Tab 路由编辑当前行、未开启练习时回退原生 `tab`、Enter 路由执行真实换行并可选推进练习和阅读器。
+  - 更新 `src/test/unit/packageContributions.test.ts`，约束 `package.json` 贡献路由命令、默认关闭的 Enter/Tab keybinding、Tab 的练习 active/补全/snippet 上下文限制，以及 `moyuplus.*` 高级配置。
+  - 更新 `src/test/unit/readerWebviewHtml.test.ts` 和 `src/test/unit/readerViewProvider.test.ts`，约束阅读器 Webview 提供 `Shortcuts` 入口并打开 MoyuPlus 快捷键相关 Settings。
+  - 执行目标测试集，确认 RED 失败于缺少 `getTabCompletion`、路由命令导出/注册、package keybinding/configuration、Webview 设置入口，以及 VS Code shim 尚无配置/编辑器/内建命令模拟能力。
+  - 更新 `src/typing/TypingPracticeController.ts`，新增 `TypingTabCompletion` 和 `getTabCompletion`，复用当前练习行与已有 ghost text 前缀补全策略。
+  - 新增 `src/commands/shortcutRouter.ts`，实现 `moyuplus.routeEnter` 和 `moyuplus.routeTab`；Tab 会按配置插入剩余文本或替换当前行，无活动练习/无编辑器/无可插入文本时回退原生 `tab`；Enter 默认执行真实换行，并按设置可选触发下一练习行和阅读器下一页。
+  - 更新 `src/extension.ts`，接入快捷键路由注册；更新 `src/typing/typingPracticeCommands.ts`，在练习状态变化时同步 `moyuplus.typingPracticeActive` context key。
+  - 更新 `src/reader/readerMessages.ts`、`src/reader/ReaderViewProvider.ts` 和 `src/reader/webviewHtml.ts`，支持从 Enter 路由请求阅读器下一页，并在 Webview 内提供 `Shortcuts` 设置入口。
+  - 更新 `package.json`，新增路由命令、activation events、默认关闭的受限 Enter/Tab keybindings，以及 `moyuplus.shortcuts.*`、`moyuplus.typing.tabMode`、`moyuplus.enter.*` Settings 配置。
+  - 扩展 `src/test/shims/vscode.ts`，支持 `workspace.getConfiguration`、测试编辑器、单行 insert/replace、`commands.executeCommand`、内建命令记录和 `setContext` 记录。
+  - 执行目标测试集，确认 6 个测试文件、25 个测试通过。
+  - 执行 `npm test`，确认 9 个测试文件、44 个测试全部通过。
+  - 执行 `npm run compile`，确认 TypeScript 编译通过。
+  - 2026-07-09 人工测试准备中发现 VS Code Settings 说明文案为英文，不便理解；按 TDD 先更新 `src/test/unit/packageContributions.test.ts` 约束中文说明和 `tabMode` 中文选项解释，确认 RED 后将 `package.json` 中 Phase 6 相关 Settings 描述改为中文。
+  - 再次执行 `npm test -- src/test/unit/packageContributions.test.ts`、`npm run compile` 和 `npm test`，均通过。
+  - 2026-07-10 用户确认 Phase 6 人工 Extension Development Host 测试全通过。
+- Files created/modified:
+  - `src/commands/shortcutRouter.ts` created
+  - `src/typing/TypingPracticeController.ts` updated
+  - `src/typing/typingPracticeCommands.ts` updated
+  - `src/reader/ReaderViewProvider.ts` updated
+  - `src/reader/readerMessages.ts` updated
+  - `src/reader/webviewHtml.ts` updated
+  - `src/extension.ts` updated
+  - `package.json` updated
+  - `src/test/shims/vscode.ts` updated
+  - `src/test/unit/typingPracticeController.test.ts` updated
+  - `src/test/unit/typingPracticeIntegration.test.ts` updated
+  - `src/test/unit/packageContributions.test.ts` updated
+  - `src/test/unit/readerWebviewHtml.test.ts` updated
+  - `src/test/unit/readerViewProvider.test.ts` updated
+  - `src/test/unit/extension.test.ts` updated
+  - `docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md` updated
+  - `task_plan.md` updated
+  - `findings.md` updated
+  - `progress.md` updated
+
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
@@ -282,6 +324,13 @@
 | Phase 5 全量测试 | `npm test` | 所有单元/集成测试通过 | 9 个测试文件、37 个测试通过，退出码 0 | pass |
 | Phase 5 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
 | Phase 5 人工验证 | Extension Development Host | 打字练习核心场景和首尾空白裁剪开关均正常 | 用户反馈功能正常 | pass |
+| Phase 6 RED 测试 | `npm test -- src/test/unit/typingPracticeController.test.ts src/test/unit/typingPracticeIntegration.test.ts src/test/unit/packageContributions.test.ts src/test/unit/readerWebviewHtml.test.ts src/test/unit/readerViewProvider.test.ts` | 因缺少路由 API、package 配置、Webview 入口和 shim 能力失败 | 10 个目标断言/调用失败，失败原因与 Phase 6 缺失能力一致 | pass |
+| Phase 6 目标测试 | `npm test -- src/test/unit/typingPracticeController.test.ts src/test/unit/typingPracticeIntegration.test.ts src/test/unit/packageContributions.test.ts src/test/unit/readerWebviewHtml.test.ts src/test/unit/readerViewProvider.test.ts src/test/unit/extension.test.ts` | 控制器、路由集成、package 贡献、Reader 设置入口和 activation 测试通过 | 6 个测试文件、25 个测试通过，退出码 0 | pass |
+| Phase 6 全量测试 | `npm test` | 所有单元/集成测试通过 | 9 个测试文件、44 个测试通过，退出码 0 | pass |
+| Phase 6 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
+| Phase 6 Settings 中文文案 RED 测试 | `npm test -- src/test/unit/packageContributions.test.ts` | 因 Settings 描述仍为英文而失败 | package contribution 测试失败，显示 6 个 Settings 描述仍为英文且 `tabMode` 缺少中文 `enumDescriptions` | pass |
+| Phase 6 Settings 中文文案目标测试 | `npm test -- src/test/unit/packageContributions.test.ts` | Settings 描述和 Tab 模式选项解释为中文 | 1 个测试文件、3 个测试通过，退出码 0 | pass |
+| Phase 6 人工验证 | Extension Development Host | 默认不拦截 Enter/Tab；启用设置后验证 Tab 两种模式、Enter 组合行为和阅读器设置入口 | 用户确认测试全通过 | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -301,11 +350,11 @@
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、实施计划 Phase 5 打字练习核心已完成自动验证和人工验证；当前目录已初始化 Git |
-| Where am I going? | 下一步执行 Phase 6，处理 Enter/Tab 路由与设置 |
+| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、Phase 5 打字练习核心、Phase 6 Enter/Tab 路由与设置均已完成自动验证和人工验证；当前目录已初始化 Git |
+| Where am I going? | 下一步进入 Phase 7：快捷键设置页与体验补齐 |
 | What's the goal? | 根据 `指导文档.md` 启动可执行的开发计划 |
-| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 4 可用 Webview HTML 合约测试防止动态分页退化为固定字符估算；Phase 5 可用扩展后的 VS Code shim 测试 inline provider、status bar 和命令菜单 |
-| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、Phase 5 打字练习核心自动验证和人工验证；根据人工验证反馈补齐每行首尾空白裁剪开关 |
+| What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 4 可用 Webview HTML 合约测试防止动态分页退化为固定字符估算；Phase 5 可用扩展后的 VS Code shim 测试 inline provider、status bar 和命令菜单；Phase 6 的配置/编辑器 shim 自动测试与真实 VS Code 人工测试均已通过 |
+| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、Phase 5 打字练习核心和 Phase 6 Enter/Tab 路由与设置；Phase 6 包含默认受限 keybinding、VS Code Settings 高级配置和阅读器快捷设置入口 |
 
 ---
 *后续每完成阶段或遇到错误都会更新。*

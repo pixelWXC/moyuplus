@@ -47,6 +47,15 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
+  async requestNextPage(): Promise<boolean> {
+    if (!this.view) {
+      return false;
+    }
+
+    await this.postMessage({ type: 'command', command: 'nextPage' });
+    return true;
+  }
+
   private async handleMessage(message: unknown): Promise<void> {
     if (!isReaderViewToExtensionMessage(message)) {
       await this.postError('Reader received an unsupported message.');
@@ -72,6 +81,9 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
           return;
         case 'setFontSize':
           await this.setFontSize(message.fontSize);
+          return;
+        case 'openShortcutSettings':
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'moyuplus shortcuts');
           return;
       }
     } catch (error) {
@@ -253,6 +265,8 @@ function isReaderViewToExtensionMessage(value: unknown): value is ReaderViewToEx
       return isPageRange(value.currentRange) && isOptionalViewportSnapshot(value.viewportSnapshot);
     case 'setFontSize':
       return typeof value.fontSize === 'number' && Number.isFinite(value.fontSize);
+    case 'openShortcutSettings':
+      return true;
     default:
       return false;
   }

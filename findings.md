@@ -50,6 +50,15 @@
 - Phase 5 人工验证反馈：除首尾空白裁剪配置缺失外，其余练习核心场景均无问题。已新增 `trimTrailingSpaces` session 字段和 `moyuplus.toggleTypingPracticeLineEdgeTrim`，状态栏菜单可切换首尾空白裁剪。
 - 2026-07-09 用户复测确认首尾空白裁剪开关功能正常，Phase 5 打字练习核心人工验证通过。
 - Phase 5 命令范围刻意不包含 Enter/Tab 路由；特殊键处理仍按实施计划留给 Phase 6，避免提前改变 VS Code 原生编辑行为。
+- Phase 6 已完成自动验证：新增 `moyuplus.routeEnter` 和 `moyuplus.routeTab`，并通过 `src/commands/shortcutRouter.ts` 与现有练习控制器和 Reader provider 组合。
+- Phase 6 Tab 路由读取 `moyuplus.typing.tabMode`：`completeRest` 按当前编辑器行前缀插入剩余练习文本，`replaceLine` 用当前练习行替换当前编辑器整行；无活动练习、无编辑器或当前行已经补全时回退 VS Code 原生 `tab`。
+- Phase 6 Enter 路由读取 `moyuplus.enter.*`：默认 `insertNewLine=true`、`nextPracticeLine=false`、`nextReaderPage=false`，因此默认路由行为仍只插入真实换行；开启组合选项后会调用现有下一练习行命令并请求阅读器下一页。
+- Phase 6 keybinding 采用默认关闭策略：`moyuplus.shortcuts.enableEnterRouter` 与 `moyuplus.shortcuts.enableTabRouter` 默认均为 `false`；Tab 额外要求 `moyuplus.typingPracticeActive`，并排除 `suggestWidgetVisible` 和 `inSnippetMode`，降低干扰 VS Code 原生补全/snippet 的风险。
+- Phase 6 已在练习状态栏更新路径中同步 `moyuplus.typingPracticeActive` context key，使 `package.json` 中的 Tab `when` 条件不依赖 UI 可见性推断。
+- Phase 6 阅读器下一页路由不能在扩展主进程直接重新计算 DOM 页范围，因此采用扩展向 Webview 发送 `{ type: 'command', command: 'nextPage' }`，再由 Webview 用当前 `currentRange` 回传 `nextPage` 的方式。
+- Phase 6 阅读器 Webview 已增加 `Shortcuts` 按钮，点击打开 `moyuplus shortcuts` Settings 查询；完整插件内快捷键设置页仍留给 Phase 7。
+- Phase 6 已通过自动验证：`npm test` 为 9 个测试文件、44 个测试通过，`npm run compile` 通过；2026-07-10 用户确认真实 Extension Development Host 中的人工测试全通过。
+- Phase 6 人工测试准备中发现 VS Code Settings 的英文说明会阻碍理解；已将 Phase 6 相关设置说明改为中文，并给 `completeRest`/`replaceLine` 增加中文选项解释。
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -74,6 +83,12 @@
 | Phase 5 使用独立 `TypingPracticeController` | 控制器只依赖 TXT 服务和 workspace session，便于在不启动 VS Code 的情况下测试物理行进度和过滤逻辑 |
 | Phase 5 Inline Completion 返回剩余文本 | 用户已经输入练习行前缀时，ghost text 不重复显示已输入部分 |
 | Phase 5 首尾空白裁剪作为显式开关 | 默认保留 TXT 原文空白；需要忽略每行首尾空白时，通过命令或状态栏菜单切换，避免改变现有练习文本语义 |
+| Phase 6 路由命令独立放在 `src/commands/shortcutRouter.ts` | 保持 `extension.ts` 只负责组合注册，并让特殊键路由逻辑集中在一个模块内 |
+| Phase 6 router keybinding 默认关闭 | 特殊键拦截风险高，默认不改变 VS Code 原生 Enter/Tab；用户显式开启 Settings 后才生效 |
+| Phase 6 Tab 默认仍使用 `completeRest` | 与 ghost text 的剩余文本策略一致，用户可通过 Settings 切到整行替换 |
+| Phase 6 Enter 组合行为由 VS Code Settings 控制 | 用户可分别控制真实换行、下一练习行、阅读器下一页，不把组合动作硬编码到 session |
+| 阅读器下一页路由通过 Webview command handoff 实现 | 当前页范围由 Webview DOM 测量产生，扩展主进程不应凭字符数估算下一页 |
+| Phase 6 Settings 说明使用中文 | 当前使用者在人工验证中需要快速理解开关含义和风险；中文说明比英文配置描述更直接 |
 
 ## Issues Encountered
 | Issue | Resolution |
@@ -85,6 +100,8 @@
 | `npm install` 报告清理 node_modules 目录 EBUSY 警告 | 安装实际成功，`npm run compile` 和 `npm test` 后续均通过 |
 | Phase 3 测试初次 GREEN 尝试中 Webview 消息异步处理未被测试等待 | `onDidReceiveMessage` 回调返回 `handleMessage` Promise 后，`receiveMessage` 可等待 session 写入完成 |
 | 人工验证中 `MOYUPLUS READER` 显示“没有可提供视图数据的已注册数据提供程序” | `package.json` 中 Webview View contribution 必须声明 `type: "webview"`；缺失时 VS Code 会按 Tree View 处理并寻找 TreeDataProvider |
+| Phase 6 目标 RED 测试暴露 VS Code shim 缺少配置、active editor 和内建命令记录能力 | 已扩展 `src/test/shims/vscode.ts`，支持 `workspace.getConfiguration`、测试编辑器 insert/replace、`commands.executeCommand`、`setContext` 和内建命令调用记录 |
+| Phase 6 人工测试准备中 Settings 英文文案难以理解 | 已通过 package contribution 测试约束中文说明，并更新 `package.json` 的配置描述和 `tabMode` 选项解释 |
 
 ## Resources
 - [指导文档.md](D:/wxc_work_file/projects/harnessplace/moyuplus/指导文档.md)
@@ -97,6 +114,7 @@
 - [src/storage/workspaceSessionStore.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/storage/workspaceSessionStore.ts)
 - [src/txt/txtFileService.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/txt/txtFileService.ts)
 - [src/commands/txtCommands.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/commands/txtCommands.ts)
+- [src/commands/shortcutRouter.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/commands/shortcutRouter.ts)
 - [src/reader/readerMessages.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/readerMessages.ts)
 - [src/reader/ReaderViewProvider.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/ReaderViewProvider.ts)
 - [src/reader/webviewHtml.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/reader/webviewHtml.ts)
@@ -105,6 +123,8 @@
 - [src/test/unit/txtCommands.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/txtCommands.test.ts)
 - [src/test/unit/readerViewProvider.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/readerViewProvider.test.ts)
 - [src/test/unit/packageContributions.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/packageContributions.test.ts)
+- [src/test/unit/typingPracticeController.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/typingPracticeController.test.ts)
+- [src/test/unit/typingPracticeIntegration.test.ts](D:/wxc_work_file/projects/harnessplace/moyuplus/src/test/unit/typingPracticeIntegration.test.ts)
 - `C:\Users\Purvar\.agents\skills\ok-skills\planning-with-files\SKILL.md`
 - `C:\Users\Purvar\.agents\skills\ok-skills\brainstorming\SKILL.md`
 

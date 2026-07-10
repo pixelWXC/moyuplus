@@ -8,7 +8,8 @@ export type ReaderViewToExtensionMessage =
   | { type: 'pageRendered'; range: PageRange; viewportSnapshot?: ReaderViewportSnapshot }
   | { type: 'nextPage'; currentRange: PageRange; viewportSnapshot?: ReaderViewportSnapshot }
   | { type: 'previousPage' }
-  | { type: 'setFontSize'; fontSize: number };
+  | { type: 'setFontSize'; fontSize: number }
+  | { type: 'openShortcutSettings' };
 
 export interface ReaderStatePayload {
   files: ImportedTxtFile[];
@@ -20,4 +21,5 @@ export interface ReaderStatePayload {
 
 export type ExtensionToReaderMessage =
   | { type: 'state'; payload: ReaderStatePayload }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'command'; command: 'nextPage' };

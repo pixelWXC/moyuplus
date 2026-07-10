@@ -7,6 +7,8 @@ import {
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
   REMOVE_IMPORTED_TXT_COMMAND_ID,
   RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
+  ROUTE_ENTER_COMMAND_ID,
+  ROUTE_TAB_COMMAND_ID,
   SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
   SMOKE_COMMAND_ID,
   SMOKE_MESSAGE,
@@ -50,11 +52,13 @@ describe('extension activation', () => {
       RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
       JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
-      SHOW_TYPING_PRACTICE_MENU_COMMAND_ID
+      SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
+      ROUTE_ENTER_COMMAND_ID,
+      ROUTE_TAB_COMMAND_ID
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(14);
+    expect(context.subscriptions).toHaveLength(16);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 

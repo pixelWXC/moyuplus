@@ -5,6 +5,11 @@ import {
   registerTxtCommands,
   REMOVE_IMPORTED_TXT_COMMAND_ID
 } from './commands/txtCommands';
+import {
+  registerShortcutRouter,
+  ROUTE_ENTER_COMMAND_ID,
+  ROUTE_TAB_COMMAND_ID
+} from './commands/shortcutRouter';
 import { READER_VIEW_ID, registerReaderView } from './reader/ReaderViewProvider';
 import { TxtLibraryStore } from './storage/txtLibraryStore';
 import { WorkspaceSessionStore } from './storage/workspaceSessionStore';
@@ -24,6 +29,7 @@ import { TxtFileService } from './txt/txtFileService';
 export const SMOKE_COMMAND_ID = 'moyuplus.smokeTest';
 export const SMOKE_MESSAGE = 'MoyuPlus extension is active.';
 export { CHECK_IMPORTED_TXT_COMMAND_ID, IMPORT_TXT_COMMAND_ID, READER_VIEW_ID, REMOVE_IMPORTED_TXT_COMMAND_ID };
+export { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID };
 export {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -51,8 +57,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerSmokeCommand(context);
   registerTxtCommands(context, txtFileService);
-  registerReaderView(context, txtFileService, sessionStore);
+  const readerViewProvider = registerReaderView(context, txtFileService, sessionStore);
   registerTypingPractice(context, typingPracticeController);
+  registerShortcutRouter(context, typingPracticeController, readerViewProvider);
 }
 
 export function deactivate(): void {}

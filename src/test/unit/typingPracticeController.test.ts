@@ -107,6 +107,22 @@ describe('TypingPracticeController', () => {
     await expect(controller.start(txtFileService.file.id)).resolves.toMatchObject({ text: 'abc' });
   });
 
+  it('calculates Tab completion edits from the configured mode and current editor prefix', async () => {
+    txtFileService.lines = ['hello world'];
+    await controller.start(txtFileService.file.id);
+
+    await expect(controller.getTabCompletion('hello', 5, 'completeRest')).resolves.toEqual({
+      mode: 'completeRest',
+      text: ' world',
+      replaceCurrentLine: false
+    });
+    await expect(controller.getTabCompletion('draft text', 5, 'replaceLine')).resolves.toEqual({
+      mode: 'replaceLine',
+      text: 'hello world',
+      replaceCurrentLine: true
+    });
+  });
+
   it('trims both line edges when leading and trailing space options are enabled', async () => {
     sessionStore = new WorkspaceSessionStore(
       new MemoryMemento({

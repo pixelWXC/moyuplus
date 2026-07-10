@@ -22,6 +22,8 @@
     "onCommand:moyuplus.resetTypingPracticeProgress",
     "onCommand:moyuplus.jumpToTypingPracticeLine",
     "onCommand:moyuplus.toggleTypingPracticeLineEdgeTrim",
+    "onCommand:moyuplus.routeEnter",
+    "onCommand:moyuplus.routeTab",
     "onView:moyuplus.readerView"
   ],
   "main": "./out/extension.js",
@@ -66,8 +68,71 @@
       {
         "command": "moyuplus.toggleTypingPracticeLineEdgeTrim",
         "title": "MoyuPlus: Toggle Typing Practice Line Edge Trim"
+      },
+      {
+        "command": "moyuplus.routeEnter",
+        "title": "MoyuPlus: Route Enter"
+      },
+      {
+        "command": "moyuplus.routeTab",
+        "title": "MoyuPlus: Route Tab"
       }
     ],
+    "keybindings": [
+      {
+        "command": "moyuplus.routeEnter",
+        "key": "enter",
+        "when": "editorTextFocus && !editorReadonly && config.moyuplus.shortcuts.enableEnterRouter"
+      },
+      {
+        "command": "moyuplus.routeTab",
+        "key": "tab",
+        "when": "editorTextFocus && !editorReadonly && moyuplus.typingPracticeActive && config.moyuplus.shortcuts.enableTabRouter && !suggestWidgetVisible && !inSnippetMode"
+      }
+    ],
+    "configuration": {
+      "title": "MoyuPlus",
+      "properties": {
+        "moyuplus.shortcuts.enableEnterRouter": {
+          "type": "boolean",
+          "default": false,
+          "description": "启用 Enter 路由。关闭时，Enter 完全保持 VS Code 原生行为；开启后会按下面的 Enter 设置执行组合动作。"
+        },
+        "moyuplus.shortcuts.enableTabRouter": {
+          "type": "boolean",
+          "default": false,
+          "description": "启用 Tab 路由。只在打字练习开启，并且补全菜单和 snippet 都不活跃时生效；关闭时，Tab 保持 VS Code 原生行为。"
+        },
+        "moyuplus.typing.tabMode": {
+          "type": "string",
+          "enum": [
+            "completeRest",
+            "replaceLine"
+          ],
+          "default": "completeRest",
+          "description": "设置按 Tab 时如何使用当前练习行。completeRest 只补全剩余文字；replaceLine 用练习行替换当前整行。",
+          "enumDescriptions": [
+            "只插入当前练习行中尚未输入的剩余部分。",
+            "用当前练习行替换编辑器当前整行。"
+          ]
+        },
+        "moyuplus.enter.insertNewLine": {
+          "type": "boolean",
+          "default": true,
+          "description": "路由 Enter 时先插入真实换行。建议保持开启，避免改变编辑器的基本输入习惯。"
+        },
+        "moyuplus.enter.nextPracticeLine": {
+          "type": "boolean",
+          "default": false,
+          "description": "路由 Enter 后推进到下一条打字练习行。"
+        },
+        "moyuplus.enter.nextReaderPage": {
+          "type": "boolean",
+          "default": false,
+          "description": "路由 Enter 后请求阅读器翻到下一页；阅读器视图需要已打开并选中文件。"
+        }
+      }
+    },
     "views": {
       "explorer": [
         {

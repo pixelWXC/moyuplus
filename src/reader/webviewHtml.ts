@@ -136,6 +136,7 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     <button id="previousPage">Previous</button>
     <button id="nextPage">Next</button>
     <span id="status" class="status"></span>
+    <button id="shortcutSettings">Shortcuts</button>
     <button id="refresh">Refresh</button>
   </div>
   <script nonce="${nonce}">
@@ -146,6 +147,7 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       increaseFont: document.getElementById('increaseFont'),
       previousPage: document.getElementById('previousPage'),
       nextPage: document.getElementById('nextPage'),
+      shortcutSettings: document.getElementById('shortcutSettings'),
       refresh: document.getElementById('refresh'),
       title: document.getElementById('title'),
       source: document.getElementById('source'),
@@ -166,6 +168,8 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       } else if (message.type === 'error') {
         elements.status.textContent = message.message;
         elements.status.className = 'status error';
+      } else if (message.type === 'command' && message.command === 'nextPage') {
+        postNextPage();
       }
     });
 
@@ -180,11 +184,11 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     });
 
     elements.nextPage.addEventListener('click', () => {
-      vscode.postMessage({
-        type: 'nextPage',
-        currentRange,
-        viewportSnapshot: getViewportSnapshot()
-      });
+      postNextPage();
+    });
+
+    elements.shortcutSettings.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openShortcutSettings' });
     });
 
     elements.decreaseFont.addEventListener('click', () => {
@@ -200,6 +204,14 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     elements.refresh.addEventListener('click', () => {
       vscode.postMessage({ type: 'ready' });
     });
+
+    function postNextPage() {
+      vscode.postMessage({
+        type: 'nextPage',
+        currentRange,
+        viewportSnapshot: getViewportSnapshot()
+      });
+    }
 
     window.addEventListener('resize', scheduleRenderPage);
 

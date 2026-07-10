@@ -4,7 +4,7 @@
 根据 `指导文档.md` 梳理并启动项目开发计划，形成可持续更新的阶段计划、发现记录和进度日志；在用户确认设计前不进行业务代码实现。
 
 ## Current Phase
-Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动验证和人工验证）
+Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成自动验证和人工验证）
 
 ## Phases
 
@@ -38,6 +38,7 @@ Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动�
 - [x] Phase 3：阅读器 Webview 基础版
 - [x] Phase 4：DOM 动态分页
 - [x] Phase 5：打字练习核心
+- [x] Phase 6：Enter/Tab 路由与设置（自动验证和人工验证已完成）
 - **Status:** in_progress
 
 ### Phase 5: 验证与交付
@@ -63,7 +64,7 @@ Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动�
 3. [x] 实现文件导入与文件列表：支持工作区内外 TXT、UTF-8/GBK 编码、失效文件处理。
 4. [x] 实现侧边栏阅读器 Webview：先完成基本渲染、字体设置、上一页/下一页，再接入 DOM 测量动态分页。
 5. [x] 实现打字练习核心：练习文件选择、物理行进度、行内 ghost text、状态栏显示。
-6. 实现 Enter/Tab 路由与快捷键设置：优先保护 VS Code 原生行为，再启用组合动作。
+6. [x] 实现 Enter/Tab 路由与快捷键设置：优先保护 VS Code 原生行为，再启用组合动作（自动验证已完成）。
 7. 补齐测试、异常处理和用户提示。
 
 ### Alternative Path A: 快速原型优先
@@ -88,7 +89,8 @@ Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动�
 | Phase 3 阅读器 Webview 基础版已完成 | 已注册侧边栏 Webview View，接入导入文件列表、全文读取、翻页、字体大小和 ReaderSession 持久化 |
 | Phase 4 DOM 动态分页已完成 | 阅读器 Webview 已使用隐藏 DOM 测量容器和二分测量替换固定字符估算，并接入 resize/font 变化后的重分页 |
 | Phase 5 打字练习核心已完成自动验证和人工验证 | 已实现练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏菜单；人工验证发现首尾空白裁剪配置缺失，已补齐开关命令和菜单入口并复测通过 |
-| 下一步进入 Phase 6 Enter/Tab 路由与设置 | 打字练习核心已具备状态和 ghost text，下一阶段再处理高风险特殊键路由 |
+| Phase 6 Enter/Tab 路由与设置已完成自动验证和人工验证 | 已实现 `moyuplus.routeEnter`、`moyuplus.routeTab`、Tab 两种模式、Enter 组合行为、默认关闭且受限的 keybinding、VS Code Settings 高级配置和阅读器快捷设置入口；2026-07-10 用户确认人工测试全通过 |
+| 下一步进入 Phase 7 快捷键设置页与体验补齐 | Phase 6 自动测试和人工验证均已通过，可继续补齐插件内快捷键设置体验 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已执行 `git init`，后续可按阶段提交 |
 
 ## Errors Encountered
@@ -108,4 +110,4 @@ Phase 4: 开发执行（实施计划 Phase 5 打字练习核心已完成自动�
 - 测试、错误和阶段动作记录在 `progress.md`。
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
-- 下一步：Phase 6 Enter/Tab 路由与设置。
+- 下一步：Phase 7 快捷键设置页与体验补齐。

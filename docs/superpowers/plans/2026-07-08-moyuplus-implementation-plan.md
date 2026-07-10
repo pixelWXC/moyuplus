@@ -196,6 +196,19 @@
 - Tab 补全可按配置替换整行或补全剩余。
 - 快捷键行为有明确上下文限制。
 
+执行状态：
+
+- 2026-07-09 已按 TDD 新增 Phase 6 测试，覆盖 Tab 补全计算、路由命令注册、Enter/Tab 集成行为、package keybinding/configuration 贡献，以及阅读器快捷设置入口。
+- 已新增 `src/commands/shortcutRouter.ts`，注册 `moyuplus.routeEnter` 和 `moyuplus.routeTab`；`extension.ts` 继续只做组合注册。
+- 已实现 Tab 两种模式：`completeRest` 按当前编辑器行前缀插入剩余练习文本，`replaceLine` 用当前练习行替换整行；无活动练习、无编辑器或无可插入文本时回退 VS Code 原生 `tab`。
+- 已实现 Enter 组合行为：根据 VS Code Settings 先执行真实换行，再可选推进下一练习行，并可选请求阅读器下一页；默认只插入真实换行，不推进练习或阅读器。
+- 已在 `package.json` 暴露 `moyuplus.shortcuts.enableEnterRouter`、`moyuplus.shortcuts.enableTabRouter`、`moyuplus.typing.tabMode`、`moyuplus.enter.*` 高级配置；Enter/Tab keybinding 默认由配置关闭，Tab 额外受 `moyuplus.typingPracticeActive`、`!suggestWidgetVisible`、`!inSnippetMode` 等上下文限制。
+- 已在打字练习状态更新时同步 `moyuplus.typingPracticeActive` context key，供 Tab 默认 `when` 条件使用。
+- 已在阅读器 Webview 中增加 `Shortcuts` 入口，点击后打开 MoyuPlus 快捷键相关 Settings；阅读器下一页由扩展向 Webview 发送命令，再由 Webview 使用当前 DOM 分页范围发回 `nextPage`。
+- 2026-07-09 人工测试准备中发现 Settings 英文说明不易理解，已将 Phase 6 相关设置说明改为中文，并为 `completeRest`/`replaceLine` 增加中文选项解释。
+- 已通过自动验证：`npm test`（9 个测试文件、44 个测试通过）、`npm run compile`。
+- 2026-07-10 用户确认 Phase 6 人工 Extension Development Host 测试全通过。
+
 ## Phase 7: 快捷键设置页与体验补齐
 
 目标：补齐指导文档中的插件内设置体验。
@@ -255,4 +268,4 @@
 
 ## 下一步执行入口
 
-下一步进入 Phase 5：实现打字练习核心，包括练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏显示。
+下一步进入 Phase 7：快捷键设置页与体验补齐。

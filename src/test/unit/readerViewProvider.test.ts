@@ -2,13 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ReaderViewProvider } from '../../reader/ReaderViewProvider';
 import { type PageRange } from '../../domain/models';
 import { TxtLibraryStore } from '../../storage/txtLibraryStore';
 import { WorkspaceSessionStore } from '../../storage/workspaceSessionStore';
 import { TxtFileService } from '../../txt/txtFileService';
-import { createWebviewView } from '../shims/vscode';
+import { commands, createWebviewView, resetVSCodeShim } from '../shims/vscode';
 
 class MemoryMemento {
   private readonly values = new Map<string, unknown>();
@@ -29,6 +29,10 @@ async function createTempDir(): Promise<string> {
   tempDirs.push(dir);
   return dir;
 }
+
+beforeEach(() => {
+  resetVSCodeShim();
+});
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -186,6 +190,18 @@ describe('ReaderViewProvider', () => {
       fontSize: 20,
       pageHistory: []
     });
+  });
+
+  it('opens MoyuPlus shortcut settings from the reader webview', async () => {
+    const { provider } = createProviderHarness();
+    const view = createWebviewView();
+    await provider.resolveWebviewView(view);
+
+    await view.webview.receiveMessage({ type: 'openShortcutSettings' });
+
+    expect(commands.executedBuiltinCommands()).toEqual([
+      { commandId: 'workbench.action.openSettings', args: ['moyuplus shortcuts'] }
+    ]);
   });
 });
 
