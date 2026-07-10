@@ -254,3 +254,6 @@
 - 练习控制器使用很窄的结构接口（列表 + 读取物理行），迁移时可保留兼容 facade；打字练习无需理解 EPUB 章节模型。
 - 当前 Reader 选择文件、导入、快捷键设置与正文渲染全部集中在同一个 Webview/Provider，重塑时应拆成书架、阅读应用服务、格式适配器和阅读视图状态，避免 EPUB 逻辑继续堆入单文件。
 - 现有自动测试覆盖 TXT 翻页、session、缺失文件恢复和 Webview HTML 合约，但没有末页/首页边界测试；这应成为重塑的第一批回归测试。
+- Reader v2 Adapter 以安全文档为边界：TXT 输出 HTML 转义文本；EPUB 只输出 parse5/css-tree 清洗后的 XHTML/CSS 与已验证内部资源引用。
+- EPUB Archive 不创建解压目录：yauzl 以 central directory、lazy entry 和逐 entry stream 读取，并在索引与实际 stream 两层执行安全限制。
+- TXT 虚拟 section ID 由规则版本、边界和边界内容摘要派生；标题缺失的大文件按稳定上限分段，小文件与空文件单章 fallback。

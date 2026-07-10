@@ -500,3 +500,11 @@
 ### Error Log 补充
 - 2026-07-10：可视化伴侣首次启动由 `Get-Command bash.exe` 解析到 WSL 启动器，但本机 WSL 缺少 `/bin/bash`；已改用已验证存在的 Git Bash 路径，避免重复同一失败。
 - 2026-07-10：官方可视化服务在 owner process 退出后停止，导致用户看到 `ERR_CONNECTION_REFUSED`；已生成完整静态 HTML，启动独立本地服务，并在内置浏览器验证页面内容正常加载。
+
+### Reader v2 Phase 2：统一 Adapter、TXT 虚拟分章与 EPUB 安全解析
+- **Status:** complete
+- 按 TDD 先增加 8 个目标测试套件，RED 确认均因 Phase 2 模块不存在而失败。
+- 实现 Adapter 合约/Registry、TXT encoding/sectionizer/adapter、typing source catalog。
+- 实现 EPUB security policy/errors、streaming archive、package/nav/NCX parser、XHTML/CSS sanitizer 和 EpubAdapter。
+- 增加中英文及无标题 TXT fixtures，以及代码生成的安全/恶意 EPUB fixtures。
+- 目标测试 8 文件 11 测试通过；全量测试 25 个 Vitest 文件 106 测试和 1 个 Chromium 测试通过；`npm run compile` 通过。

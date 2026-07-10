@@ -182,3 +182,10 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - `writing-plans` 技能在当前会话不可用；采用等价的文件级、测试先行实施计划作为回退。
 - 一次 Web `find` 调用因工具输入解析错误失败；改用官方页面 `open` 定位，未重复失败调用。
 - Reader v2 实施计划首次大文件新增补丁因代码块内一行缺少补丁前缀而被拒绝，文件未创建；改为分块新增并逐段校验。
+
+### Reader v2 Phase 2：Adapter
+- [x] Adapter 合约与 Registry
+- [x] TXT 编码、虚拟分章、Adapter 与练习源筛选
+- [x] EPUB Archive 安全边界、package/nav/NCX 解析和 sanitizer
+- [x] EpubAdapter、目标测试、全量测试、compile、diff check
+- **Status:** complete；下一步进入 Reader v2 Phase 3

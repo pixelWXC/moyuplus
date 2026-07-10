@@ -1,0 +1,2 @@
+export interface EpubSecurityPolicy { maxEntries: number; maxTotalUncompressedBytes: number; maxEntryUncompressedBytes: number; maxMarkupBytes: number; maxCompressionRatio: number }
+export const DEFAULT_EPUB_SECURITY_POLICY: EpubSecurityPolicy = { maxEntries: 5_000, maxTotalUncompressedBytes: 256 * 1024 * 1024, maxEntryUncompressedBytes: 32 * 1024 * 1024, maxMarkupBytes: 8 * 1024 * 1024, maxCompressionRatio: 100 };

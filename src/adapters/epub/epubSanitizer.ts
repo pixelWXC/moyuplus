@@ -1,0 +1,24 @@
+import path from 'node:path';
+import * as parse5 from 'parse5';
+import * as csstree from 'css-tree';
+import { normalizeArchivePath } from './epubArchive';
+export interface SanitizedResource { path: string; kind: 'image' | 'font' }
+const BLOCKED = new Set(['script', 'iframe', 'object', 'embed', 'form']);
+const CSS_ALLOWED = new Set(['color', 'font-family', 'font-size', 'font-style', 'font-weight', 'line-height', 'letter-spacing', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'text-align', 'text-decoration', 'text-indent', 'white-space', 'list-style-type', 'border', 'border-color', 'border-style', 'border-width', 'display', 'vertical-align']);
+export function sanitizeEpubSection(source: string, options: { basePath: string; allowedResources: Set<string> }): { html: string; resources: SanitizedResource[] } {
+  const document: any = parse5.parse(source); const resources: SanitizedResource[] = []; sanitizeChildren(document, options, resources);
+  const body = find(document, 'body'); const content = body ? (body.childNodes ?? []).map((x: any) => parse5.serializeOuter(x)).join('') : '';
+  return { html: `<div class="moyuplus-book-content">${content}</div>`, resources: uniqueResources(resources) };
+}
+function sanitizeChildren(parent: any, options: { basePath: string; allowedResources: Set<string> }, resources: SanitizedResource[]) {
+  parent.childNodes = (parent.childNodes ?? []).filter((node: any) => !BLOCKED.has(node.tagName)).filter((node: any) => !(node.tagName === 'meta' && (attr(node, 'http-equiv') ?? '').toLowerCase() === 'refresh'));
+  for (const node of parent.childNodes) { if (node.attrs) node.attrs = node.attrs.filter((x: any) => !/^on/i.test(x.name)); if (node.tagName === 'style') { const value = nodeText(node); const safe = sanitizeStyleSheet(value); node.childNodes = safe ? [{ nodeName: '#text', value: safe, parentNode: node }] : []; }
+    if (node.attrs) for (const item of [...node.attrs]) { if (item.name === 'style') item.value = sanitizeDeclarations(item.value); if (item.name === 'href') { const safe = safeInternal(item.value, options.basePath); if (!safe) removeAttr(node, 'href'); else item.value = `#${item.value.split('#')[1] ?? ''}`; } if (item.name === 'src') { const safe = safeInternal(item.value, options.basePath); if (!safe || !options.allowedResources.has(safe)) removeAttr(node, 'src'); else { item.value = `moyuplus-resource:${safe}`; resources.push({ path: safe, kind: node.tagName === 'img' ? 'image' : 'font' }); } } }
+    sanitizeChildren(node, options, resources);
+  }
+}
+function sanitizeDeclarations(value: string): string { try { const ast: any = csstree.parse(value, { context: 'declarationList' }); ast.children.forEach((node: any, item: any, list: any) => { const generated = csstree.generate(node.value); if (node.type !== 'Declaration' || !CSS_ALLOWED.has(node.property.toLowerCase()) || /url\s*\(|expression|behavior/i.test(generated)) list.remove(item); }); return csstree.generate(ast); } catch { return ''; } }
+function sanitizeStyleSheet(value: string): string { try { const ast: any = csstree.parse(value); ast.children.forEach((node: any, item: any, list: any) => { if (node.type !== 'Rule') { list.remove(item); return; } node.block.children.forEach((decl: any, di: any, dl: any) => { if (decl.type !== 'Declaration' || !CSS_ALLOWED.has(decl.property.toLowerCase()) || /url\s*\(|expression|behavior/i.test(csstree.generate(decl.value))) dl.remove(di); }); if (!node.block.children.size) list.remove(item); else node.prelude = csstree.parse(`.moyuplus-book-content ${csstree.generate(node.prelude)}`, { context: 'selectorList' }); }); return csstree.generate(ast); } catch { return ''; } }
+function safeInternal(value: string, basePath: string): string | undefined { if (!value || /^\s*(?:javascript|data|file|https?):/i.test(value)) return undefined; const file = value.split('#')[0]; if (!file) return basePath; try { return normalizeArchivePath(path.posix.normalize(path.posix.join(path.posix.dirname(basePath), decodeURIComponent(file)))); } catch { return undefined; } }
+function find(node: any, tag: string): any { if (node.tagName === tag) return node; for (const child of node.childNodes ?? []) { const result = find(child, tag); if (result) return result; } }
+function attr(node: any, name: string) { return node.attrs?.find((x: any) => x.name === name)?.value; } function removeAttr(node: any, name: string) { node.attrs = node.attrs.filter((x: any) => x.name !== name); } function nodeText(node: any): string { return node.nodeName === '#text' ? node.value : (node.childNodes ?? []).map(nodeText).join(''); } function uniqueResources(values: SanitizedResource[]) { return [...new Map(values.map((x) => [x.path, x])).values()]; }

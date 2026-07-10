@@ -3,7 +3,7 @@
 - 日期：2026-07-10
 - 依据：[Reader v2 设计规格](../specs/2026-07-10-moyuplus-reader-redesign-design.md)
 - 策略：最大改动面、测试先行、完成后删除旧阅读栈，不长期维护双栈
-- 当前状态：Phase 1 已完成（2026-07-10），下一步进入 Phase 2
+- 当前状态：Phase 2 已完成（2026-07-10），下一步进入 Phase 3
 
 ## 1. 执行原则
 
@@ -359,6 +359,14 @@ Phase 2 完成门槛：
 - 所有 EPUB 解析都在扩展宿主完成。
 - 恶意 fixtures 通过安全拒绝测试。
 - 提交：`Implement TXT and EPUB adapters`。
+
+执行状态（2026-07-10）：
+
+- 已完成统一 `BookAdapter`/`BookHandle` 合约和 format Registry。
+- 已完成 TXT UTF-8/GBK 解码、物理行接口、中英文章节识别、无标题大文件稳定分段和 TXT typing capability 过滤。
+- 已完成 EPUB ZIP 安全边界、container/OPF、EPUB 3 nav/EPUB 2 NCX 解析、XHTML/CSS 清洗和 `EpubAdapter` 组合。
+- ZIP 读取不落盘，启用条目数、单条/累计大小、markup 大小、压缩比、路径、加密和压缩算法限制。
+- `npm test` 通过：25 个 Vitest 文件、106 个单元测试，以及 1 个 Chromium 测试；`npm run compile` 与 `git diff --check` 通过。
 
 ## 6. Phase 3：Webview Bundle、Layout Engine 与真实 DOM 测试
 

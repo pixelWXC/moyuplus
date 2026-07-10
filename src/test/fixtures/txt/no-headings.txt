@@ -1,0 +1,1 @@
+This fixture intentionally has no chapter heading. It exercises deterministic fallback sectioning for plain text content.
