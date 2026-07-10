@@ -10,8 +10,18 @@ import {
   ROUTE_TAB_COMMAND_ID,
   START_TYPING_PRACTICE_COMMAND_ID,
   STOP_TYPING_PRACTICE_COMMAND_ID,
+  TOGGLE_TYPING_PRACTICE_COMMAND_ID,
   TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID
 } from '../../extension';
+import {
+  CLOSE_READER_COMMAND_ID,
+  DECREASE_READER_FONT_COMMAND_ID,
+  FOCUS_READER_COMMAND_ID,
+  INCREASE_READER_FONT_COMMAND_ID,
+  NEXT_READER_PAGE_COMMAND_ID,
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  SELECT_READER_FILE_COMMAND_ID
+} from '../../shortcuts/shortcutSettings';
 
 describe('package contributions', () => {
   it('contributes the reader webview to the VS Code sidebar', async () => {
@@ -117,5 +127,25 @@ describe('package contributions', () => {
         description: expect.stringContaining('阅读器翻到下一页')
       }
     });
+  });
+
+  it('contributes commands for every action shown on the shortcut settings page', async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
+    const commandIds = packageJson.contributes.commands.map((command: { command: string }) => command.command);
+    const settingsCommands = [
+      NEXT_READER_PAGE_COMMAND_ID,
+      PREVIOUS_READER_PAGE_COMMAND_ID,
+      FOCUS_READER_COMMAND_ID,
+      CLOSE_READER_COMMAND_ID,
+      SELECT_READER_FILE_COMMAND_ID,
+      INCREASE_READER_FONT_COMMAND_ID,
+      DECREASE_READER_FONT_COMMAND_ID,
+      TOGGLE_TYPING_PRACTICE_COMMAND_ID
+    ];
+
+    expect(commandIds).toEqual(expect.arrayContaining(settingsCommands));
+    expect(packageJson.activationEvents).toEqual(
+      expect.arrayContaining(settingsCommands.map((commandId) => `onCommand:${commandId}`))
+    );
   });
 });

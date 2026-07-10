@@ -36,8 +36,6 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     select,
     button {
       min-height: 28px;
-      color: var(--vscode-button-foreground);
-      background: var(--vscode-button-background);
       border: 1px solid var(--vscode-button-border, transparent);
       border-radius: 3px;
       padding: 3px 8px;
@@ -51,8 +49,37 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       border-color: var(--vscode-dropdown-border);
     }
 
+    button {
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background));
+    }
+
     button:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+    }
+
+    button.primary {
+      color: var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+    }
+
+    button.primary:hover {
       background: var(--vscode-button-hoverBackground);
+    }
+
+    button:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
     }
 
     .meta {
@@ -118,9 +145,109 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     .error {
       color: var(--vscode-errorForeground);
     }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .recovery-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .shortcut-panel {
+      height: calc(100vh - 24px);
+      overflow: auto;
+    }
+
+    .shortcut-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .shortcut-list {
+      display: grid;
+      border-top: 1px solid var(--vscode-panel-border);
+    }
+
+    .shortcut-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+
+    .shortcut-item-title,
+    .shortcut-item-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .shortcut-item-meta {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .shortcut-item-meta > .shortcut-description {
+      margin-right: auto;
+    }
+
+    .shortcut-description,
+    .shortcut-risk,
+    .shortcut-note {
+      margin-top: 6px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .shortcut-risk {
+      color: var(--vscode-editorWarning-foreground);
+    }
+
+    kbd {
+      padding: 2px 6px;
+      border: 1px solid var(--vscode-keybindingLabel-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      background: var(--vscode-keybindingLabel-background);
+      color: var(--vscode-keybindingLabel-foreground);
+      font-family: var(--vscode-editor-font-family);
+    }
+
+    @media (max-width: 320px) {
+      body {
+        padding: 8px;
+      }
+
+      .toolbar {
+        gap: 4px;
+      }
+
+      .footer {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .footer .status {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+
+      .shortcut-item-title {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
   </style>
 </head>
 <body>
+  <section id="readerPanel">
   <div class="toolbar">
     <select id="fileSelect" aria-label="Select TXT file"></select>
     <button id="decreaseFont" title="Decrease font size">A-</button>
@@ -131,14 +258,31 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     <span id="source"></span>
   </div>
   <main id="reader" class="reader"></main>
+  <div id="recoveryActions" class="recovery-actions" hidden>
+    <button id="importTxt" class="primary">导入 TXT</button>
+    <button id="removeActiveFile">移除导入记录</button>
+    <button id="switchActiveFileEncoding">切换 UTF-8 / GBK</button>
+  </div>
   <div id="measure" class="measure" aria-hidden="true"></div>
   <div class="footer">
     <button id="previousPage">Previous</button>
-    <button id="nextPage">Next</button>
-    <span id="status" class="status"></span>
+    <button id="nextPage" class="primary">Next</button>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
     <button id="shortcutSettings">Shortcuts</button>
     <button id="refresh">Refresh</button>
   </div>
+  </section>
+  <section id="shortcutPanel" class="shortcut-panel" hidden>
+    <div class="shortcut-header">
+      <strong>快捷键设置</strong>
+      <button id="closeShortcutSettings">返回阅读器</button>
+    </div>
+    <p class="shortcut-note">这里显示 MoyuPlus 默认绑定和启用状态。用户自定义后的实际绑定请在 VS Code Keyboard Shortcuts 中查看。</p>
+    <div id="shortcutList" class="shortcut-list"></div>
+    <div class="recovery-actions">
+      <button id="openAdvancedSettings">打开高级设置</button>
+    </div>
+  </section>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const elements = {
@@ -148,6 +292,15 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       previousPage: document.getElementById('previousPage'),
       nextPage: document.getElementById('nextPage'),
       shortcutSettings: document.getElementById('shortcutSettings'),
+      readerPanel: document.getElementById('readerPanel'),
+      shortcutPanel: document.getElementById('shortcutPanel'),
+      shortcutList: document.getElementById('shortcutList'),
+      closeShortcutSettings: document.getElementById('closeShortcutSettings'),
+      openAdvancedSettings: document.getElementById('openAdvancedSettings'),
+      recoveryActions: document.getElementById('recoveryActions'),
+      importTxt: document.getElementById('importTxt'),
+      removeActiveFile: document.getElementById('removeActiveFile'),
+      switchActiveFileEncoding: document.getElementById('switchActiveFileEncoding'),
       refresh: document.getElementById('refresh'),
       title: document.getElementById('title'),
       source: document.getElementById('source'),
@@ -188,7 +341,32 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     });
 
     elements.shortcutSettings.addEventListener('click', () => {
+      elements.readerPanel.hidden = true;
+      elements.shortcutPanel.hidden = false;
+      renderShortcutSettings();
+      elements.closeShortcutSettings.focus();
+    });
+
+    elements.closeShortcutSettings.addEventListener('click', () => {
+      elements.shortcutPanel.hidden = true;
+      elements.readerPanel.hidden = false;
+      elements.shortcutSettings.focus();
+    });
+
+    elements.openAdvancedSettings.addEventListener('click', () => {
       vscode.postMessage({ type: 'openShortcutSettings' });
+    });
+
+    elements.importTxt.addEventListener('click', () => {
+      vscode.postMessage({ type: 'importTxt' });
+    });
+
+    elements.removeActiveFile.addEventListener('click', () => {
+      vscode.postMessage({ type: 'removeActiveFile' });
+    });
+
+    elements.switchActiveFileEncoding.addEventListener('click', () => {
+      vscode.postMessage({ type: 'switchActiveFileEncoding' });
     });
 
     elements.decreaseFont.addEventListener('click', () => {
@@ -225,6 +403,65 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
     function render() {
       renderFileSelect();
       renderPage();
+      renderShortcutSettings();
+    }
+
+    function renderShortcutSettings() {
+      elements.shortcutList.innerHTML = '';
+      for (const item of payload?.shortcuts ?? []) {
+        const container = document.createElement('div');
+        container.className = 'shortcut-item';
+
+        const title = document.createElement('div');
+        title.className = 'shortcut-item-title';
+        const label = document.createElement('strong');
+        label.textContent = item.label;
+        const binding = document.createElement('kbd');
+        binding.textContent = item.defaultBinding ?? '未设置默认按键';
+        title.append(label, binding);
+        container.appendChild(title);
+
+        const description = document.createElement('div');
+        description.className = 'shortcut-description';
+        description.textContent = item.description;
+        container.appendChild(description);
+
+        if (item.conflictWarning) {
+          const risk = document.createElement('div');
+          risk.className = 'shortcut-risk';
+          risk.textContent = '潜在冲突：' + item.conflictWarning;
+          container.appendChild(risk);
+        }
+
+        const meta = document.createElement('div');
+        meta.className = 'shortcut-item-meta';
+        const state = document.createElement('span');
+        state.className = 'shortcut-description';
+        state.textContent = item.enabled ? '已启用' : '已停用';
+        meta.appendChild(state);
+
+        if (item.configurableEnablement) {
+          const toggle = document.createElement('button');
+          toggle.textContent = item.enabled ? '停用' : '启用';
+          toggle.addEventListener('click', () => {
+            vscode.postMessage({
+              type: 'setShortcutEnabled',
+              shortcut: item.configurableEnablement,
+              enabled: !item.enabled
+            });
+          });
+          meta.appendChild(toggle);
+        }
+
+        const edit = document.createElement('button');
+        edit.textContent = '编辑按键';
+        edit.addEventListener('click', () => {
+          vscode.postMessage({ type: 'openShortcutEditor', commandId: item.commandId });
+        });
+        meta.appendChild(edit);
+        container.appendChild(meta);
+        elements.shortcutList.appendChild(container);
+      }
     }
 
     function renderFileSelect() {
@@ -253,9 +490,14 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
       elements.source.textContent = payload?.activeFile?.source ?? '';
 
       if (payload?.error) {
+        const errorMessage = typeof payload.error === 'string' ? payload.error : payload.error.message;
         elements.reader.className = 'reader error';
-        elements.reader.textContent = payload.error;
-        elements.status.textContent = payload.error;
+        elements.reader.textContent = errorMessage;
+        elements.status.textContent = errorMessage;
+        elements.recoveryActions.hidden = false;
+        elements.importTxt.hidden = payload.error.kind !== 'missing';
+        elements.removeActiveFile.hidden = payload.error.kind !== 'missing';
+        elements.switchActiveFileEncoding.hidden = payload.error.kind !== 'decode';
         lastRenderedSignature = undefined;
         return;
       }
@@ -264,6 +506,10 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
         elements.reader.className = 'reader empty';
         elements.reader.textContent = 'No imported TXT files. Run "MoyuPlus: Import TXT" first.';
         elements.status.textContent = '';
+        elements.recoveryActions.hidden = false;
+        elements.importTxt.hidden = false;
+        elements.removeActiveFile.hidden = true;
+        elements.switchActiveFileEncoding.hidden = true;
         currentRange = { startOffset: 0, endOffset: 0 };
         lastRenderedSignature = undefined;
         return;
@@ -273,12 +519,14 @@ export function getReaderWebviewHtml(webview: vscode.Webview): string {
         elements.reader.className = 'reader empty';
         elements.reader.textContent = 'Select a TXT file to start reading.';
         elements.status.textContent = '';
+        elements.recoveryActions.hidden = true;
         currentRange = { startOffset: 0, endOffset: 0 };
         lastRenderedSignature = undefined;
         return;
       }
 
       const startOffset = clamp(session.offset, 0, text.length);
+      elements.recoveryActions.hidden = true;
       elements.reader.className = 'reader';
       syncMeasureStyles();
       const endOffset = findMeasuredPageEnd(text, startOffset);

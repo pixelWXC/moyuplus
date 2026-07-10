@@ -13,10 +13,30 @@ describe('reader webview html', () => {
     expect(html).not.toContain('charsPerLine');
   });
 
-  it('provides a shortcut settings entry in the reader webview', () => {
+  it('provides an in-plugin shortcut settings page with status, risk, and edit actions', () => {
     const html = getReaderWebviewHtml({ cspSource: 'vscode-resource:' } as never);
 
     expect(html).toContain('id="shortcutSettings"');
-    expect(html).toContain("type: 'openShortcutSettings'");
+    expect(html).toContain('id="shortcutPanel"');
+    expect(html).toContain('renderShortcutSettings');
+    expect(html).toContain("type: 'setShortcutEnabled'");
+    expect(html).toContain("type: 'openShortcutEditor'");
+    expect(html).toContain('潜在冲突');
+  });
+
+  it('offers recovery actions for empty, missing, and decode-error reader states', () => {
+    const html = getReaderWebviewHtml({ cspSource: 'vscode-resource:' } as never);
+
+    expect(html).toContain("type: 'importTxt'");
+    expect(html).toContain("type: 'removeActiveFile'");
+    expect(html).toContain("type: 'switchActiveFileEncoding'");
+  });
+
+  it('keeps keyboard focus and live status visible in the narrow VS Code sidebar', () => {
+    const html = getReaderWebviewHtml({ cspSource: 'vscode-resource:' } as never);
+
+    expect(html).toContain(':focus-visible');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('@media (max-width: 320px)');
   });
 });

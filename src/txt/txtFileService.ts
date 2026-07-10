@@ -112,6 +112,17 @@ export class TxtFileService {
     return this.libraryStore.remove(fileId);
   }
 
+  async updateImportedFileEncoding(fileId: string, encoding: TxtEncoding): Promise<ImportedTxtFile> {
+    const file = this.getImportedFile(fileId);
+    const updated: ImportedTxtFile = {
+      ...file,
+      encoding,
+      updatedAt: this.now()
+    };
+    await this.libraryStore.upsert(updated);
+    return updated;
+  }
+
   async readFullText(fileId: string): Promise<string> {
     const file = this.getImportedFile(fileId);
     const buffer = await this.readImportedFileBuffer(file);

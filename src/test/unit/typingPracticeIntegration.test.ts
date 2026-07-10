@@ -13,11 +13,21 @@ import {
   START_TYPING_PRACTICE_COMMAND_ID,
   STOP_TYPING_PRACTICE_COMMAND_ID,
   TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
+  TOGGLE_TYPING_PRACTICE_COMMAND_ID,
   activate
 } from '../../extension';
 import { createDefaultTypingPracticeSession } from '../../domain/models';
 import { READER_VIEW_ID } from '../../reader/readerMessages';
 import { TYPING_PRACTICE_SESSION_KEY } from '../../storage/storageKeys';
+import {
+  CLOSE_READER_COMMAND_ID,
+  DECREASE_READER_FONT_COMMAND_ID,
+  FOCUS_READER_COMMAND_ID,
+  INCREASE_READER_FONT_COMMAND_ID,
+  NEXT_READER_PAGE_COMMAND_ID,
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  SELECT_READER_FILE_COMMAND_ID
+} from '../../shortcuts/shortcutSettings';
 import {
   commands,
   createTextEditor,
@@ -81,6 +91,13 @@ describe('typing practice registration and VS Code integration', () => {
       IMPORT_TXT_COMMAND_ID,
       'moyuplus.removeImportedTxt',
       'moyuplus.checkImportedTxtFiles',
+      NEXT_READER_PAGE_COMMAND_ID,
+      PREVIOUS_READER_PAGE_COMMAND_ID,
+      FOCUS_READER_COMMAND_ID,
+      CLOSE_READER_COMMAND_ID,
+      SELECT_READER_FILE_COMMAND_ID,
+      INCREASE_READER_FONT_COMMAND_ID,
+      DECREASE_READER_FONT_COMMAND_ID,
       START_TYPING_PRACTICE_COMMAND_ID,
       STOP_TYPING_PRACTICE_COMMAND_ID,
       NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -88,6 +105,7 @@ describe('typing practice registration and VS Code integration', () => {
       JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
       SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
+      TOGGLE_TYPING_PRACTICE_COMMAND_ID,
       ROUTE_ENTER_COMMAND_ID,
       ROUTE_TAB_COMMAND_ID
     ]);
@@ -95,6 +113,39 @@ describe('typing practice registration and VS Code integration', () => {
     expect(window.statusBarItems).toHaveLength(1);
     expect(window.statusBarItems[0].visible).toBe(false);
     expect(commands.contextValue('moyuplus.typingPracticeActive')).toBe(false);
+  });
+
+  it('shows the real-file safety notice only on first start and toggles practice state', async () => {
+    const workspaceDir = await createTempDir();
+    const filePath = path.join(workspaceDir, 'safe-practice.txt');
+    await writeFile(filePath, 'practice line', 'utf8');
+    const context = {
+      globalState: new MemoryMemento(),
+      workspaceState: new MemoryMemento(),
+      subscriptions: [] as Disposable[]
+    };
+    workspace.workspaceFolders = [{ uri: Uri.file(workspaceDir) }];
+    window.openDialogResult = [Uri.file(filePath)];
+    window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
+    activate(context);
+    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    window.quickPickResult = { label: 'safe-practice.txt', fileId: imported.id };
+
+    await commands.executeRegisteredCommand(TOGGLE_TYPING_PRACTICE_COMMAND_ID);
+
+    expect(window.warningMessages).toEqual([
+      expect.stringContaining('练习输入会真实写入当前编辑器文件')
+    ]);
+    expect(window.statusBarItems[0].visible).toBe(true);
+
+    await commands.executeRegisteredCommand(TOGGLE_TYPING_PRACTICE_COMMAND_ID);
+    expect(window.statusBarItems[0].visible).toBe(false);
+
+    window.quickPickResult = { label: 'safe-practice.txt', fileId: imported.id };
+    await commands.executeRegisteredCommand(TOGGLE_TYPING_PRACTICE_COMMAND_ID);
+
+    expect(window.warningMessages).toHaveLength(1);
+    expect(window.statusBarItems[0].visible).toBe(true);
   });
 
   it('starts practice from an imported TXT, serves ghost text, updates the menu, and stops cleanly', async () => {

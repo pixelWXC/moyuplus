@@ -4,7 +4,7 @@
 根据 `指导文档.md` 梳理并启动项目开发计划，形成可持续更新的阶段计划、发现记录和进度日志；在用户确认设计前不进行业务代码实现。
 
 ## Current Phase
-Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成自动验证和人工验证）
+Phase 4: 开发执行（实施计划 Phase 7 快捷键设置页与体验补齐已完成自动验证和人工验证，下一步进入 Phase 8）
 
 ## Phases
 
@@ -39,6 +39,7 @@ Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成�
 - [x] Phase 4：DOM 动态分页
 - [x] Phase 5：打字练习核心
 - [x] Phase 6：Enter/Tab 路由与设置（自动验证和人工验证已完成）
+- [x] Phase 7：快捷键设置页与体验补齐（自动验证和人工验证已完成）
 - **Status:** in_progress
 
 ### Phase 5: 验证与交付
@@ -65,7 +66,7 @@ Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成�
 4. [x] 实现侧边栏阅读器 Webview：先完成基本渲染、字体设置、上一页/下一页，再接入 DOM 测量动态分页。
 5. [x] 实现打字练习核心：练习文件选择、物理行进度、行内 ghost text、状态栏显示。
 6. [x] 实现 Enter/Tab 路由与快捷键设置：优先保护 VS Code 原生行为，再启用组合动作（自动验证已完成）。
-7. 补齐测试、异常处理和用户提示。
+7. [x] 补齐快捷键设置页、异常处理和用户提示（自动验证已完成）。
 
 ### Alternative Path A: 快速原型优先
 先实现一个最小可见 demo：单文件导入、阅读器分页、当前练习行提示。优点是最快看到效果；缺点是后期需要补状态边界和架构整理。
@@ -90,7 +91,7 @@ Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成�
 | Phase 4 DOM 动态分页已完成 | 阅读器 Webview 已使用隐藏 DOM 测量容器和二分测量替换固定字符估算，并接入 resize/font 变化后的重分页 |
 | Phase 5 打字练习核心已完成自动验证和人工验证 | 已实现练习文件选择、物理行进度、Inline Completion ghost text、下一行/重置/跳转和状态栏菜单；人工验证发现首尾空白裁剪配置缺失，已补齐开关命令和菜单入口并复测通过 |
 | Phase 6 Enter/Tab 路由与设置已完成自动验证和人工验证 | 已实现 `moyuplus.routeEnter`、`moyuplus.routeTab`、Tab 两种模式、Enter 组合行为、默认关闭且受限的 keybinding、VS Code Settings 高级配置和阅读器快捷设置入口；2026-07-10 用户确认人工测试全通过 |
-| 下一步进入 Phase 7 快捷键设置页与体验补齐 | Phase 6 自动测试和人工验证均已通过，可继续补齐插件内快捷键设置体验 |
+| Phase 7 快捷键设置页与体验补齐已完成自动验证和人工验证 | Reader Webview 已提供插件内快捷键总览、Enter/Tab 开关、原生 Keyboard Shortcuts 编辑入口、风险说明、首次练习安全提示和文件异常恢复操作；界面遵循“原生、克制、可靠”的 VS Code 工具风格；2026-07-10 用户确认人工测试通过 |
 | 从现在开始使用 Git | 用户已要求启动 Git，当前目录已执行 `git init`，后续可按阶段提交 |
 
 ## Errors Encountered
@@ -110,4 +111,4 @@ Phase 4: 开发执行（实施计划 Phase 6 Enter/Tab 路由与设置已完成�
 - 测试、错误和阶段动作记录在 `progress.md`。
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
-- 下一步：Phase 7 快捷键设置页与体验补齐。
+- 下一步：进入 Phase 8 测试、打包与人工验收。

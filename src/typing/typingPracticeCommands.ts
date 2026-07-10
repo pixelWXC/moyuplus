@@ -13,6 +13,8 @@ export const RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID = 'moyuplus.resetTypingPr
 export const JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID = 'moyuplus.jumpToTypingPracticeLine';
 export const TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID = 'moyuplus.toggleTypingPracticeLineEdgeTrim';
 export const SHOW_TYPING_PRACTICE_MENU_COMMAND_ID = 'moyuplus.showTypingPracticeMenu';
+export const TOGGLE_TYPING_PRACTICE_COMMAND_ID = 'moyuplus.toggleTypingPractice';
+const TYPING_PRACTICE_SAFETY_NOTICE_KEY = 'moyuplus.typingPracticeSafetyNoticeShown';
 
 interface PracticeFileQuickPickItem extends vscode.QuickPickItem {
   fileId: string;
@@ -71,7 +73,7 @@ export function registerTypingPractice(
 
   context.subscriptions.push(
     vscode.commands.registerCommand(START_TYPING_PRACTICE_COMMAND_ID, async () => {
-      const result = await startTypingPractice(controller);
+      const result = await startTypingPractice(controller, context.globalState);
       await updateStatusBar();
       return result;
     }),
@@ -105,6 +107,14 @@ export function registerTypingPractice(
       await updateStatusBar();
       return result;
     }),
+    vscode.commands.registerCommand(TOGGLE_TYPING_PRACTICE_COMMAND_ID, async () => {
+      const currentLine = await getCurrentLineIfAvailable(controller);
+      const result = currentLine
+        ? await controller.stop().then(() => undefined)
+        : await startTypingPractice(controller, context.globalState);
+      await updateStatusBar();
+      return result;
+    }),
     vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, new TypingInlineCompletionProvider(controller))
   );
 
@@ -121,7 +131,10 @@ async function getCurrentLineIfAvailable(
   }
 }
 
-async function startTypingPractice(controller: TypingPracticeController): Promise<TypingPracticeLine | undefined> {
+async function startTypingPractice(
+  controller: TypingPracticeController,
+  globalState: vscode.Memento
+): Promise<TypingPracticeLine | undefined> {
   const files = controller.listPracticeFiles();
   if (files.length === 0) {
     await vscode.window.showInformationMessage('No imported TXT files. Import a TXT before starting typing practice.');
@@ -141,7 +154,19 @@ async function startTypingPractice(controller: TypingPracticeController): Promis
     return undefined;
   }
 
+  await showSafetyNoticeOnce(globalState);
   return runPracticeAction(() => controller.start(selected.fileId));
+}
+
+async function showSafetyNoticeOnce(globalState: vscode.Memento): Promise<void> {
+  if (globalState.get<boolean>(TYPING_PRACTICE_SAFETY_NOTICE_KEY, false)) {
+    return;
+  }
+
+  await vscode.window.showWarningMessage(
+    '练习输入会真实写入当前编辑器文件。建议在临时文件、草稿文件或专门练习文件中使用，避免误修改项目源码。'
+  );
+  await globalState.update(TYPING_PRACTICE_SAFETY_NOTICE_KEY, true);
 }
 
 async function showTypingPracticeMenu(controller: TypingPracticeController): Promise<TypingPracticeLine | undefined> {

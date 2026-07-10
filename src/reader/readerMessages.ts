@@ -1,4 +1,5 @@
 import { type ImportedTxtFile, type PageRange, type ReaderSession, type ReaderViewportSnapshot } from '../domain/models';
+import { type ShortcutEnablement, type ShortcutSettingItem } from '../shortcuts/shortcutSettings';
 
 export const READER_VIEW_ID = 'moyuplus.readerView';
 
@@ -9,14 +10,25 @@ export type ReaderViewToExtensionMessage =
   | { type: 'nextPage'; currentRange: PageRange; viewportSnapshot?: ReaderViewportSnapshot }
   | { type: 'previousPage' }
   | { type: 'setFontSize'; fontSize: number }
-  | { type: 'openShortcutSettings' };
+  | { type: 'openShortcutSettings' }
+  | { type: 'openShortcutEditor'; commandId: string }
+  | { type: 'setShortcutEnabled'; shortcut: ShortcutEnablement; enabled: boolean }
+  | { type: 'importTxt' }
+  | { type: 'removeActiveFile' }
+  | { type: 'switchActiveFileEncoding' };
+
+export interface ReaderErrorState {
+  kind: 'missing' | 'decode' | 'notImported' | 'generic';
+  message: string;
+}
 
 export interface ReaderStatePayload {
   files: ImportedTxtFile[];
   session: ReaderSession;
   activeFile?: ImportedTxtFile;
   text?: string;
-  error?: string;
+  error?: ReaderErrorState;
+  shortcuts: ShortcutSettingItem[];
 }
 
 export type ExtensionToReaderMessage =

@@ -143,4 +143,28 @@ describe('TxtFileService', () => {
 
     expect(store.list()).toEqual([]);
   });
+
+  it('updates an imported TXT encoding without replacing its identity', async () => {
+    const dir = await createTempDir();
+    const filePath = path.join(dir, 'switch-encoding.txt');
+    await writeFile(filePath, iconv.encode('中文', 'gbk'));
+    const store = new TxtLibraryStore(new MemoryMemento());
+    const service = new TxtFileService(store, { now: () => 200 });
+    const imported = await service.importTxtFile({
+      uri: pathToFileURL(filePath).toString(),
+      encoding: 'utf8',
+      workspaceFolderUris: []
+    });
+
+    const updated = await service.updateImportedFileEncoding(imported.id, 'gbk');
+
+    expect(updated).toMatchObject({
+      id: imported.id,
+      uri: imported.uri,
+      createdAt: imported.createdAt,
+      encoding: 'gbk',
+      updatedAt: 200
+    });
+    await expect(service.readFullText(imported.id)).resolves.toBe('中文');
+  });
 });

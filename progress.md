@@ -331,6 +331,15 @@
 | Phase 6 Settings 中文文案 RED 测试 | `npm test -- src/test/unit/packageContributions.test.ts` | 因 Settings 描述仍为英文而失败 | package contribution 测试失败，显示 6 个 Settings 描述仍为英文且 `tabMode` 缺少中文 `enumDescriptions` | pass |
 | Phase 6 Settings 中文文案目标测试 | `npm test -- src/test/unit/packageContributions.test.ts` | Settings 描述和 Tab 模式选项解释为中文 | 1 个测试文件、3 个测试通过，退出码 0 | pass |
 | Phase 6 人工验证 | Extension Development Host | 默认不拦截 Enter/Tab；启用设置后验证 Tab 两种模式、Enter 组合行为和阅读器设置入口 | 用户确认测试全通过 | pass |
+| Phase 7 第一组 RED | 快捷键目录、Webview、package 目标测试 | 因缺少快捷键设置页与命令贡献失败 | 缺少模块、面板、恢复动作和命令，符合预期 | pass |
+| Phase 7 快捷键状态与命令 | `shortcutSettings`、Reader provider、package/activation 测试 | 状态目录、配置更新、原生改键入口和阅读器命令通过 | 目标测试通过 | pass |
+| Phase 7 安全提示 | 打字练习集成测试 | 首次提示真实文件写入风险，后续不重复，统一开关正常 | 目标测试通过 | pass |
+| Phase 7 异常恢复 | TXT service、Reader provider 测试 | 空状态导入、失效记录移除、编码切换通过 | 2 个测试文件、20 个测试通过 | pass |
+| Phase 7 Webview 可访问性 | `npm test -- src/test/unit/readerWebviewHtml.test.ts` | 焦点环、状态播报和窄侧栏契约通过 | 1 个测试文件、4 个测试通过 | pass |
+| Phase 7 全量测试 | `npm test` | 所有单元/集成测试通过 | 10 个测试文件、57 个测试通过 | pass |
+| Phase 7 TypeScript 编译 | `npm run compile` | 编译通过 | `tsc -p ./` 退出码 0 | pass |
+| Phase 7 diff 检查 | `git diff --check` | 无空白错误 | 退出码 0，仅报告既有行尾转换提示 | pass |
+| Phase 7 人工验证 | Extension Development Host | 快捷键页、Enter/Tab 开关、原生改键入口、首次安全提示、空/失效/编码错误恢复均正常 | 用户确认人工测试通过 | pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -346,15 +355,46 @@
 | 2026-07-08 | Phase 5 第一次全量测试中 TXT 命令测试 fake context 缺少 `workspaceState` | 1 | 为相关测试 context 补齐 `workspaceState`，匹配真实 VS Code `ExtensionContext` |
 | 2026-07-08 | 用户人工验证发现 Phase 5 缺少每行首尾空白裁剪配置入口 | 1 | 新增 `trimTrailingSpaces` session 字段、`moyuplus.toggleTypingPracticeLineEdgeTrim` 命令和状态栏菜单入口 |
 | 2026-07-08 | 首尾空白裁剪初次实现导致默认 `skipEmptyLines` 不再跳过纯空白行 | 1 | 空行判断改为原始 `trim()` 非空且配置处理后非空，目标测试通过 |
+| 2026-07-10 | Phase 7 恢复测试初次 GREEN 中两个断言要求对象显式包含值为 `undefined` 的可选属性 | 1 | 改为断言属性不存在，匹配真实消息与 session 序列化结构 |
+| 2026-07-10 | 使用 PowerShell `;` 顺序执行目标测试和编译时，后续编译成功掩盖了前一个测试命令的非零退出码 | 1 | 分开运行验证命令；后续不使用该形式判断整体验证是否成功 |
+| 2026-07-10 | 一次大型文档补丁因 `progress.md` 上下文行匹配失败而整体未应用 | 1 | 将补丁拆分为按文件和稳定标题定位的小补丁后成功更新 |
+
+## 2026-07-10 Phase 7 恢复
+
+- 已从 `task_plan.md`、`findings.md`、`progress.md` 和实施计划恢复上下文。
+- Phase 6 的自动测试与人工验证均已通过；当前目标是 Phase 7“快捷键设置页与体验补齐”。
+- 当前工作树只有 `manual-gbk.txt`、`manual-utf8.txt`、`test.txt` 三个既有未跟踪手工测试文件，本阶段保持不动。
+- Phase 7 既定验收范围：主要功能快捷键状态可见、首次开启练习有安全提示、无文件/文件失效/编码失败有明确反馈。
+- Phase 7 第一组 RED 已验证：快捷键目录模块不存在，Webview 尚无快捷键面板与恢复动作，package 尚未贡献对应阅读器/练习切换命令；目标测试按预期失败。
+- 新增 `src/shortcuts/shortcutSettings.ts`，集中描述 10 个主要阅读/练习动作的功能名、默认绑定、启用状态、风险和说明。
+- Reader Webview 新增插件内快捷键设置面板，支持 Enter/Tab 启停、打开原生 Keyboard Shortcuts 和高级 Settings。
+- 新增 7 个阅读器可绑定命令和统一的 `moyuplus.toggleTypingPractice` 命令。
+- 首次开始练习会显示“练习输入会真实写入当前编辑器文件”的一次性中文警告。
+- Reader 空状态支持直接导入；缺失文件状态支持重新导入或移除记录；解码失败支持 UTF-8/GBK 切换。
+- `TxtFileService` 新增导入记录编码更新能力，保持文件 identity 与创建时间不变。
+- 根据用户选择建立 `.impeccable.md`，并把快捷键页收敛为 VS Code 原生克制工具风：扁平列表、主题令牌、主次按钮、焦点环、状态播报和窄侧栏适配。
+- 全量自动验证：`npm test` 通过 10 个测试文件、57 个测试；`npm run compile` 与 `git diff --check` 通过。
+- 2026-07-10 用户确认 Phase 7 Extension Development Host 人工测试通过。
+- Files created/modified:
+  - `.impeccable.md` created
+  - `src/shortcuts/shortcutSettings.ts` created
+  - `src/test/unit/shortcutSettings.test.ts` created
+  - `src/reader/ReaderViewProvider.ts` updated
+  - `src/reader/readerMessages.ts` updated
+  - `src/reader/webviewHtml.ts` updated
+  - `src/typing/typingPracticeCommands.ts` updated
+  - `src/txt/txtFileService.ts` updated
+  - `src/extension.ts` and `package.json` updated
+  - Phase 7 unit/integration tests and VS Code shim updated
 
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 4: 开发执行中；Phase 0 插件骨架、Phase 1 数据模型/存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、Phase 5 打字练习核心、Phase 6 Enter/Tab 路由与设置均已完成自动验证和人工验证；当前目录已初始化 Git |
-| Where am I going? | 下一步进入 Phase 7：快捷键设置页与体验补齐 |
+| Where am I? | Phase 4: 开发执行中；Phase 0–7 均已完成自动与人工验证；当前目录已初始化 Git |
+| Where am I going? | 下一步进入 Phase 8：测试、打包与人工验收 |
 | What's the goal? | 根据 `指导文档.md` 启动可执行的开发计划 |
 | What have I learned? | Phase 0 可用 TypeScript + Vitest 验证 extension activation；Phase 1 可用内存 Memento 测试 global/workspace state 读写；Phase 2 可用临时文件和 VS Code shim 测试 TXT 导入、编码读取和命令交互；Phase 3 可用 Webview shim 测试 provider 消息协议和 `ReaderSession` 持久化；Phase 4 可用 Webview HTML 合约测试防止动态分页退化为固定字符估算；Phase 5 可用扩展后的 VS Code shim 测试 inline provider、status bar 和命令菜单；Phase 6 的配置/编辑器 shim 自动测试与真实 VS Code 人工测试均已通过 |
-| What have I done? | 已创建计划文件、设计规格、实施计划，并完成 Phase 0 插件骨架、Phase 1 数据模型与存储层、Phase 2 TXT 文件服务与导入命令、Phase 3 阅读器 Webview 基础版、Phase 4 DOM 动态分页、Phase 5 打字练习核心和 Phase 6 Enter/Tab 路由与设置；Phase 6 包含默认受限 keybinding、VS Code Settings 高级配置和阅读器快捷设置入口 |
+| What have I done? | 已完成 Phase 0–7 的代码实现；Phase 7 增加插件内快捷键页、主要动作命令、首次练习安全提示、空/失效/编码错误恢复和 VS Code 原生克制工具风设计基线 |
 
 ---
 *后续每完成阶段或遇到错误都会更新。*

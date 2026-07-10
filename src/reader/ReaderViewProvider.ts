@@ -14,10 +14,22 @@ import {
 } from '../txt/txtFileService';
 import {
   READER_VIEW_ID,
+  type ReaderErrorState,
   type ExtensionToReaderMessage,
   type ReaderViewToExtensionMessage
 } from './readerMessages';
 import { getReaderWebviewHtml } from './webviewHtml';
+import {
+  CLOSE_READER_COMMAND_ID,
+  DECREASE_READER_FONT_COMMAND_ID,
+  FOCUS_READER_COMMAND_ID,
+  INCREASE_READER_FONT_COMMAND_ID,
+  NEXT_READER_PAGE_COMMAND_ID,
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  SELECT_READER_FILE_COMMAND_ID,
+  createShortcutSettingsState,
+  type ShortcutEnablement
+} from '../shortcuts/shortcutSettings';
 
 const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 32;
@@ -56,6 +68,36 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
     return true;
   }
 
+  async requestPreviousPage(): Promise<void> {
+    await this.goToPreviousPage();
+  }
+
+  async adjustFontSize(delta: number): Promise<void> {
+    const session = this.sessionStore.getReaderSession();
+    await this.setFontSize(session.fontSize + delta);
+  }
+
+  async pickReaderFile(): Promise<void> {
+    const files = this.txtFileService.listImportedFiles();
+    if (files.length === 0) {
+      await vscode.window.showInformationMessage('No imported TXT files. Import a TXT first.');
+      return;
+    }
+
+    const selected = await vscode.window.showQuickPick(
+      files.map((file) => ({
+        label: file.name,
+        description: file.source,
+        detail: file.uri,
+        fileId: file.id
+      })),
+      { placeHolder: 'Select TXT for MoyuPlus Reader' }
+    );
+    if (selected) {
+      await this.selectFile(selected.fileId);
+    }
+  }
+
   private async handleMessage(message: unknown): Promise<void> {
     if (!isReaderViewToExtensionMessage(message)) {
       await this.postError('Reader received an unsupported message.');
@@ -85,10 +127,29 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
         case 'openShortcutSettings':
           await vscode.commands.executeCommand('workbench.action.openSettings', 'moyuplus shortcuts');
           return;
+        case 'openShortcutEditor':
+          await vscode.commands.executeCommand(
+            'workbench.action.openGlobalKeybindings',
+            `@command:${message.commandId}`
+          );
+          return;
+        case 'setShortcutEnabled':
+          await this.setShortcutEnabled(message.shortcut, message.enabled);
+          return;
+        case 'importTxt':
+          await vscode.commands.executeCommand('moyuplus.importTxt');
+          await this.postState();
+          return;
+        case 'removeActiveFile':
+          await this.removeActiveFile();
+          return;
+        case 'switchActiveFileEncoding':
+          await this.switchActiveFileEncoding();
+          return;
       }
     } catch (error) {
       await this.postError(toUserFacingErrorMessage(error));
-      await this.postState(toUserFacingErrorMessage(error));
+      await this.postState(toReaderErrorState(error));
     }
   }
 
@@ -182,7 +243,43 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
-  private async postState(error?: string): Promise<void> {
+  private async setShortcutEnabled(shortcut: ShortcutEnablement, enabled: boolean): Promise<void> {
+    const key = shortcut === 'enter' ? 'enableEnterRouter' : 'enableTabRouter';
+    await vscode.workspace
+      .getConfiguration('moyuplus.shortcuts')
+      .update(key, enabled, vscode.ConfigurationTarget.Global);
+    await this.postState();
+  }
+
+  private async removeActiveFile(): Promise<void> {
+    const session = this.sessionStore.getReaderSession();
+    if (session.fileId) {
+      await this.txtFileService.removeImportedFile(session.fileId);
+    }
+    await this.sessionStore.saveReaderSession({
+      ...createDefaultReaderSession(),
+      fontSize: session.fontSize,
+      lineHeight: session.lineHeight
+    });
+    await this.postState();
+  }
+
+  private async switchActiveFileEncoding(): Promise<void> {
+    const session = this.sessionStore.getReaderSession();
+    if (!session.fileId) {
+      await this.postState();
+      return;
+    }
+
+    const file = this.txtFileService.listImportedFiles().find((candidate) => candidate.id === session.fileId);
+    if (!file) {
+      throw new TxtFileNotImportedError(session.fileId);
+    }
+    await this.txtFileService.updateImportedFileEncoding(file.id, file.encoding === 'utf8' ? 'gbk' : 'utf8');
+    await this.postState();
+  }
+
+  private async postState(error?: ReaderErrorState): Promise<void> {
     const view = this.view;
     if (!view) {
       return;
@@ -198,7 +295,7 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
       try {
         text = await this.txtFileService.readFullText(activeFile.id);
       } catch (readError) {
-        stateError = toUserFacingErrorMessage(readError);
+        stateError = toReaderErrorState(readError);
       }
     }
 
@@ -209,6 +306,7 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
         session,
         activeFile,
         text,
+        shortcuts: readShortcutSettingsState(),
         ...(stateError ? { error: stateError } : {})
       }
     });
@@ -229,8 +327,29 @@ export function registerReaderView(
   sessionStore: WorkspaceSessionStore
 ): ReaderViewProvider {
   const provider = new ReaderViewProvider(txtFileService, sessionStore);
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider(READER_VIEW_ID, provider));
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(READER_VIEW_ID, provider),
+    vscode.commands.registerCommand(NEXT_READER_PAGE_COMMAND_ID, async () => provider.requestNextPage()),
+    vscode.commands.registerCommand(PREVIOUS_READER_PAGE_COMMAND_ID, async () => provider.requestPreviousPage()),
+    vscode.commands.registerCommand(FOCUS_READER_COMMAND_ID, async () =>
+      vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`)
+    ),
+    vscode.commands.registerCommand(CLOSE_READER_COMMAND_ID, async () =>
+      vscode.commands.executeCommand('workbench.action.closeSidebar')
+    ),
+    vscode.commands.registerCommand(SELECT_READER_FILE_COMMAND_ID, async () => provider.pickReaderFile()),
+    vscode.commands.registerCommand(INCREASE_READER_FONT_COMMAND_ID, async () => provider.adjustFontSize(1)),
+    vscode.commands.registerCommand(DECREASE_READER_FONT_COMMAND_ID, async () => provider.adjustFontSize(-1))
+  );
   return provider;
+}
+
+function readShortcutSettingsState() {
+  const configuration = vscode.workspace.getConfiguration('moyuplus.shortcuts');
+  return createShortcutSettingsState({
+    enableEnterRouter: configuration.get<boolean>('enableEnterRouter', false),
+    enableTabRouter: configuration.get<boolean>('enableTabRouter', false)
+  });
 }
 
 function normalizePageRange(range: PageRange, textLength: number): PageRange {
@@ -266,6 +385,14 @@ function isReaderViewToExtensionMessage(value: unknown): value is ReaderViewToEx
     case 'setFontSize':
       return typeof value.fontSize === 'number' && Number.isFinite(value.fontSize);
     case 'openShortcutSettings':
+      return true;
+    case 'openShortcutEditor':
+      return typeof value.commandId === 'string' && value.commandId.startsWith('moyuplus.');
+    case 'setShortcutEnabled':
+      return (value.shortcut === 'enter' || value.shortcut === 'tab') && typeof value.enabled === 'boolean';
+    case 'importTxt':
+    case 'removeActiveFile':
+    case 'switchActiveFileEncoding':
       return true;
     default:
       return false;
@@ -316,4 +443,18 @@ function toUserFacingErrorMessage(error: unknown): string {
   }
 
   return 'Reader operation failed.';
+}
+
+function toReaderErrorState(error: unknown): ReaderErrorState {
+  if (error instanceof TxtFileMissingError) {
+    return { kind: 'missing', message: error.message };
+  }
+  if (error instanceof TxtDecodeError) {
+    return { kind: 'decode', message: error.message };
+  }
+  if (error instanceof TxtFileNotImportedError) {
+    return { kind: 'notImported', message: error.message };
+  }
+
+  return { kind: 'generic', message: toUserFacingErrorMessage(error) };
 }

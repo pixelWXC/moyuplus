@@ -57,6 +57,22 @@
 - Phase 6 已在练习状态栏更新路径中同步 `moyuplus.typingPracticeActive` context key，使 `package.json` 中的 Tab `when` 条件不依赖 UI 可见性推断。
 - Phase 6 阅读器下一页路由不能在扩展主进程直接重新计算 DOM 页范围，因此采用扩展向 Webview 发送 `{ type: 'command', command: 'nextPage' }`，再由 Webview 用当前 `currentRange` 回传 `nextPage` 的方式。
 - Phase 6 阅读器 Webview 已增加 `Shortcuts` 按钮，点击打开 `moyuplus shortcuts` Settings 查询；完整插件内快捷键设置页仍留给 Phase 7。
+- Phase 7 可复用现有阅读器 Webview，不必新增独立 VS Code 视图；当前 `Shortcuts` 按钮只会打开 Settings 搜索，尚不展示功能、当前绑定、启用状态或风险说明。
+- `package.json` 目前仅贡献 Enter/Tab 两个默认 keybinding，且两者默认关闭；其余主要功能只能通过命令面板执行。因此“当前绑定”需要同时展示扩展贡献的默认绑定和用户自定义绑定，不能仅从 `package.json` 静态推断。
+- 现有 `ShortcutConfig` 仍为空默认值，未接入配置读取；Phase 7 更适合使用 VS Code 的命令/键绑定查询能力生成只读状态，并通过标准设置/快捷键编辑器完成修改，避免自行维护第二套绑定存储。
+- 当前异常反馈不完整：Reader Webview 已有“无导入文件”空状态；TXT 命令会弹出缺失文件与解码错误；首次开启练习尚无“真实写入当前编辑器文件”的一次性安全确认。
+- `指导文档.md` 明确要求快捷键页不仅只读展示，还要允许配置：阅读器下一/上一页、关闭、打开/隐藏、切换文件、字号增减、练习开关，以及 Enter/Tab 组合行为；页面至少展示功能名、当前按键、启用状态、潜在冲突和动作说明。
+- VS Code 稳定扩展 API 没有公开“解析所有当前生效键绑定”的接口。可靠方案应把自定义动作委托给 VS Code Keybindings 编辑器，并在插件页展示本插件贡献的默认绑定/启用条件；若要精确反映用户覆盖，需要读取并解析用户 `keybindings.json`，会引入跨平台、配置同步和 JSONC 合并复杂度。
+- 2026-07-10 核对官方 VS Code Extension API：公开能力包括贡献 keybindings、执行命令和打开 Keyboard Shortcuts 编辑器，但没有读取当前解析后 keybinding 的稳定 API；官方也说明冲突取决于上下文规则和键盘布局，因此插件页应将“潜在冲突”视为风险提示，而不是声称能完整检测。
+- Phase 7 适合新增一个独立 `shortcutSettings` 领域模块，向 Reader Webview 提供稳定的行模型（command、功能名、默认绑定、启用状态、风险、说明），Reader provider 只负责配置读写与打开原生快捷键编辑器，避免把清单逻辑继续堆进 `webviewHtml.ts`。
+- Reader provider 已集中处理文件读取异常并把 `error` 发给 Webview；Phase 7 可在错误态附带“重新选择/切换编码/移除记录”动作，而无需改动 TXT 解码核心。
+- 现有 Reader provider 只有 `requestNextPage` 公共动作，Phase 7 若要让全部阅读器功能可绑定，需要补齐 previous page、打开视图、切换文件、字号增减等命令入口；它们可以复用现有私有方法/Webview 消息，不需要复制分页算法。
+- 现有 VS Code 测试 shim 的 `workspace.getConfiguration` 只有 `get`，Phase 7 的 Webview 启用开关与首次安全提示测试需要补 `update` 和配置变更记录；安全提示可用 `globalState` 保存“已确认”标记，符合仅首次提醒的要求。
+- 当前练习启动顺序是“选择 TXT 后立即 start”；安全确认应插入在真正启动前，提供“继续/取消”选择，取消时不改 session、不显示状态栏。
+- Phase 7 最终采用非阻塞的一次性警告，而不是确认弹窗：用户首次选定练习文件时明确看到真实文件写入风险，提示后继续启动，并通过 global state 防止重复打扰。
+- 用户确认界面风格为“原生克制工具感”；已写入 `.impeccable.md`，具体原则是原生优先、信息克制、风险可见、状态清楚、无干扰反馈。
+- 快捷键页使用 VS Code Settings 式扁平列表、主题令牌和主次按钮层级，并补齐 `:focus-visible`、`aria-live` 与 320px 窄侧栏布局。
+- 2026-07-10 用户确认 Phase 7 人工测试通过；快捷键页、原生改键入口、首次安全提示和异常恢复操作可进入 Phase 8 验收。
 - Phase 6 已通过自动验证：`npm test` 为 9 个测试文件、44 个测试通过，`npm run compile` 通过；2026-07-10 用户确认真实 Extension Development Host 中的人工测试全通过。
 - Phase 6 人工测试准备中发现 VS Code Settings 的英文说明会阻碍理解；已将 Phase 6 相关设置说明改为中文，并给 `completeRest`/`replaceLine` 增加中文选项解释。
 

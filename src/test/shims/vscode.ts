@@ -205,7 +205,10 @@ export const workspace = {
   workspaceFolders: undefined as { uri: Uri }[] | undefined,
   configurationValues: {} as Record<string, unknown>,
 
-  getConfiguration(section?: string): { get<T>(key: string, defaultValue?: T): T } {
+  getConfiguration(section?: string): {
+    get<T>(key: string, defaultValue?: T): T;
+    update(key: string, value: unknown): Promise<void>;
+  } {
     return {
       get<T>(key: string, defaultValue?: T): T {
         const fullKey = section ? `${section}.${key}` : key;
@@ -214,10 +217,21 @@ export const workspace = {
         }
 
         return defaultValue as T;
+      },
+
+      async update(key: string, value: unknown): Promise<void> {
+        const fullKey = section ? `${section}.${key}` : key;
+        workspace.configurationValues[fullKey] = value;
       }
     };
   }
 };
+
+export const ConfigurationTarget = {
+  Global: 1,
+  Workspace: 2,
+  WorkspaceFolder: 3
+} as const;
 
 export const languages = {
   registerInlineCompletionItemProvider(selector: unknown, provider: InlineCompletionProvider): Disposable {

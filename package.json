@@ -24,6 +24,14 @@
     "onCommand:moyuplus.toggleTypingPracticeLineEdgeTrim",
     "onCommand:moyuplus.routeEnter",
     "onCommand:moyuplus.routeTab",
+    "onCommand:moyuplus.reader.nextPage",
+    "onCommand:moyuplus.reader.previousPage",
+    "onCommand:moyuplus.reader.focus",
+    "onCommand:moyuplus.reader.close",
+    "onCommand:moyuplus.reader.selectFile",
+    "onCommand:moyuplus.reader.increaseFont",
+    "onCommand:moyuplus.reader.decreaseFont",
+    "onCommand:moyuplus.toggleTypingPractice",
     "onView:moyuplus.readerView"
   ],
   "main": "./out/extension.js",
@@ -76,6 +84,38 @@
       {
         "command": "moyuplus.routeTab",
         "title": "MoyuPlus: Route Tab"
+      },
+      {
+        "command": "moyuplus.reader.nextPage",
+        "title": "MoyuPlus: Reader Next Page"
+      },
+      {
+        "command": "moyuplus.reader.previousPage",
+        "title": "MoyuPlus: Reader Previous Page"
+      },
+      {
+        "command": "moyuplus.reader.focus",
+        "title": "MoyuPlus: Open Reader"
+      },
+      {
+        "command": "moyuplus.reader.close",
+        "title": "MoyuPlus: Close Reader"
+      },
+      {
+        "command": "moyuplus.reader.selectFile",
+        "title": "MoyuPlus: Select Reader File"
+      },
+      {
+        "command": "moyuplus.reader.increaseFont",
+        "title": "MoyuPlus: Increase Reader Font"
+      },
+      {
+        "command": "moyuplus.reader.decreaseFont",
+        "title": "MoyuPlus: Decrease Reader Font"
+      },
+      {
+        "command": "moyuplus.toggleTypingPractice",
+        "title": "MoyuPlus: Toggle Typing Practice"
       }
     ],
     "keybindings": [
