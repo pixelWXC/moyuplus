@@ -220,6 +220,16 @@
 - 结果：Approved，无阻断问题。
 - 已把审查建议落实为显式测试断言：持久化前剥离内存文本提示；迁移测试覆盖 source 和 formatData.encoding。
 
+### 实施计划依赖核对
+- `yauzl` 官方文档提供基于 central directory 的异步读取、Promise/async iterator、逐条 lazy 处理、entry size 验证和文件名安全校验，适合 Reader v2 的 EPUB ZIP 边界；计划采用它并额外实施条目数、累计大小和压缩比限制。
+- `fast-xml-parser` 官方仓库明确支持 XML 语法验证、XML→JS、属性和顺序保留，适合 container.xml、OPF、NCX/nav 的结构解析；Reader v2 仍需在解析结果之上做显式 schema 校验。
+- `parse5` 是 WHATWG HTML 兼容的 Node HTML 解析/序列化工具，适合把 EPUB XHTML 转成 AST 后做自定义白名单清洗。
+- `css-tree` 提供 CSS AST 解析、遍历、生成和语法匹配，适合删除 @import/url/Raw 节点并执行声明白名单。
+- `esbuild` 用于把独立 Webview TypeScript/CSS 打成浏览器 bundle，避免继续维护单个内联 HTML/JS 巨型字符串；扩展宿主仍由 tsc 编译。
+- `@playwright/test` 官方支持只配置 Chromium project 和 webServer，用于真实 DOM Layout Harness；浏览器安装作为显式开发步骤，不进入 VSIX 运行时依赖。
+- 为吸收最新解析依赖的 ESM/CJS 差异，实施计划决定由 esbuild 同时生成 Extension Host CommonJS bundle 和 Webview browser bundle；`tsc --noEmit` 仅做严格类型检查，`vscode` 保持 external。
+- 正式实施计划已写入 `docs/superpowers/plans/2026-07-10-moyuplus-reader-redesign-implementation-plan.md`，包含 6 个 Phase、23 个测试先行任务、停止条件和完成定义。
+
 ### 需要从代码验证
 - 现有 `TxtLibraryStore` 是否已具备移除记录但 UI 未暴露。
 - 现有 `ReaderSession`、`offset`、`pageHistory` 与章节定位模型的耦合程度。
