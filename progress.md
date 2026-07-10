@@ -512,6 +512,31 @@
 ### Reader v2 Phase 3：Webview Bundle、消息协议、资源与真实 DOM 分页
 - **Status:** complete
 - RED：Reader v2 消息测试 5 个用例因守卫不存在而失败；实现协议版本、open/section envelope 与安全 section 守卫后 GREEN。
+
+### Reader v2 Phase 4：书架、Reader Controller 与侧边栏应用
+
+- Task 4.1 RED：`libraryService.test.ts` 最初因模块不存在加载失败；补最小接口骨架后，5 个测试均因 not implemented 正确失败。
+- Task 4.1 GREEN：实现 Adapter 首选/回退探测、inspect 后落库、URI 去重、插件状态删除、同格式重定位与失效扫描。
+- 验证：`npm run test:unit -- src/test/unit/libraryService.test.ts`，5/5 通过。
+- Task 4.2 RED：ReaderController 骨架缺少 openBook/requestSection/reportLayout/flush，4 个行为测试正确失败。
+- Task 4.2 GREEN：实现唯一 BookHandle、requestId/section generation 旧响应丢弃、显式错误消息、进度防抖与 flush/dispose。
+- 验证：`readerController.test.ts` 4/4 通过；`npm run compile` 通过。
+- Phase 4 中间回归：`npm run test:unit` 全量 29 个文件、124 个测试通过。
+- Task 4.3 RED：新增 Provider v2 与 Webview Security 测试，确认旧 TXT-only Provider 未转发 v2 协议、未在 hide/dispose 时 flush/dispose，旧 HTML 也未满足目标 CSP。
+- Task 4.3 GREEN：Provider 仅接收通过运行时守卫的 v2 消息并转发 Controller；Webview 仅加载 `media/readerApp.js/css`，每次生成随机 nonce，`localResourceRoots` 仅包含扩展 media，hide/dispose 正确清理 Controller。
+- Task 4.3 回归：29 个 Vitest 文件 112 个测试、7 个 Chromium Layout/隐私测试、`npm run compile` 与 `git diff --check` 全部通过；下一步进入 Task 4.4。
+- Task 4.4 RED：新增 `readerWebviewState.test.ts`，因 `readerState` 尚不存在而按预期失败。
+- Task 4.4 GREEN：实现纯 `readerAppReducer`、书架 view model 与能力动作过滤；书架 UI 覆盖导入、空状态、EPUB/TXT 元数据与进度、失效状态、打开、TXT 打字练习、重新定位和移除确认。
+- Task 4.4 删除文案固定为“仅从 MoyuPlus 书架移除，不会删除原文件。”；EPUB view model 不产生打字练习动作。
+- Task 4.4 回归：30 个 Vitest 文件 117 个测试、7 个 Chromium Layout/隐私测试、`npm run compile` 与 `git diff --check` 全部通过；下一步进入 Task 4.5。
+- Task 4.5 启动：确认已批准规格要求阅读页顶部工具栏、章节栏、正文与页脚、嵌套目录、Preferences 即时预览/保存/reset、首尾能力反馈及极窄宽度可访问模式。
+- 检索消息协议时误读不存在的 `src/reader/protocol.ts`；实际协议位于 `src/reader/readerMessages.ts`，后续改读真实路径，不重复该失败调用。
+- Task 4.5 首次 compile 暴露两类类型问题：消息联合被误写为交叉类型而收窄为 `never`，且 `libraryLoaded` 未保留新增 Preferences 字段；已分别改为联合消息载荷和 reducer 保留共享状态。
+- Task 4.5 RED：阅读状态 3 个用例与 Controller 相邻章节用例按预期失败；实现纯状态迁移、Preferences 草稿/保存/reset、章节/页面能力与相邻章节边界消息后目标测试 13/13 通过。
+- Task 4.5 GREEN：完成阅读页工具栏、章节栏、Layout Engine 正文、页脚、嵌套目录、设置即时预览/保存意图、首尾提示和极窄宽度模式。
+- Task 4.5 回归：`npm test` 通过，包含 30 个 Vitest 文件 121 个测试及 7 个 Chromium Layout/隐私测试；`npm run compile` 与 `git diff --check` 通过。
+- **Reader v2 Phase 4 Status：complete。**
+- 最终回归首次 compile 在 Layout 重建逻辑中发现可选属性未稳定收窄；改用局部 `priorLayout` 保存快照后消除类型不确定性。
 - RED：ResourceManager 测试先因模块不存在报错，补最小空实现后确认行为断言失败；实现声明校验、MIME 白名单、缓存与统一 revoke 后 3 个用例通过。
 - RED：真实 DOM Harness 因 `LayoutEngine` 不存在失败；实现后分页、定位恢复与首尾边界用例通过。
 - RED：合并重排用例因调度 API 不存在失败；补 animation-frame 调度后通过。

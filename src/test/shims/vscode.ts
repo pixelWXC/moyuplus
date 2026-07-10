@@ -19,16 +19,22 @@ type WebviewViewProvider = {
 
 export interface Webview {
   html: string;
-  options: { enableScripts?: boolean };
+  options: { enableScripts?: boolean; localResourceRoots?: Uri[] };
   readonly cspSource: string;
   readonly postedMessages: unknown[];
   onDidReceiveMessage(callback: MessageCallback): Disposable;
   postMessage(message: unknown): Promise<boolean>;
   receiveMessage(message: unknown): Promise<void>;
+  asWebviewUri(uri: Uri): Uri;
 }
 
 export interface WebviewView {
   webview: Webview;
+  visible: boolean;
+  onDidChangeVisibility(callback: () => unknown): Disposable;
+  onDidDispose(callback: () => unknown): Disposable;
+  setVisible(visible: boolean): Promise<void>;
+  dispose(): Promise<void>;
 }
 
 export interface TextLine {
@@ -78,6 +84,10 @@ export class Uri {
     const normalizedPath = filePath.replace(/\\/g, '/');
     const prefixedPath = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
     return new Uri(`file://${encodeURI(prefixedPath)}`);
+  }
+
+  static joinPath(base: Uri, ...segments: string[]): Uri {
+    return new Uri(`${base.toString().replace(/\/$/, '')}/${segments.map(encodeURIComponent).join('/')}`);
   }
 
   toString(): string {
@@ -297,14 +307,43 @@ export function createTextEditor(lines: string[], active: Position): TextEditor 
 }
 
 export function createWebviewView(): WebviewView {
-  return {
-    webview: new TestWebview()
-  };
+  return new TestWebviewView();
+}
+
+class TestWebviewView implements WebviewView {
+  readonly webview = new TestWebview();
+  visible = true;
+  private readonly visibilityCallbacks: Array<() => unknown> = [];
+  private readonly disposeCallbacks: Array<() => unknown> = [];
+
+  onDidChangeVisibility(callback: () => unknown): Disposable {
+    this.visibilityCallbacks.push(callback);
+    return { dispose: () => this.remove(this.visibilityCallbacks, callback) };
+  }
+
+  onDidDispose(callback: () => unknown): Disposable {
+    this.disposeCallbacks.push(callback);
+    return { dispose: () => this.remove(this.disposeCallbacks, callback) };
+  }
+
+  async setVisible(visible: boolean): Promise<void> {
+    this.visible = visible;
+    for (const callback of this.visibilityCallbacks) await callback();
+  }
+
+  async dispose(): Promise<void> {
+    for (const callback of this.disposeCallbacks) await callback();
+  }
+
+  private remove(callbacks: Array<() => unknown>, callback: () => unknown): void {
+    const index = callbacks.indexOf(callback);
+    if (index >= 0) callbacks.splice(index, 1);
+  }
 }
 
 class TestWebview implements Webview {
   html = '';
-  options: { enableScripts?: boolean } = {};
+  options: { enableScripts?: boolean; localResourceRoots?: Uri[] } = {};
   readonly cspSource = 'vscode-resource:';
   readonly postedMessages: unknown[] = [];
   private readonly messageCallbacks: MessageCallback[] = [];
@@ -331,6 +370,10 @@ class TestWebview implements Webview {
     for (const callback of this.messageCallbacks) {
       await callback(message);
     }
+  }
+
+  asWebviewUri(uri: Uri): Uri {
+    return Uri.file(`/webview/${encodeURIComponent(uri.toString())}`);
   }
 }
 

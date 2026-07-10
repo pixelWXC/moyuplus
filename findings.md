@@ -261,7 +261,25 @@
 ## 2026-07-10 Reader v2 Phase 3 发现
 
 - 旧 Reader 消息类型仍被现有 `ReaderViewProvider` 使用；Phase 3 新增 v2 严格协议并暂留旧类型，Phase 4 重写 Provider 后再删除旧协议，避免阶段提交不可编译。
+
+## 2026-07-10 Reader v2 Phase 4 发现
+
+- ReaderViewProvider v2 可保持为薄边界：Webview 入站先经过 v2 runtime guard，再按意图分派给 Controller；Provider 不读取书籍正文或直接操作 Adapter。
+- 严格 CSP 可同时支持构建产物与离线资源：脚本和样式均使用每次 HTML 生成的新 nonce，图片/字体仅允许 `blob:`/`data:`，连接、frame、media 明确为 `none`。
+- `localResourceRoots` 只需扩展的 `media` 目录；书籍原始目录和文件 URI 不应成为 Webview local root。
+
+- `LibraryService` 通过扩展名确定首选 Adapter，但以 `inspect` 实际成功为准并回退其他 Adapter，因此可处理扩展名伪装或缺失。
+- 移除事务只清 BookRecord、ReadingPosition、Reader/typing 引用；服务不持有也不调用任何源文件删除能力。
+- 重定位先重新探测格式，仅允许与原记录同格式，再更新 URI/updatedAt；bookId 和独立 ReadingPosition 保持不变。
+- `ReaderController` 用单调 requestId 隔离切书、section generation 隔离切章；底层 Adapter API 暂无 AbortSignal，因此 AbortController 用于生命周期取消，迟到的 BookHandle 仍需显式 dispose。
+- 阅读进度只保留最新 pending position，并由 debounce 或 flush/dispose 落盘，避免高频 layoutStable 写 Memento。
 - Playwright `file:` Harness 可直接加载 Webview bundle 并使用真实 Chromium DOM，足以验证分页测量而无需 Extension Host DOM shim。
 - Webview bundle 静态检查不能用宽泛的 `node:` 或 `//` 正则：对象属性和 esbuild 注释会误报；应检查真实 `require/import` 的 `node:` 形式和 `http(s)://` URL。
 - 章节末页空白缺陷通过能力状态根治：最后一个非空页面为 `isSectionEnd`，`nextPage()` 返回 false 且不改变渲染内容。
 - 连续重排围绕当前页起始 offset 恢复；animation-frame 合并使多次字体、resize 和 Preferences 事件只触发一次测量。
+- 书架状态适合保持为纯 reducer/view model：宿主只需发送书籍、可用性与进度，Webview 统一派生格式、失效状态和允许动作，避免 EPUB/TXT 能力判断散落在 DOM 事件中。
+- 移除确认采用 Webview 内联确认区并明确“不删除原文件”；这既避免阻断式浏览器对话框，也让文件所有权约束在危险操作旁持续可见。
+- Task 4.5 的既定 UI 边界：侧边栏内书架/阅读双页；目录和设置覆盖正文，关闭后恢复完整正文并重排；UI 只发送意图和消费能力状态，Layout Engine 仍是唯一分页实现。
+- `.impeccable.md` 已提供完整设计上下文：面向 VS Code 内轻量阅读/练习用户，视觉语气为原生、克制、可靠，必须使用 VS Code 主题令牌且不引入外部字体或装饰性视觉。
+- 阅读 UI 每次 reducer 渲染都会替换正文 DOM，因此 Layout Engine 必须随新 viewport 重建，并以当前 progression 恢复位置；不能让 Engine 持有已脱离文档的旧 viewport。
+- Controller 的相邻章节导航以打开时的 section 顺序为唯一依据；越过首尾只发送 `bookStart`/`bookEnd` 正常状态，不将边界记录为错误。

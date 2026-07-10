@@ -3,7 +3,7 @@
 - 日期：2026-07-10
 - 依据：[Reader v2 设计规格](../specs/2026-07-10-moyuplus-reader-redesign-design.md)
 - 策略：最大改动面、测试先行、完成后删除旧阅读栈，不长期维护双栈
-- 当前状态：Phase 3 已完成（2026-07-10），下一步进入 Phase 4
+- 当前状态：Phase 4 已完成（2026-07-10），下一步进入 Phase 5
 
 ## 1. 执行原则
 
@@ -522,6 +522,13 @@ Phase 4 完成门槛：
 - 侧边栏从书架到 EPUB/TXT 阅读完整可用。
 - 删除、失效恢复、目录和设置自动测试通过。
 - 提交：`Build Reader v2 sidebar experience`。
+
+完成记录（2026-07-10）：
+
+- LibraryService、ReaderController、ReaderViewProvider v2、严格 CSP、书架 reducer 与混合 EPUB/TXT 书架均已实现。
+- 阅读页已接通顶部工具栏、章节导航、Layout Engine 正文分页、页脚翻页、嵌套目录与 Preferences 覆盖抽屉。
+- 章节与页面能力统一派生；书首/书尾保持当前页并显示非阻断提示；极窄宽度保留 tooltip 与可访问标签。
+- Phase 4 回归通过：30 个 Vitest 文件 121 个测试、7 个 Chromium Layout/隐私测试、`npm run compile` 与 `git diff --check`。
 
 ## 8. Phase 5：打字练习、命令、快捷键与迁移集成
 

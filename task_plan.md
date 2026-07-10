@@ -197,3 +197,19 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - [x] 真实 DOM Layout Engine、分页边界、定位恢复与合并重排
 - [x] Chromium Layout/隐私 Harness
 - **Status:** complete；下一步进入 Reader v2 Phase 4
+
+### Reader v2 Phase 4：书架、Reader Controller 与侧边栏应用
+
+- [x] Task 4.1：LibraryService 导入、移除、重定位与失效扫描
+- [x] Task 4.2：ReaderController 并发、状态与进度保存
+- [x] Task 4.3：ReaderViewProvider v2 与严格 CSP
+- [x] Task 4.4：书架页与 reducer
+- [x] Task 4.5：阅读页、目录与设置抽屉
+- **Status:** complete；Reader v2 Phase 4 全部任务已完成
+
+#### Task 4.5 执行拆分（2026-07-10）
+- [x] RED：阅读页状态、目录嵌套、Preferences 预览/保存/reset、边界能力测试
+- [x] GREEN：阅读页工具栏、章节栏、正文分页与页脚
+- [x] GREEN：目录/设置覆盖抽屉、窄宽度可访问模式
+- [x] 回归：目标单测、全量单测、Chromium Layout/隐私、compile、diff check
+- [x] 更新 Phase 4 完成记录与实施计划状态

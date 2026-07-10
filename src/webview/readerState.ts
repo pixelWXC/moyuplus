@@ -1,0 +1,153 @@
+import type { BookRecord } from '../domain/books';
+import type { TocNode, SectionRef } from '../adapters/bookAdapter';
+import { createDefaultReaderPreferences, normalizeReaderPreferences, type ReaderPreferences } from '../domain/readerPreferences';
+import type { LayoutState } from './layoutEngine';
+
+export const REMOVE_BOOK_CONFIRMATION = '仅从 MoyuPlus 书架移除，不会删除原文件。';
+
+export type LibraryBookAction = 'open' | 'startTypingPractice' | 'relocate' | 'remove';
+
+export type LibraryBookItem = BookRecord & {
+  available: boolean;
+  status: 'available' | 'missing';
+  progress: number;
+};
+
+export interface ReaderAppState {
+  view: 'library' | 'reader';
+  status: 'loading' | 'ready' | 'error';
+  books: LibraryBookItem[];
+  emptyAction?: 'importBook';
+  pendingRemoval?: { bookId: string; message: string };
+  error?: string;
+  activeBook?: BookRecord;
+  requestId?: string;
+  toc?: TocNode[];
+  sections?: SectionRef[];
+  activeSectionId?: string;
+  layout?: LayoutState;
+  navigation?: ReaderNavigation;
+  drawer?: 'toc' | 'settings';
+  notice?: string;
+  preferences: ReaderPreferences;
+  preferencesDraft: ReaderPreferences;
+}
+
+export interface ReaderNavigation {
+  canPreviousPage: boolean;
+  canNextPage: boolean;
+  canPreviousSection: boolean;
+  canNextSection: boolean;
+}
+
+export type ReaderAppAction =
+  | {
+      type: 'libraryLoaded';
+      books: BookRecord[];
+      availability: Record<string, boolean>;
+      progress: Record<string, number>;
+    }
+  | { type: 'requestRemove'; bookId: string }
+  | { type: 'cancelRemove' }
+  | { type: 'bookRemoved'; bookId: string }
+  | { type: 'showError'; message: string }
+  | { type: 'openReader'; book: BookRecord; requestId: string }
+  | { type: 'closeReader' }
+  | { type: 'bookReady'; requestId: string; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string }
+  | ({ type: 'layoutChanged' } & LayoutState)
+  | { type: 'selectSection'; sectionId: string }
+  | { type: 'openDrawer'; drawer: 'toc' | 'settings' }
+  | { type: 'closeDrawer' }
+  | { type: 'bookBoundary'; edge: 'start' | 'end' }
+  | { type: 'preferencesLoaded'; preferences: ReaderPreferences }
+  | { type: 'previewPreferences'; patch: Partial<ReaderPreferences> }
+  | { type: 'preferencesSaved' }
+  | { type: 'resetPreferences' };
+
+export function createInitialReaderAppState(): ReaderAppState {
+  const preferences = createDefaultReaderPreferences();
+  return { view: 'library', status: 'loading', books: [], preferences, preferencesDraft: preferences };
+}
+
+export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction): ReaderAppState {
+  switch (action.type) {
+    case 'libraryLoaded': {
+      const books = action.books.map(book => {
+        const available = action.availability[book.id] !== false;
+        return {
+          ...book,
+          available,
+          status: available ? 'available' as const : 'missing' as const,
+          progress: normalizeProgress(action.progress[book.id])
+        };
+      });
+      return {
+        ...state,
+        view: 'library',
+        status: 'ready',
+        books,
+        ...(books.length === 0 ? { emptyAction: 'importBook' as const } : {})
+      };
+    }
+    case 'requestRemove':
+      return { ...state, pendingRemoval: { bookId: action.bookId, message: REMOVE_BOOK_CONFIRMATION } };
+    case 'cancelRemove': {
+      const { pendingRemoval: _pendingRemoval, ...next } = state;
+      return next;
+    }
+    case 'bookRemoved':
+      return {
+        ...state,
+        books: state.books.filter(book => book.id !== action.bookId),
+        pendingRemoval: undefined,
+        ...(state.books.length === 1 ? { emptyAction: 'importBook' as const } : {})
+      };
+    case 'showError':
+      return { ...state, status: 'error', error: action.message };
+    case 'openReader':
+      return { ...state, view: 'reader', status: 'loading', activeBook: action.book, requestId: action.requestId, notice: undefined };
+    case 'closeReader':
+      return { ...state, view: 'library', status: 'ready', activeBook: undefined, requestId: undefined, toc: undefined, sections: undefined, activeSectionId: undefined, layout: undefined, navigation: undefined, drawer: undefined, notice: undefined };
+    case 'bookReady':
+      if (state.requestId !== action.requestId) return state;
+      return { ...state, toc: action.toc, sections: action.sections, activeSectionId: action.initialSectionId, status: 'loading', navigation: navigationFor(action.sections, action.initialSectionId) };
+    case 'selectSection':
+      return { ...state, activeSectionId: action.sectionId, status: 'loading', drawer: undefined, notice: undefined, navigation: navigationFor(state.sections ?? [], action.sectionId) };
+    case 'layoutChanged': {
+      const chapter = navigationFor(state.sections ?? [], action.sectionId);
+      return { ...state, status: 'ready', activeSectionId: action.sectionId, layout: action, notice: undefined, navigation: {
+        ...chapter,
+        canPreviousPage: action.canPreviousPage || chapter.canPreviousSection,
+        canNextPage: action.canNextPage || chapter.canNextSection
+      } };
+    }
+    case 'openDrawer': return { ...state, drawer: action.drawer };
+    case 'closeDrawer': return { ...state, drawer: undefined };
+    case 'bookBoundary': return { ...state, notice: action.edge === 'start' ? '已到本书开头' : '已读完本书' };
+    case 'preferencesLoaded': {
+      const preferences = normalizeReaderPreferences(action.preferences);
+      return { ...state, preferences, preferencesDraft: preferences };
+    }
+    case 'previewPreferences': return { ...state, preferencesDraft: normalizeReaderPreferences({ ...state.preferencesDraft, ...action.patch }) };
+    case 'preferencesSaved': return { ...state, preferences: state.preferencesDraft };
+    case 'resetPreferences': return { ...state, preferencesDraft: createDefaultReaderPreferences() };
+  }
+}
+
+function navigationFor(sections: SectionRef[], sectionId: string): ReaderNavigation {
+  const index = sections.findIndex(section => section.id === sectionId);
+  return { canPreviousPage: false, canNextPage: false, canPreviousSection: index > 0, canNextSection: index >= 0 && index < sections.length - 1 };
+}
+
+export function getLibraryBookActions(book: LibraryBookItem): LibraryBookAction[] {
+  return [
+    'open',
+    ...(book.capabilities.typing ? ['startTypingPractice' as const] : []),
+    'relocate',
+    'remove'
+  ];
+}
+
+function normalizeProgress(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
