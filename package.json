@@ -184,17 +184,32 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "build": "node scripts/build.mjs",
+    "compile": "tsc -p ./ --noEmit && npm run build",
     "watch": "tsc -watch -p ./",
-    "test": "vitest run"
+    "test:unit": "vitest run",
+    "test:layout": "playwright test --config playwright.config.ts",
+    "test": "npm run test:unit && npm run test:layout",
+    "package": "npm run compile && npm test && vsce package"
   },
   "dependencies": {
-    "iconv-lite": "^0.6.3"
+    "css-tree": "^3.2.1",
+    "fast-xml-parser": "^5.9.3",
+    "iconv-lite": "^0.6.3",
+    "parse5": "^8.0.1",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/css-tree": "^2.3.11",
     "@types/node": "^22.10.2",
     "@types/vscode": "^1.92.0",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "yazl": "^3.3.1"
   }
 }

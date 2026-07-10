@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/webview/styles.css"],
+  "sourcesContent": [":root {\n  color-scheme: light dark;\n}\n"],
+  "mappings": ";AAAA;AACE,gBAAc,MAAM;AACtB;",
+  "names": []
+}

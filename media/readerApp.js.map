@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/webview/readerApp.ts"],
+  "sourcesContent": ["import './styles.css';\n\nexport const READER_APP_BUILD_TARGET = 'webview';\n"],
+  "mappings": ";;;AAEO,MAAM,0BAA0B;",
+  "names": []
+}

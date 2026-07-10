@@ -1,0 +1,59 @@
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { describe, expect, it } from 'vitest';
+
+const execFileAsync = promisify(execFile);
+const projectRoot = path.resolve(__dirname, '../../..');
+
+describe('dual-target build contract', () => {
+  it('declares the Reader v2 toolchain and verification scripts', async () => {
+    const packageJson = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
+
+    expect(packageJson.scripts).toMatchObject({
+      build: 'node scripts/build.mjs',
+      compile: 'tsc -p ./ --noEmit && npm run build',
+      'test:unit': 'vitest run',
+      'test:layout': 'playwright test --config playwright.config.ts',
+      test: 'npm run test:unit && npm run test:layout',
+      package: 'npm run compile && npm test && vsce package'
+    });
+    expect(packageJson.dependencies).toMatchObject({
+      'css-tree': expect.any(String),
+      'fast-xml-parser': expect.any(String),
+      parse5: expect.any(String),
+      yauzl: expect.any(String)
+    });
+    expect(packageJson.devDependencies).toMatchObject({
+      '@playwright/test': expect.any(String),
+      '@types/yauzl': expect.any(String),
+      '@types/yazl': expect.any(String),
+      '@vscode/vsce': expect.any(String),
+      esbuild: expect.any(String),
+      yazl: expect.any(String)
+    });
+  });
+
+  it('emits an external-vscode CommonJS extension bundle', async () => {
+    await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
+    const extensionBundle = await readFile(path.join(projectRoot, 'out/extension.js'), 'utf8');
+
+    expect(extensionBundle).toContain('module.exports');
+    expect(extensionBundle).toMatch(/\bactivate\b/);
+    expect(extensionBundle).toMatch(/\bdeactivate\b/);
+    expect(extensionBundle).toMatch(/require\(["']vscode["']\)/);
+  });
+
+  it('emits a self-contained browser Webview bundle and stylesheet', async () => {
+    await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
+    const webviewBundle = await readFile(path.join(projectRoot, 'media/readerApp.js'), 'utf8');
+    const webviewStyles = await readFile(path.join(projectRoot, 'media/readerApp.css'), 'utf8');
+
+    expect(webviewBundle).not.toMatch(/\brequire\s*\(/);
+    expect(webviewBundle).not.toMatch(/\bnode:/);
+    expect(webviewBundle).not.toMatch(/https?:\/\//);
+    expect(webviewBundle).not.toMatch(/(?:css-tree|fast-xml-parser|parse5|yauzl)/);
+    expect(webviewStyles.trim()).not.toBe('');
+  });
+});

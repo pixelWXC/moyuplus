@@ -3,7 +3,7 @@
 - 日期：2026-07-10
 - 依据：[Reader v2 设计规格](../specs/2026-07-10-moyuplus-reader-redesign-design.md)
 - 策略：最大改动面、测试先行、完成后删除旧阅读栈，不长期维护双栈
-- 当前状态：规划完成，尚未开始业务实现
+- 当前状态：Phase 1 已完成（2026-07-10），下一步进入 Phase 2
 
 ## 1. 执行原则
 
@@ -253,6 +253,13 @@ Phase 1 完成门槛：
 - 新领域层和 Store 不依赖旧 Reader Provider。
 - 目标测试、全量 Vitest 和 compile 通过。
 - 提交：`Implement Reader v2 domain and storage`。
+
+执行状态（2026-07-10）：
+
+- 已完成依赖兼容探针、Extension/Webview 双目标 esbuild、Chromium toolchain smoke 和运行时依赖审计（0 vulnerabilities）。
+- 已完成 Book/Locator/Preferences、Reader Engine、v2 Stores 与可重试、幂等的 v1→v2 迁移。
+- `npm test` 通过：17 个 Vitest 文件、95 个单元测试，以及 1 个 Chromium 测试。
+- `npm run compile`、`git diff --check` 通过；新领域层和 Store 未依赖旧 Reader Provider。
 
 ## 5. Phase 2：统一 Adapter、TXT 虚拟分章与 EPUB 安全解析
 

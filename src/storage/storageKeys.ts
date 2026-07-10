@@ -2,3 +2,7 @@ export const TXT_LIBRARY_KEY = 'moyuplus.txtLibrary.v1';
 export const READER_SESSION_KEY = 'moyuplus.readerSession.v1';
 export const TYPING_PRACTICE_SESSION_KEY = 'moyuplus.typingPracticeSession.v1';
 export const SHORTCUT_CONFIG_KEY = 'moyuplus.shortcutConfig.v1';
+export const BOOK_LIBRARY_KEY = 'moyuplus.bookLibrary.v2';
+export const READING_PROGRESS_KEY = 'moyuplus.readingProgress.v2';
+export const READER_PREFERENCES_KEY = 'moyuplus.readerPreferences.v1';
+export const READER_V2_MIGRATION_KEY = 'moyuplus.readerV2Migration.v1';
