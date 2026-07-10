@@ -149,3 +149,98 @@
 
 ---
 *本文件会在每次关键发现后更新。*
+
+## 2026-07-10 阅读器重塑需求
+
+### 已确认的产品方向
+- MVP 验证结束，后续聚焦文本阅读模块。
+- 主界面改为书架，展示已经导入的 EPUB/TXT 文件。
+- 导入记录必须支持删除，不能只增不减。
+- TXT 能力保留，并作为 `TxtAdapter`；打字练习只能选择 TXT。
+- 新增 `EpubAdapter`；阅读器至少支持 EPUB，用户同时表述“目前支持 epub、txt”，需进一步确认 TXT 是否仍可阅读。
+- EPUB 阅读能力包括：打开、目录、章节阅读、上一章/下一章、字号调整、章节位置保存、自适应窗口、阅读 CSS 设置。
+- 现有分页在内容最后一页仍可继续翻页且无提示，这是必须修复的显式边界缺陷。
+
+### 规划假设（待确认）
+- 书架、阅读会话和打字练习会共享统一的书籍索引，但使用不同能力过滤。
+- EPUB 章节位置不能只保存字符 offset，至少需要稳定的章节标识与章节内定位信息。
+- 自定义 CSS 应以受控设置项生成，必要时再提供高级 CSS 覆盖，避免任意 CSS 破坏阅读器控制层。
+- 适配器应隔离格式差异：元数据、目录、章节内容、定位和能力声明由 Adapter 统一暴露。
+
+### 用户已确认的范围决策
+- 阅读器同时支持 EPUB 与 TXT。
+- 打字练习只允许选择 TXT。
+- `TxtAdapter` 与 `EpubAdapter` 共用阅读接口，但书籍能力声明必须让练习模块过滤掉 EPUB。
+- 主界面继续使用 VS Code 侧边栏 Webview，不迁移到宽 Webview Panel 或多编辑器标签。
+- 隐私性是硬约束：本地离线处理、无上传、无遥测；EPUB 内容不得执行脚本或主动加载外部网络资源。
+- 侧边栏布局必须窄宽度优先，采用书架页与阅读页切换；目录和设置按抽屉/覆盖层呈现，不长期挤压正文。
+- EPUB/TXT 导入均只保存原文件路径/URI，不复制到插件目录。
+- 书架删除的语义固定为“移除导入记录”，不得删除或修改用户磁盘中的原文件。
+- 原文件移动或删除后，书架显示失效状态，并提供重新定位或移除记录的恢复操作。
+- TXT 采用整本 DOM 动态分页；EPUB 采用章节内 DOM 动态分页。
+- EPUB 章节末页执行下一页时自动进入下一章并提示章节名；上一页在章节开头时对称进入上一章末页。
+- 全书最后一页不再推进到空白位置：下一页按钮禁用，快捷键/Enter 路由也不得推进，并提示“已读完本书”；书首边界对称处理。
+- 首版阅读样式通过受控设置与 CSS 变量实现，不提供任意原始 CSS 输入框。
+- 样式范围包括字体、字号、行高、字距、文字/背景色、段间距、页内边距、对齐方式和预设主题；修改后即时预览并持久化。
+- 会影响分页的样式调整必须触发 DOM 重新测量，并围绕原定位恢复，不能把读者送回章节开头。
+- 阅读进度按书籍保存于本机全局状态，跨 VS Code workspace 共享；同一本书恢复上次章节与章节内位置。
+- 打字练习 session 继续保存在 workspaceState，与全局阅读进度保持独立。
+- 演进路线选择“阅读模块整体重写”，允许最大改动面，不要求保留现有 Reader 原生测试结构或追求最小 diff。
+- 最大改动面仅限本次阅读器/书架/格式导入与相关状态边界；TXT 打字练习的产品能力、旧用户导入数据迁移和隐私约束仍需保留。
+
+### 总体架构评审反馈
+- 动态分页不属于纯领域 `Reader Engine`：DOM 尺寸、字体和容器变化驱动的测量应由 Webview 内的 `Layout Engine` 负责。
+- `Reader Engine` 保留格式无关的逻辑导航、章节序列、书首/书尾与跨章状态转换；Layout Engine 回报可见范围和页边界。
+- `ReadingLocator` 必须是可扩展的判别联合类型；格式专属锚点之外同时持久化 `progression`，在锚点失效、内容轻微变化或迁移失败时降级恢复。
+- TXT 不能永久建模为单一虚拟章节；`TxtAdapter` 应通过可替换分章策略产生 1..N 个稳定虚拟章节，单章仅为 fallback。
+
+### 已确认设计：总体架构 v2
+- 用户确认 Webview Layout Engine / Reader Engine / Adapter Registry / 三类 global store / workspace typing session 的分层。
+- 后续数据模型必须保持这些边界，不把 DOM 分页逻辑重新塞回扩展宿主的 Reader Engine。
+
+### 已确认设计：数据模型与 Adapter 合约
+- 用户确认稳定随机 bookId、联合 Locator、多级 progression fallback、BookAdapter/BookHandle、TxtSectionizer、EpubAdapter 清洗边界和 v1→v2 数据迁移，无需调整。
+
+### 已确认设计：侧边栏信息架构
+- 用户确认书架页/阅读页切换、目录与设置覆盖抽屉、章节和页导航分层、TXT 菜单启动练习、删除确认及窄宽度适配，无需调整。
+
+### 已确认设计：运行时、错误与隐私
+- 用户确认请求 token、跨章协议、内存资源生命周期、CSP、EPUB 主动内容隔离、错误恢复矩阵和进度写入策略，无需调整。
+
+### 已确认设计：测试、阶段与验收
+- 用户确认六阶段整体重写路线、真实 Chromium Layout Harness、新 EPUB 安全 fixtures、隐私自动验证和最终验收矩阵。
+- 全部设计章节已经通过用户确认，正式规格已写入 `docs/superpowers/specs/2026-07-10-moyuplus-reader-redesign-design.md`。
+
+### 规格评审第 1 轮
+- 审查发现 4 个阻断规划的问题：持久化 textQuote 与隐私冲突、首次 open 的 sectionId 必填矛盾、v1 TXT 编码/来源无 v2 模型落点、未定义 FutureLocator。
+- 已修订为：textQuote 仅可作为内存提示且持久化前剥离；open 只要求 requestId+bookId，选章后才要求 sectionId；BookRecord 增加 source 和格式判别 formatData；Reader v2 Locator 联合封闭为 TXT/EPUB。
+- 采纳建议：用 SectionRef.progressionWeight 统一 bookProgression 计算；用户自定义标题正则移出 v2 首版，仅保留 Sectionizer 扩展点。
+
+### 规格评审第 2 轮
+- 结果：Approved，无阻断问题。
+- 已把审查建议落实为显式测试断言：持久化前剥离内存文本提示；迁移测试覆盖 source 和 formatData.encoding。
+
+### 需要从代码验证
+- 现有 `TxtLibraryStore` 是否已具备移除记录但 UI 未暴露。
+- 现有 `ReaderSession`、`offset`、`pageHistory` 与章节定位模型的耦合程度。
+- 现有 Reader Webview 是否位于侧边栏以及是否适合新书架/目录/阅读布局。
+- 打字练习是否直接依赖 TXT store/service，迁移到统一书架时需要怎样兼容。
+
+### 第一轮代码盘点
+- 当前是 TypeScript VS Code 扩展，Reader 以 Explorer 下的 `WebviewView` 形式存在；新书架与目录若继续塞在侧边栏，会受窄宽度约束。
+- `TxtLibraryStore.remove()`、`TxtFileService.removeImportedFile()` 与 `moyuplus.removeImportedTxt` 命令已经存在，因此“不能删除”主要是书架/Reader 缺乏可发现的删除入口，而不是底层完全缺能力。
+- 当前导入只保存原文件 URI，不复制文件；所谓删除实际上是“移除导入记录”，不会删除用户磁盘原文件。
+- 数据模型完全以 `ImportedTxtFile` 为中心；需要迁移为通用 `BookRecord`/`LibraryStore`，同时保留旧 key `moyuplus.txtLibrary.v1` 的一次性迁移。
+- `ReaderSession` 以 `fileId + offset + pageHistory` 表示位置，只适合纯文本；EPUB 需要 `bookId + chapterId/href + 章节内 locator`。
+- `WorkspaceSessionStore` 当前每个 workspace 只保存一个 Reader session；“保存章节位置”更适合按书籍保存位置，否则切书会覆盖另一书的位置。
+- 打字练习控制器由 `TxtFileService` 注入，天然限制 TXT；重构时可以继续依赖 `TxtAdapter` 或专门的 `TypingSource` 能力，避免 EPUB 进入练习选择器。
+- 当前依赖只有 `iconv-lite`，尚未选择 EPUB 解析库；EPUB 是 ZIP 容器，需处理 OPF/container.xml、manifest、spine、nav/NCX、资源 URL 与 HTML 清洗。
+
+### Reader 与练习链路盘点
+- `ReaderViewProvider` 直接依赖 `TxtFileService`，状态消息一次发送整个 TXT 文本给 Webview；EPUB 不能沿用“整本书全文一次推送”，应改为按章节请求/加载。
+- 末页缺陷原因已经定位：Webview 在末页仍发送 `nextPage`，Provider 将 `offset` 保存为 `text.length` 并继续发状态；Webview 随后渲染空切片。当前没有 `hasNextPage/isAtEnd` 状态、禁用按钮或“已读完”反馈。
+- `goToPreviousPage()` 在没有历史记录时也只是静默刷新；新设计应对首页/第一章边界采用一致反馈策略。
+- Reader Webview 内其实已有“移除导入记录”按钮和消息，但它主要作为当前文件失效时的恢复动作；书架缺少每本书可见的管理操作与删除确认，因此用户感知仍是“只能添加”。
+- 练习控制器使用很窄的结构接口（列表 + 读取物理行），迁移时可保留兼容 facade；打字练习无需理解 EPUB 章节模型。
+- 当前 Reader 选择文件、导入、快捷键设置与正文渲染全部集中在同一个 Webview/Provider，重塑时应拆成书架、阅读应用服务、格式适配器和阅读视图状态，避免 EPUB 逻辑继续堆入单文件。
+- 现有自动测试覆盖 TXT 翻页、session、缺失文件恢复和 Webview HTML 合约，但没有末页/首页边界测试；这应成为重塑的第一批回归测试。

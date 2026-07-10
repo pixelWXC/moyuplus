@@ -104,6 +104,8 @@ Phase 4: 开发执行（实施计划 Phase 7 快捷键设置页与体验补齐�
 | `npm install` 报告 node_modules 清理目录 EBUSY 警告 | 1 | 依赖安装成功，后续 `npm run compile` 和 `npm test` 均通过；该警告不影响当前 Phase 0 |
 | Phase 3 reader 测试初次 GREEN 尝试中，Webview message callback 丢弃 Promise，导致测试无法等待异步状态写入 | 1 | 让 `onDidReceiveMessage` 回调返回 `handleMessage` Promise，测试和状态写入均可可靠等待 |
 | 人工验证中 reader 视图被 VS Code 当作 Tree View，显示无数据提供程序 | 1 | 补充 package contribution 测试并在 `package.json` 添加 `type: "webview"` |
+| 可视化伴侣首次启动误用了 Windows 系统的 WSL `bash.exe` | 1 | WSL 环境没有 `/bin/bash`；下一次显式使用 Git for Windows 的 `C:\Program Files\Git\bin\bash.exe` |
+| 可视化伴侣脚本的服务随 owner process 退出，用户访问时出现 `ERR_CONNECTION_REFUSED` | 2 | 不再重复依赖该生命周期；改为隐藏启动独立 Python 静态服务，并通过 `127.0.0.1` 提供完整 HTML 预览 |
 
 ## Notes
 - 每完成一个阶段后更新本文件。
@@ -112,3 +114,68 @@ Phase 4: 开发执行（实施计划 Phase 7 快捷键设置页与体验补齐�
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
 - 下一步：进入 Phase 8 测试、打包与人工验收。
+
+## 2026-07-10 阅读器重塑规划（当前）
+
+### Goal
+在保留 TXT 打字练习能力的前提下，把现有 MVP 重塑为以书架为入口、支持 EPUB/TXT 管理与 EPUB 章节阅读的本地 VS Code 阅读器，并形成经用户确认后才能进入实现的设计与实施路线。
+
+### Current Phase
+新 Phase B：方案比较与总体设计。
+
+### Phases
+
+#### 新 Phase A：现状盘点与需求澄清
+- [x] 记录用户提出的书架、EPUB、删除、章节导航、阅读位置和样式设置需求
+- [ ] 盘点现有导入、存储、Reader Webview、打字练习及测试边界
+- [x] 明确 EPUB 导入后的文件所有权与删除语义
+- [x] 明确阅读器承载形态与分页/滚动交互
+- [x] 明确隐私、样式设置与阅读进度作用域
+- **Status:** complete
+
+#### 新 Phase B：方案比较与总体设计
+- [x] 提出 2–3 种演进方案及取舍
+- [x] 定义统一 Book/Adapter/Library/ReaderSession 总体边界
+- [x] 定义书架、目录、阅读区和设置区的信息架构
+- [x] 定义失败提示、末页/末章反馈和恢复策略
+- [x] 分节提交用户确认
+- [x] 总体架构 v2 已获用户确认
+- [x] 数据模型与 Adapter 合约已获用户确认
+- [x] 侧边栏信息架构与交互状态已获用户确认
+- [x] 运行时数据流、错误处理与隐私机制已获用户确认
+- [x] 测试策略、重写阶段与验收标准已获用户确认
+- **Status:** complete
+
+#### 新 Phase C：设计规格与评审
+- [x] 写入新的阅读器重塑设计规格
+- [x] 完成规格评审并修订
+- [ ] 请求用户审阅规格
+- **Status:** in_progress
+
+#### 新 Phase D：实施计划
+- [ ] 在设计获批后拆分文件级任务、测试策略和验收标准
+- [ ] 明确分阶段迁移顺序，避免破坏现有 TXT 打字练习
+- **Status:** pending
+
+### 当前关键问题
+1. EPUB 是复制到插件管理目录，还是仅保存原文件 URI？这会直接决定删除、失效恢复与可移植性。
+   - 已确认：仅保存 URI；删除仅移除书架记录，不操作磁盘原文件。
+2. 新主界面继续放在侧边栏窄 Webview，还是使用可获得更大空间的 Webview Panel/自定义编辑器？
+   - 已确认：保持侧边栏，并把隐私性作为不可妥协的产品约束。
+3. EPUB 阅读采用章节内滚动，还是章节内动态分页？
+   - 已确认：采用章节内动态分页；跨章节自动衔接，并对书首/书尾给出明确反馈。
+4. TXT 是否继续允许阅读，还是仅保留为打字练习来源？
+   - 已确认：TXT 与 EPUB 均可阅读；打字练习仅支持 TXT。
+
+### 约束
+- 本轮只做规划；在用户确认设计前不修改业务代码。
+- 保留现有 TXT 导入与打字练习能力，并通过适配器抽象迁移，而不是一次性推翻。
+- 新设计必须显式处理最后一页、最后一章、无上一章/下一章等边界反馈。
+- 用户选择整体重写路线，允许替换现有 Reader/TXT 专用阅读架构和测试；不以最小改动为目标。
+
+### 本轮规划错误
+- 可视化伴侣启动先后遇到错误 bash 与 owner process 退出；已改用独立本地静态预览服务。
+- 两次大型规划补丁因上下文匹配失败而整体未应用；已拆分为小补丁并成功更新，未修改业务代码。
+- 正式规格首次大型补丁因规划文件上下文匹配失败而整体未应用；确认规格文件未创建后，改为分离“状态更新”和“规格新增”补丁。
+- 规格第 1 轮审查发现 4 个阻断问题；已完成定向修订，等待第 2 轮复审。
+- 规格第 2 轮审查已通过；等待用户审阅正式规格。
