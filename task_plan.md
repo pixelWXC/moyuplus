@@ -189,3 +189,11 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - [x] EPUB Archive 安全边界、package/nav/NCX 解析和 sanitizer
 - [x] EpubAdapter、目标测试、全量测试、compile、diff check
 - **Status:** complete；下一步进入 Reader v2 Phase 3
+
+### Reader v2 Phase 3：Webview 与 Layout Engine
+- [x] Webview-only 构建入口与 bundle 契约
+- [x] Reader v2 消息协议和运行时守卫
+- [x] ResourceManager 资源声明、Blob URL 与回收
+- [x] 真实 DOM Layout Engine、分页边界、定位恢复与合并重排
+- [x] Chromium Layout/隐私 Harness
+- **Status:** complete；下一步进入 Reader v2 Phase 4

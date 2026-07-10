@@ -257,3 +257,11 @@
 - Reader v2 Adapter 以安全文档为边界：TXT 输出 HTML 转义文本；EPUB 只输出 parse5/css-tree 清洗后的 XHTML/CSS 与已验证内部资源引用。
 - EPUB Archive 不创建解压目录：yauzl 以 central directory、lazy entry 和逐 entry stream 读取，并在索引与实际 stream 两层执行安全限制。
 - TXT 虚拟 section ID 由规则版本、边界和边界内容摘要派生；标题缺失的大文件按稳定上限分段，小文件与空文件单章 fallback。
+
+## 2026-07-10 Reader v2 Phase 3 发现
+
+- 旧 Reader 消息类型仍被现有 `ReaderViewProvider` 使用；Phase 3 新增 v2 严格协议并暂留旧类型，Phase 4 重写 Provider 后再删除旧协议，避免阶段提交不可编译。
+- Playwright `file:` Harness 可直接加载 Webview bundle 并使用真实 Chromium DOM，足以验证分页测量而无需 Extension Host DOM shim。
+- Webview bundle 静态检查不能用宽泛的 `node:` 或 `//` 正则：对象属性和 esbuild 注释会误报；应检查真实 `require/import` 的 `node:` 形式和 `http(s)://` URL。
+- 章节末页空白缺陷通过能力状态根治：最后一个非空页面为 `isSectionEnd`，`nextPage()` 返回 false 且不改变渲染内容。
+- 连续重排围绕当前页起始 offset 恢复；animation-frame 合并使多次字体、resize 和 Preferences 事件只触发一次测量。

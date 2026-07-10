@@ -6,8 +6,18 @@ const sharedOptions = {
   sourcemap: true
 };
 
-await Promise.all([
-  build({
+const webviewBuild = build({
+  ...sharedOptions,
+  entryPoints: ['src/webview/readerApp.ts'],
+  format: 'iife',
+  outfile: 'media/readerApp.js',
+  platform: 'browser',
+  target: ['chrome120']
+});
+
+const builds = [webviewBuild];
+if (!process.argv.includes('--webview-only')) {
+  builds.push(build({
     ...sharedOptions,
     entryPoints: ['src/extension.ts'],
     external: ['vscode'],
@@ -15,13 +25,7 @@ await Promise.all([
     outfile: 'out/extension.js',
     platform: 'node',
     target: 'node20'
-  }),
-  build({
-    ...sharedOptions,
-    entryPoints: ['src/webview/readerApp.ts'],
-    format: 'iife',
-    outfile: 'media/readerApp.js',
-    platform: 'browser',
-    target: ['chrome120']
-  })
-]);
+  }));
+}
+
+await Promise.all(builds);

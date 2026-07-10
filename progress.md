@@ -508,3 +508,14 @@
 - 实现 EPUB security policy/errors、streaming archive、package/nav/NCX parser、XHTML/CSS sanitizer 和 EpubAdapter。
 - 增加中英文及无标题 TXT fixtures，以及代码生成的安全/恶意 EPUB fixtures。
 - 目标测试 8 文件 11 测试通过；全量测试 25 个 Vitest 文件 106 测试和 1 个 Chromium 测试通过；`npm run compile` 通过。
+
+### Reader v2 Phase 3：Webview Bundle、消息协议、资源与真实 DOM 分页
+- **Status:** complete
+- RED：Reader v2 消息测试 5 个用例因守卫不存在而失败；实现协议版本、open/section envelope 与安全 section 守卫后 GREEN。
+- RED：ResourceManager 测试先因模块不存在报错，补最小空实现后确认行为断言失败；实现声明校验、MIME 白名单、缓存与统一 revoke 后 3 个用例通过。
+- RED：真实 DOM Harness 因 `LayoutEngine` 不存在失败；实现后分页、定位恢复与首尾边界用例通过。
+- RED：合并重排用例因调度 API 不存在失败；补 animation-frame 调度后通过。
+- RED：构建契约确认缺少 `build:webview`；增加 `--webview-only` 路径后通过。
+- 隐私 Harness 初次因 `//` 匹配 sourcemap 注释误报；收紧为 HTTP(S) URL 后通过，页面实际外部请求数为 0。
+- 当前目标验证：`npm run compile` 通过；`npm run test:layout` 7/7 通过。
+- 全量交付验证：27 个 Vitest 文件、115 个单元测试全部通过；7 个 Chromium Layout/隐私测试全部通过；`npm run compile` 与 `git diff --check` 通过。

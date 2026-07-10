@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline'; img-src blob: data:">
+  <style>html,body{margin:0}#reader{box-sizing:border-box;height:380px;overflow:hidden;padding:16px;font:16px/1.6 sans-serif}#reader p{margin:0 0 1em}</style>
+</head>
+<body>
+  <main id="reader"></main>
+  <script src="../../../media/readerApp.js"></script>
+  <script>
+    const reader = document.querySelector('#reader');
+    const engine = new window.MoyuplusReader.LayoutEngine(reader);
+    window.readerHarness = {
+      load: html => engine.setContent('section-1', html),
+      next: () => engine.nextPage(),
+      previous: () => engine.previousPage(),
+      resize: fontSize => { reader.style.fontSize = `${fontSize}px`; engine.reflow(); },
+      scheduleReflows: async count => {
+        const before = engine.getReflowPasses();
+        for (let index = 0; index < count; index += 1) engine.requestReflow();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return engine.getReflowPasses() - before;
+      },
+      state: () => ({ ...engine.getState(), visibleText: reader.textContent || '' })
+    };
+  </script>
+</body>
+</html>

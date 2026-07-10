@@ -185,6 +185,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:webview": "node scripts/build.mjs --webview-only",
     "compile": "tsc -p ./ --noEmit && npm run build",
     "watch": "tsc -watch -p ./",
     "test:unit": "vitest run",

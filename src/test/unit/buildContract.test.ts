@@ -13,6 +13,7 @@ describe('dual-target build contract', () => {
 
     expect(packageJson.scripts).toMatchObject({
       build: 'node scripts/build.mjs',
+      'build:webview': 'node scripts/build.mjs --webview-only',
       compile: 'tsc -p ./ --noEmit && npm run build',
       'test:unit': 'vitest run',
       'test:layout': 'playwright test --config playwright.config.ts',
@@ -51,7 +52,7 @@ describe('dual-target build contract', () => {
     const webviewStyles = await readFile(path.join(projectRoot, 'media/readerApp.css'), 'utf8');
 
     expect(webviewBundle).not.toMatch(/\brequire\s*\(/);
-    expect(webviewBundle).not.toMatch(/\bnode:/);
+    expect(webviewBundle).not.toMatch(/(?:from\s+|require\s*\()["']node:/);
     expect(webviewBundle).not.toMatch(/https?:\/\//);
     expect(webviewBundle).not.toMatch(/(?:css-tree|fast-xml-parser|parse5|yauzl)/);
     expect(webviewStyles.trim()).not.toBe('');

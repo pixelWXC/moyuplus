@@ -3,7 +3,7 @@
 - 日期：2026-07-10
 - 依据：[Reader v2 设计规格](../specs/2026-07-10-moyuplus-reader-redesign-design.md)
 - 策略：最大改动面、测试先行、完成后删除旧阅读栈，不长期维护双栈
-- 当前状态：Phase 2 已完成（2026-07-10），下一步进入 Phase 3
+- 当前状态：Phase 3 已完成（2026-07-10），下一步进入 Phase 4
 
 ## 1. 执行原则
 
@@ -418,9 +418,17 @@ Playwright 覆盖中英文、超长行、字体、图片、220/280/360px 宽度�
 
 Phase 3 完成门槛：
 
-- `npm run build:webview` 和 `npm run test:layout` 通过。
-- Layout Engine 不依赖 Extension Host DOM 模拟。
+- [x] `npm run build:webview` 和 `npm run test:layout` 通过。
+- [x] Layout Engine 不依赖 Extension Host DOM 模拟。
 - 提交：`Implement Webview layout engine`。
+
+完成记录（2026-07-10）：
+
+- Reader v2 消息协议已提供版本、关联 ID、章节阶段约束和双向运行时守卫，同时保留旧 Provider 在 Phase 4 重写前的兼容类型。
+- ResourceManager 仅接收 sanitizer 声明且 MIME 匹配的图片/字体资源，切章、切书与 dispose 均回收 Blob URL。
+- Layout Engine 使用真实 Chromium DOM、指数扩展后二分测量、词/段落边界收敛、首尾能力状态和基于 offset/progression 的重排恢复；重复 next 不产生空白尾页。
+- resize、字体完成和 Preferences 重排请求按 animation frame 合并；真实 DOM Harness 覆盖 220/280/360px、中英文、长内容、图片、字号变化、定位恢复和章节首尾。
+- 隐私 Harness 验证零 HTTP(S) 请求、deny-by-default CSP，以及 Webview bundle 不含远程 URL、网络 API 或 Node 运行时依赖。
 
 ## 7. Phase 4：书架、Reader Controller 与侧边栏应用
 
