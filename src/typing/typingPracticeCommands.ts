@@ -143,7 +143,7 @@ async function startTypingPractice(
 
   const selected = await vscode.window.showQuickPick(
     files.map((file): PracticeFileQuickPickItem => ({
-      label: file.name,
+      label: file.title,
       description: file.source,
       detail: file.uri,
       fileId: file.id

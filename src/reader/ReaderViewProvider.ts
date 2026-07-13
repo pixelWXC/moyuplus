@@ -7,6 +7,12 @@ import {
   INCREASE_READER_FONT_COMMAND_ID, NEXT_READER_PAGE_COMMAND_ID, PREVIOUS_READER_PAGE_COMMAND_ID,
   SELECT_READER_FILE_COMMAND_ID
 } from '../shortcuts/shortcutSettings';
+import {
+  NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
+  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID
+} from '../shortcuts/shortcutSettings';
+
+export type ReaderExternalCommand = 'nextPage' | 'previousPage' | 'nextChapter' | 'previousChapter' | 'openLibrary' | 'openToc' | 'openSettings';
 
 export { READER_VIEW_ID };
 
@@ -22,6 +28,7 @@ export interface ReaderViewController {
 
 export class ReaderViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
+  private canNextPage = false;
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly controller: ReaderViewController
@@ -46,13 +53,24 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
 
   // Kept until Phase 5 rewires shortcut routing to Reader v2 navigation state.
   async requestNextPage(): Promise<boolean> {
-    if (!this.view) return false;
-    await this.view.webview.postMessage({ type: 'command', command: 'nextPage' });
-    return true;
+    if (!this.canNextPage) return false;
+    return this.requestReaderCommand('nextPage');
   }
-  async requestPreviousPage(): Promise<void> {}
+  async requestPreviousPage(): Promise<void> { await this.requestReaderCommand('previousPage'); }
+
+  async requestReaderCommand(command: ReaderExternalCommand): Promise<boolean> {
+    return this.view ? this.view.webview.postMessage({ type: 'command', command }) : false;
+  }
+
+  async postMessage(message: unknown): Promise<boolean> {
+    return this.view ? this.view.webview.postMessage(message) : false;
+  }
 
   private async handleMessage(value: unknown): Promise<void> {
+    if (isNavigationState(value)) {
+      this.canNextPage = value.canNextPage;
+      return;
+    }
     if (!isReaderToExtensionV2Message(value)) return;
     await dispatchReaderMessage(this.controller, value);
   }
@@ -83,11 +101,22 @@ export function registerReaderView(
     vscode.commands.registerCommand(PREVIOUS_READER_PAGE_COMMAND_ID, () => provider.requestPreviousPage()),
     vscode.commands.registerCommand(FOCUS_READER_COMMAND_ID, () => vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`)),
     vscode.commands.registerCommand(CLOSE_READER_COMMAND_ID, () => vscode.commands.executeCommand('workbench.action.closeSidebar')),
-    vscode.commands.registerCommand(SELECT_READER_FILE_COMMAND_ID, () => undefined),
-    vscode.commands.registerCommand(INCREASE_READER_FONT_COMMAND_ID, () => undefined),
-    vscode.commands.registerCommand(DECREASE_READER_FONT_COMMAND_ID, () => undefined)
+    vscode.commands.registerCommand(SELECT_READER_FILE_COMMAND_ID, () => provider.requestReaderCommand('openLibrary')),
+    vscode.commands.registerCommand(INCREASE_READER_FONT_COMMAND_ID, () => provider.requestReaderCommand('openSettings')),
+    vscode.commands.registerCommand(DECREASE_READER_FONT_COMMAND_ID, () => provider.requestReaderCommand('openSettings')),
+    vscode.commands.registerCommand(OPEN_READER_LIBRARY_COMMAND_ID, () => provider.requestReaderCommand('openLibrary')),
+    vscode.commands.registerCommand(PREVIOUS_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('previousChapter')),
+    vscode.commands.registerCommand(NEXT_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('nextChapter')),
+    vscode.commands.registerCommand(OPEN_READER_TOC_COMMAND_ID, () => provider.requestReaderCommand('openToc')),
+    vscode.commands.registerCommand(OPEN_READER_SETTINGS_COMMAND_ID, () => provider.requestReaderCommand('openSettings'))
   );
   return provider;
+}
+
+function isNavigationState(value: unknown): value is { type: 'navigationState'; canNextPage: boolean } {
+  return typeof value === 'object' && value !== null
+    && (value as { type?: unknown }).type === 'navigationState'
+    && typeof (value as { canNextPage?: unknown }).canNextPage === 'boolean';
 }
 
 function isReaderViewController(value: unknown): value is ReaderViewController {

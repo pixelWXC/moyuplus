@@ -47,4 +47,25 @@ describe('ReaderViewProvider v2', () => {
     expect(target.flush).toHaveBeenCalledOnce();
     expect(target.dispose).toHaveBeenCalledOnce();
   });
+
+  it('routes external reader commands and refuses Enter-style next-page at the book end', async () => {
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller());
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+
+    await view.webview.receiveMessage({ type: 'navigationState', canNextPage: false });
+    await expect(provider.requestNextPage()).resolves.toBe(false);
+    expect(view.webview.postedMessages).toEqual([]);
+
+    await view.webview.receiveMessage({ type: 'navigationState', canNextPage: true });
+    await expect(provider.requestNextPage()).resolves.toBe(true);
+    await provider.requestPreviousPage();
+    await provider.requestReaderCommand('nextChapter');
+
+    expect(view.webview.postedMessages).toEqual([
+      { type: 'command', command: 'nextPage' },
+      { type: 'command', command: 'previousPage' },
+      { type: 'command', command: 'nextChapter' }
+    ]);
+  });
 });

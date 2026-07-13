@@ -8,6 +8,11 @@ export const CLOSE_READER_COMMAND_ID = 'moyuplus.reader.close';
 export const SELECT_READER_FILE_COMMAND_ID = 'moyuplus.reader.selectFile';
 export const INCREASE_READER_FONT_COMMAND_ID = 'moyuplus.reader.increaseFont';
 export const DECREASE_READER_FONT_COMMAND_ID = 'moyuplus.reader.decreaseFont';
+export const OPEN_READER_LIBRARY_COMMAND_ID = 'moyuplus.reader.openLibrary';
+export const PREVIOUS_READER_CHAPTER_COMMAND_ID = 'moyuplus.reader.previousChapter';
+export const NEXT_READER_CHAPTER_COMMAND_ID = 'moyuplus.reader.nextChapter';
+export const OPEN_READER_TOC_COMMAND_ID = 'moyuplus.reader.openToc';
+export const OPEN_READER_SETTINGS_COMMAND_ID = 'moyuplus.reader.openSettings';
 
 export type ShortcutRisk = 'low' | 'high';
 export type ShortcutEnablement = 'enter' | 'tab';
@@ -32,6 +37,11 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
   return [
     action(NEXT_READER_PAGE_COMMAND_ID, '阅读器：下一页', '将阅读器翻到下一页。'),
     action(PREVIOUS_READER_PAGE_COMMAND_ID, '阅读器：上一页', '返回阅读器历史中的上一页。'),
+    action(PREVIOUS_READER_CHAPTER_COMMAND_ID, '阅读器：上一章', '跳转到上一章节。'),
+    action(NEXT_READER_CHAPTER_COMMAND_ID, '阅读器：下一章', '跳转到下一章节。'),
+    action(OPEN_READER_LIBRARY_COMMAND_ID, '阅读器：书架', '返回 MoyuPlus 书架。'),
+    action(OPEN_READER_TOC_COMMAND_ID, '阅读器：目录', '打开当前书籍目录。'),
+    action(OPEN_READER_SETTINGS_COMMAND_ID, '阅读器：设置', '打开阅读设置。'),
     action(FOCUS_READER_COMMAND_ID, '阅读器：打开', '打开并聚焦 MoyuPlus Reader。'),
     action(CLOSE_READER_COMMAND_ID, '阅读器：关闭', '关闭当前侧边栏。'),
     action(SELECT_READER_FILE_COMMAND_ID, '阅读器：切换文件', '从已导入的 TXT 中选择阅读文件。'),

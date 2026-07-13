@@ -594,6 +594,13 @@ Phase 5 完成门槛：
 - v1 迁移和跨 workspace 恢复通过。
 - 提交：`Integrate Reader v2 and migrate legacy state`。
 
+执行记录（2026-07-13）：
+
+- [x] Task 5.1：打字练习已切换到 `TypingSourceCatalog`；只列出 TXT，EPUB 双层拒绝，移除当前练习书籍会安全停止。
+- [x] Task 5.2：v2 书架导入/移除/重定位、Reader 章节/目录/设置命令与隐藏 `importTxt` alias 已完成；Enter route 会读取 Webview 上报的真实导航能力，书尾不推进。
+- [x] Task 5.3：activation 已先运行幂等 v1→v2 迁移，失败时仅记录最小错误并继续；Reader v2、typing 与全局阅读进度已接入同一 v2 stores。
+- **Phase 5 Status：complete。** 当前回归：30 个 Vitest 文件 125 个测试、7 个 Chromium Layout/隐私测试、`npm run compile` 与 `git diff --check` 全部通过。
+
 ## 9. Phase 6：删除旧栈、隐私硬化、打包与人工验收
 
 ### Task 6.1：删除旧阅读栈

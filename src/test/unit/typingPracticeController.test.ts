@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { type ImportedTxtFile, createDefaultTypingPracticeSession } from '../../domain/models';
+import { createDefaultTypingPracticeSession } from '../../domain/models';
+import { createBookCapabilities, type BookRecord } from '../../domain/books';
 import { WorkspaceSessionStore } from '../../storage/workspaceSessionStore';
 import { TypingPracticeController, TypingPracticeNoUsableLinesError } from '../../typing/TypingPracticeController';
 
@@ -21,24 +22,28 @@ class MemoryMemento {
   }
 }
 
-class FakeTxtFileService {
-  readonly file: ImportedTxtFile = {
+class FakeTypingSourceCatalog {
+  readonly file: BookRecord = {
+    schemaVersion: 2,
     id: 'file-1',
-    name: 'book.txt',
     uri: 'file:///book.txt',
-    encoding: 'utf8',
     source: 'workspace',
+    title: 'book.txt',
+    authors: [],
+    format: 'txt',
+    formatData: { encoding: 'utf8' },
+    capabilities: createBookCapabilities('txt'),
     createdAt: 1,
     updatedAt: 1
   };
 
   lines: string[] = [];
 
-  listImportedFiles(): ImportedTxtFile[] {
+  list(): BookRecord[] {
     return [this.file];
   }
 
-  async readPracticePhysicalLines(fileId: string): Promise<string[]> {
+  async getPhysicalLines(fileId: string): Promise<string[]> {
     if (fileId !== this.file.id) {
       throw new Error(`Unknown file: ${fileId}`);
     }
@@ -47,21 +52,21 @@ class FakeTxtFileService {
   }
 }
 
-let txtFileService: FakeTxtFileService;
+let typingSources: FakeTypingSourceCatalog;
 let sessionStore: WorkspaceSessionStore;
 let controller: TypingPracticeController;
 
 beforeEach(() => {
-  txtFileService = new FakeTxtFileService();
+  typingSources = new FakeTypingSourceCatalog();
   sessionStore = new WorkspaceSessionStore(new MemoryMemento());
-  controller = new TypingPracticeController(txtFileService, sessionStore);
+  controller = new TypingPracticeController(typingSources, sessionStore);
 });
 
 describe('TypingPracticeController', () => {
   it('starts practice at the first usable physical line and saves workspace progress', async () => {
-    txtFileService.lines = ['', '  first line', 'second line'];
+    typingSources.lines = ['', '  first line', 'second line'];
 
-    const currentLine = await controller.start(txtFileService.file.id);
+    const currentLine = await controller.start(typingSources.file.id);
 
     expect(currentLine).toEqual({
       fileId: 'file-1',
@@ -81,8 +86,8 @@ describe('TypingPracticeController', () => {
   });
 
   it('moves through usable physical lines, resets, and jumps by one-based line number', async () => {
-    txtFileService.lines = ['one', '', 'three'];
-    await controller.start(txtFileService.file.id);
+    typingSources.lines = ['one', '', 'three'];
+    await controller.start(typingSources.file.id);
 
     await expect(controller.nextLine()).resolves.toMatchObject({ lineNumber: 3, text: 'three' });
     await expect(controller.nextLine()).resolves.toMatchObject({ lineNumber: 3, text: 'three' });
@@ -101,15 +106,15 @@ describe('TypingPracticeController', () => {
         }
       })
     );
-    controller = new TypingPracticeController(txtFileService, sessionStore);
-    txtFileService.lines = ['  a b\tc'];
+    controller = new TypingPracticeController(typingSources, sessionStore);
+    typingSources.lines = ['  a b\tc'];
 
-    await expect(controller.start(txtFileService.file.id)).resolves.toMatchObject({ text: 'abc' });
+    await expect(controller.start(typingSources.file.id)).resolves.toMatchObject({ text: 'abc' });
   });
 
   it('calculates Tab completion edits from the configured mode and current editor prefix', async () => {
-    txtFileService.lines = ['hello world'];
-    await controller.start(txtFileService.file.id);
+    typingSources.lines = ['hello world'];
+    await controller.start(typingSources.file.id);
 
     await expect(controller.getTabCompletion('hello', 5, 'completeRest')).resolves.toEqual({
       mode: 'completeRest',
@@ -133,18 +138,18 @@ describe('TypingPracticeController', () => {
         }
       })
     );
-    controller = new TypingPracticeController(txtFileService, sessionStore);
-    txtFileService.lines = ['   ', '  first line  '];
+    controller = new TypingPracticeController(typingSources, sessionStore);
+    typingSources.lines = ['   ', '  first line  '];
 
-    await expect(controller.start(txtFileService.file.id)).resolves.toMatchObject({
+    await expect(controller.start(typingSources.file.id)).resolves.toMatchObject({
       lineNumber: 2,
       text: 'first line'
     });
   });
 
   it('stops practice so no current ghost text is available', async () => {
-    txtFileService.lines = ['one'];
-    await controller.start(txtFileService.file.id);
+    typingSources.lines = ['one'];
+    await controller.start(typingSources.file.id);
 
     await controller.stop();
 
@@ -153,9 +158,32 @@ describe('TypingPracticeController', () => {
   });
 
   it('rejects files without a usable practice line', async () => {
-    txtFileService.lines = ['', '   '];
+    typingSources.lines = ['', '   '];
 
-    await expect(controller.start(txtFileService.file.id)).rejects.toBeInstanceOf(TypingPracticeNoUsableLinesError);
+    await expect(controller.start(typingSources.file.id)).rejects.toBeInstanceOf(TypingPracticeNoUsableLinesError);
     expect(sessionStore.getTypingPracticeSession()).toEqual(createDefaultTypingPracticeSession());
+  });
+
+  it('safely stops a persisted practice session after its TXT is removed from the library', async () => {
+    typingSources.lines = ['one'];
+    await controller.start(typingSources.file.id);
+    typingSources.list = () => [];
+
+    await expect(controller.getCurrentLine()).resolves.toBeUndefined();
+    expect(sessionStore.getTypingPracticeSession()).toMatchObject({ active: false });
+  });
+
+  it('never starts typing practice for an EPUB record', async () => {
+    const epub: BookRecord = {
+      ...typingSources.file,
+      id: 'epub-1',
+      uri: 'file:///book.epub',
+      format: 'epub',
+      formatData: {},
+      capabilities: createBookCapabilities('epub')
+    };
+    typingSources.list = () => [epub];
+
+    await expect(controller.start(epub.id)).rejects.toThrow('not available for typing practice');
   });
 });

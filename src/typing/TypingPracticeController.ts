@@ -1,14 +1,7 @@
-import {
-  type ImportedTxtFile,
-  type TypingTabMode,
-  type TypingPracticeSession
-} from '../domain/models';
+import { type TypingTabMode, type TypingPracticeSession } from '../domain/models';
+import type { BookRecord } from '../domain/books';
 import { type WorkspaceSessionStore } from '../storage/workspaceSessionStore';
-
-interface TypingPracticeTxtFileService {
-  listImportedFiles(): ImportedTxtFile[];
-  readPracticePhysicalLines(fileId: string): Promise<string[]>;
-}
+import type { TypingSourceCatalogLike } from './typingSourceCatalog';
 
 export interface TypingPracticeLine {
   fileId: string;
@@ -33,8 +26,8 @@ export class TypingPracticeFileNotFoundError extends Error {
 }
 
 export class TypingPracticeNoUsableLinesError extends Error {
-  constructor(readonly file: ImportedTxtFile) {
-    super(`TXT file has no usable practice lines: ${file.name}`);
+  constructor(readonly file: BookRecord) {
+    super(`TXT file has no usable practice lines: ${file.title}`);
     this.name = 'TypingPracticeNoUsableLinesError';
   }
 }
@@ -43,12 +36,12 @@ export class TypingPracticeController {
   private linesCache?: { fileId: string; lines: string[] };
 
   constructor(
-    private readonly txtFileService: TypingPracticeTxtFileService,
+    private readonly typingSources: TypingSourceCatalogLike,
     private readonly sessionStore: WorkspaceSessionStore
   ) {}
 
-  listPracticeFiles(): ImportedTxtFile[] {
-    return this.txtFileService.listImportedFiles();
+  listPracticeFiles(): BookRecord[] {
+    return this.typingSources.list();
   }
 
   async start(fileId: string): Promise<TypingPracticeLine> {
@@ -88,7 +81,11 @@ export class TypingPracticeController {
       return undefined;
     }
 
-    const file = this.getImportedFile(session.fileId);
+    const file = this.getPracticeFile(session.fileId);
+    if (!file) {
+      await this.stop();
+      return undefined;
+    }
     const lines = await this.loadLines(file.id);
     const lineIndex = this.findNearestUsableLineIndex(lines, session.lineIndex, session);
     if (lineIndex === undefined) {
@@ -226,13 +223,19 @@ export class TypingPracticeController {
     return this.getCurrentLine();
   }
 
-  private getImportedFile(fileId: string): ImportedTxtFile {
-    const file = this.txtFileService.listImportedFiles().find((candidate) => candidate.id === fileId);
+  private getImportedFile(fileId: string): BookRecord {
+    const file = this.getPracticeFile(fileId);
     if (!file) {
-      throw new TypingPracticeFileNotFoundError(fileId);
+      throw new Error(`Book ${fileId} is not available for typing practice.`);
     }
 
     return file;
+  }
+
+  private getPracticeFile(fileId: string): BookRecord | undefined {
+    return this.typingSources
+      .list()
+      .find((candidate) => candidate.id === fileId && candidate.format === 'txt' && candidate.capabilities.typing);
   }
 
   private async loadLines(fileId: string): Promise<string[]> {
@@ -240,7 +243,7 @@ export class TypingPracticeController {
       return this.linesCache.lines;
     }
 
-    const lines = await this.txtFileService.readPracticePhysicalLines(fileId);
+    const lines = await this.typingSources.getPhysicalLines(fileId);
     this.linesCache = { fileId, lines };
     return lines;
   }
@@ -293,13 +296,13 @@ export class TypingPracticeController {
   }
 
   private toPracticeLine(
-    file: ImportedTxtFile,
+    file: BookRecord,
     rawLine: string,
     session: TypingPracticeSession
   ): TypingPracticeLine {
     return {
       fileId: file.id,
-      fileName: file.name,
+      fileName: file.title,
       lineIndex: session.lineIndex,
       lineNumber: session.lineIndex + 1,
       totalLines: session.totalLines,

@@ -14,6 +14,9 @@
   "activationEvents": [
     "onCommand:moyuplus.smokeTest",
     "onCommand:moyuplus.importTxt",
+    "onCommand:moyuplus.importBook",
+    "onCommand:moyuplus.removeBook",
+    "onCommand:moyuplus.relocateBook",
     "onCommand:moyuplus.removeImportedTxt",
     "onCommand:moyuplus.checkImportedTxtFiles",
     "onCommand:moyuplus.startTypingPractice",
@@ -26,6 +29,11 @@
     "onCommand:moyuplus.routeTab",
     "onCommand:moyuplus.reader.nextPage",
     "onCommand:moyuplus.reader.previousPage",
+    "onCommand:moyuplus.reader.previousChapter",
+    "onCommand:moyuplus.reader.nextChapter",
+    "onCommand:moyuplus.reader.openLibrary",
+    "onCommand:moyuplus.reader.openToc",
+    "onCommand:moyuplus.reader.openSettings",
     "onCommand:moyuplus.reader.focus",
     "onCommand:moyuplus.reader.close",
     "onCommand:moyuplus.reader.selectFile",
@@ -38,12 +46,20 @@
   "contributes": {
     "commands": [
       {
-        "command": "moyuplus.smokeTest",
-        "title": "MoyuPlus: Smoke Test"
+        "command": "moyuplus.importBook",
+        "title": "MoyuPlus: Import Book"
       },
       {
-        "command": "moyuplus.importTxt",
-        "title": "MoyuPlus: Import TXT"
+        "command": "moyuplus.removeBook",
+        "title": "MoyuPlus: Remove Book"
+      },
+      {
+        "command": "moyuplus.relocateBook",
+        "title": "MoyuPlus: Relocate Book"
+      },
+      {
+        "command": "moyuplus.smokeTest",
+        "title": "MoyuPlus: Smoke Test"
       },
       {
         "command": "moyuplus.removeImportedTxt",
@@ -92,6 +108,26 @@
       {
         "command": "moyuplus.reader.previousPage",
         "title": "MoyuPlus: Reader Previous Page"
+      },
+      {
+        "command": "moyuplus.reader.previousChapter",
+        "title": "MoyuPlus: Reader Previous Chapter"
+      },
+      {
+        "command": "moyuplus.reader.nextChapter",
+        "title": "MoyuPlus: Reader Next Chapter"
+      },
+      {
+        "command": "moyuplus.reader.openLibrary",
+        "title": "MoyuPlus: Open Library"
+      },
+      {
+        "command": "moyuplus.reader.openToc",
+        "title": "MoyuPlus: Open Table of Contents"
+      },
+      {
+        "command": "moyuplus.reader.openSettings",
+        "title": "MoyuPlus: Open Reader Settings"
       },
       {
         "command": "moyuplus.reader.focus",

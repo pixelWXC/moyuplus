@@ -32,6 +32,7 @@ function render(): void {
   if (state.view === 'reader') { renderReader(app); return; }
   layout?.dispose(); layout = undefined;
   renderLibrary(app);
+  post({ type: 'navigationState', canNextPage: false });
 }
 
 function renderLibrary(root: HTMLElement): void {
@@ -88,6 +89,7 @@ function renderReader(root: HTMLElement): void {
   if (state.notice) { const notice = element('div', 'reader-toast', state.notice); notice.setAttribute('role', 'status'); root.append(notice); }
   if (state.drawer === 'toc') root.append(renderTocDrawer());
   if (state.drawer === 'settings') root.append(renderSettingsDrawer());
+  post({ type: 'navigationState', canNextPage: Boolean(state.navigation?.canNextPage) });
 }
 
 function renderTocDrawer(): HTMLElement {
@@ -155,6 +157,17 @@ function button(label: string, className: string, handler: () => void, disabled 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] { const target = document.createElement(tag); if (className) target.className = className; if (text !== undefined) target.textContent = text; return target; }
 
 window.addEventListener('message', event => {
+  if (isReaderCommand(event.data)) {
+    const command = event.data.command;
+    if (command === 'nextPage') nextPage();
+    else if (command === 'previousPage') previousPage();
+    else if (command === 'nextChapter') requestAdjacent('requestNextSection');
+    else if (command === 'previousChapter') requestAdjacent('requestPreviousSection');
+    else if (command === 'openLibrary') dispatch({ type: 'closeReader' });
+    else if (command === 'openToc') dispatch({ type: 'openDrawer', drawer: 'toc' });
+    else if (command === 'openSettings') dispatch({ type: 'openDrawer', drawer: 'settings' });
+    return;
+  }
   const incoming = event.data as Partial<LibraryStateMessage>;
   if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) { dispatch({ type: 'libraryLoaded', books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} }); if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences }); return; }
   if (!isExtensionToReaderV2Message(event.data)) return;
@@ -165,5 +178,11 @@ window.addEventListener('message', event => {
   if (message.type === 'bookStart' || message.type === 'bookEnd') { dispatch({ type: 'bookBoundary', edge: message.type === 'bookStart' ? 'start' : 'end' }); return; }
   if (message.type === 'readerError') dispatch({ type: 'showError', message: message.message });
 });
+
+function isReaderCommand(value: unknown): value is { type: 'command'; command: 'nextPage' | 'previousPage' | 'nextChapter' | 'previousChapter' | 'openLibrary' | 'openToc' | 'openSettings' } {
+  if (typeof value !== 'object' || value === null || (value as { type?: unknown }).type !== 'command') return false;
+  return ['nextPage', 'previousPage', 'nextChapter', 'previousChapter', 'openLibrary', 'openToc', 'openSettings']
+    .includes(String((value as { command?: unknown }).command));
+}
 
 render(); post({ type: 'libraryReady' });

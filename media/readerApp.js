@@ -401,6 +401,7 @@
     layout?.dispose();
     layout = void 0;
     renderLibrary(app);
+    post({ type: "navigationState", canNextPage: false });
   }
   function renderLibrary(root) {
     root.className = "library-view";
@@ -481,6 +482,7 @@
     }
     if (state.drawer === "toc") root.append(renderTocDrawer());
     if (state.drawer === "settings") root.append(renderSettingsDrawer());
+    post({ type: "navigationState", canNextPage: Boolean(state.navigation?.canNextPage) });
   }
   function renderTocDrawer() {
     const drawer = drawerShell("\u76EE\u5F55");
@@ -674,6 +676,17 @@
     return target;
   }
   window.addEventListener("message", (event) => {
+    if (isReaderCommand(event.data)) {
+      const command = event.data.command;
+      if (command === "nextPage") nextPage();
+      else if (command === "previousPage") previousPage();
+      else if (command === "nextChapter") requestAdjacent("requestNextSection");
+      else if (command === "previousChapter") requestAdjacent("requestPreviousSection");
+      else if (command === "openLibrary") dispatch({ type: "closeReader" });
+      else if (command === "openToc") dispatch({ type: "openDrawer", drawer: "toc" });
+      else if (command === "openSettings") dispatch({ type: "openDrawer", drawer: "settings" });
+      return;
+    }
     const incoming = event.data;
     if (incoming.type === "libraryState" && Array.isArray(incoming.books)) {
       dispatch({ type: "libraryLoaded", books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} });
@@ -700,6 +713,10 @@
     }
     if (message.type === "readerError") dispatch({ type: "showError", message: message.message });
   });
+  function isReaderCommand(value) {
+    if (typeof value !== "object" || value === null || value.type !== "command") return false;
+    return ["nextPage", "previousPage", "nextChapter", "previousChapter", "openLibrary", "openToc", "openSettings"].includes(String(value.command));
+  }
   render();
   post({ type: "libraryReady" });
 })();

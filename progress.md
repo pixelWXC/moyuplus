@@ -399,6 +399,17 @@
 ---
 *后续每完成阶段或遇到错误都会更新。*
 
+### Reader v2 Phase 5：打字练习、命令与迁移集成（2026-07-13）
+
+- Task 5.1 完成：TypingPracticeController 不再依赖 ImportedTxtFile/TxtFileService，改用 TypingSourceCatalog 与 TxtAdapter 物理行能力。
+- EPUB 不会出现在练习选择器中，控制器也会拒绝 EPUB；书架移除当前练习 TXT 时会清理 active 状态。
+- Task 5.2 部分完成：新增 importBook/removeBook/relocateBook，importTxt 仅作为隐藏 alias；旧 remove/check TXT 产品入口不再注册。
+- Task 5.3 完成：activate 先执行幂等迁移，再组装 BookLibraryStore、ReadingProgressStore、AdapterRegistry、LibraryService、ReaderController 与 typing。
+- 验证：30 个 Vitest 文件 124 个测试、7 个 Playwright Chromium 测试、compile 与 diff check 全部通过。
+- Reader previous/next chapter、open library/TOC/settings 命令已接通；Webview 上报 canNextPage，Enter route 在书尾不发送推进命令。
+- Phase 5 完成回归：30 个 Vitest 文件 125 个测试、7 个 Playwright Chromium 测试、compile 与 diff check 全部通过。
+- **Reader v2 Phase 5 Status：complete。下一步进入 Phase 6 清理旧栈、隐私硬化、性能与打包验收。**
+
 ## 2026-07-10 阅读器重塑规划
 - **Status:** in_progress
 - Actions taken:

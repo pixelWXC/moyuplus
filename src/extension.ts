@@ -1,17 +1,11 @@
 import * as vscode from 'vscode';
-import {
-  CHECK_IMPORTED_TXT_COMMAND_ID,
-  IMPORT_TXT_COMMAND_ID,
-  registerTxtCommands,
-  REMOVE_IMPORTED_TXT_COMMAND_ID
-} from './commands/txtCommands';
+import { CHECK_IMPORTED_TXT_COMMAND_ID, IMPORT_TXT_COMMAND_ID, REMOVE_IMPORTED_TXT_COMMAND_ID } from './commands/txtCommands';
 import {
   registerShortcutRouter,
   ROUTE_ENTER_COMMAND_ID,
   ROUTE_TAB_COMMAND_ID
 } from './commands/shortcutRouter';
 import { READER_VIEW_ID, registerReaderView } from './reader/ReaderViewProvider';
-import { TxtLibraryStore } from './storage/txtLibraryStore';
 import { WorkspaceSessionStore } from './storage/workspaceSessionStore';
 import { TypingPracticeController } from './typing/TypingPracticeController';
 import {
@@ -25,11 +19,26 @@ import {
   TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
   registerTypingPractice
 } from './typing/typingPracticeCommands';
-import { TxtFileService } from './txt/txtFileService';
+import { BookLibraryStore } from './storage/bookLibraryStore';
+import { TxtAdapter } from './adapters/txt/txtAdapter';
+import { TypingSourceCatalog } from './typing/typingSourceCatalog';
+import { AdapterRegistry } from './adapters/adapterRegistry';
+import { EpubAdapter } from './adapters/epub/epubAdapter';
+import { ReadingProgressStore } from './storage/readingProgressStore';
+import { LibraryService } from './library/libraryService';
+import { ReaderController } from './reader/readerController';
+import { migrateV1ToV2 } from './storage/migrations/migrateV1ToV2';
+import {
+  IMPORT_BOOK_COMMAND_ID,
+  RELOCATE_BOOK_COMMAND_ID,
+  REMOVE_BOOK_COMMAND_ID,
+  registerLibraryCommands
+} from './commands/libraryCommands';
 
 export const SMOKE_COMMAND_ID = 'moyuplus.smokeTest';
 export const SMOKE_MESSAGE = 'MoyuPlus extension is active.';
 export { CHECK_IMPORTED_TXT_COMMAND_ID, IMPORT_TXT_COMMAND_ID, READER_VIEW_ID, REMOVE_IMPORTED_TXT_COMMAND_ID };
+export { IMPORT_BOOK_COMMAND_ID, REMOVE_BOOK_COMMAND_ID, RELOCATE_BOOK_COMMAND_ID };
 export { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID };
 export {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -51,15 +60,34 @@ export function registerSmokeCommand(context: vscode.ExtensionContext): void {
   context.subscriptions.push(disposable);
 }
 
-export function activate(context: vscode.ExtensionContext): void {
-  const txtLibraryStore = new TxtLibraryStore(context.globalState);
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    await migrateV1ToV2(context.globalState, context.workspaceState);
+  } catch (error) {
+    console.error('MoyuPlus Reader v2 migration failed; activation will continue.', error instanceof Error ? error.message : 'Unknown error');
+  }
+
   const sessionStore = new WorkspaceSessionStore(context.workspaceState);
-  const txtFileService = new TxtFileService(txtLibraryStore);
-  const typingPracticeController = new TypingPracticeController(txtFileService, sessionStore);
+  const books = new BookLibraryStore(context.globalState);
+  const progress = new ReadingProgressStore(context.globalState);
+  const txtAdapter = new TxtAdapter();
+  const adapters = new AdapterRegistry([txtAdapter, new EpubAdapter()]);
+  const typingSources = new TypingSourceCatalog(books, txtAdapter);
+  const typingPracticeController = new TypingPracticeController(typingSources, sessionStore);
+  const library = new LibraryService(books, progress, adapters, {
+    clearTyping: async (bookId) => {
+      const session = sessionStore.getTypingPracticeSession();
+      if (session.fileId === bookId) await typingPracticeController.stop();
+    }
+  });
+  let readerViewProvider: ReturnType<typeof registerReaderView> | undefined;
+  const readerController = new ReaderController(books, progress, adapters, async (message) => {
+    await readerViewProvider?.postMessage(message);
+  });
 
   registerSmokeCommand(context);
-  registerTxtCommands(context, txtFileService);
-  const readerViewProvider = registerReaderView(context, txtFileService, sessionStore);
+  registerLibraryCommands(context, library);
+  readerViewProvider = registerReaderView(context, readerController);
   registerTypingPractice(context, typingPracticeController);
   registerShortcutRouter(context, typingPracticeController, readerViewProvider);
 }

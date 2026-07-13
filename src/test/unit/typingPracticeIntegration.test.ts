@@ -16,6 +16,7 @@ import {
   TOGGLE_TYPING_PRACTICE_COMMAND_ID,
   activate
 } from '../../extension';
+import { IMPORT_BOOK_COMMAND_ID, RELOCATE_BOOK_COMMAND_ID, REMOVE_BOOK_COMMAND_ID } from '../../commands/libraryCommands';
 import { createDefaultTypingPracticeSession } from '../../domain/models';
 import { READER_VIEW_ID } from '../../reader/readerMessages';
 import { TYPING_PRACTICE_SESSION_KEY } from '../../storage/storageKeys';
@@ -27,6 +28,10 @@ import {
   NEXT_READER_PAGE_COMMAND_ID,
   PREVIOUS_READER_PAGE_COMMAND_ID,
   SELECT_READER_FILE_COMMAND_ID
+} from '../../shortcuts/shortcutSettings';
+import {
+  NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
+  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   commands,
@@ -77,20 +82,21 @@ afterEach(async () => {
 });
 
 describe('typing practice registration and VS Code integration', () => {
-  it('registers commands, an inline completion provider, and a hidden status bar item on activation', () => {
+  it('registers commands, an inline completion provider, and a hidden status bar item on activation', async () => {
     const context = {
       globalState: new MemoryMemento(),
       workspaceState: new MemoryMemento(),
       subscriptions: [] as Disposable[]
     };
 
-    activate(context);
+    await activate(context);
 
     expect(commands.registeredCommandIds()).toEqual([
       'moyuplus.smokeTest',
+      IMPORT_BOOK_COMMAND_ID,
       IMPORT_TXT_COMMAND_ID,
-      'moyuplus.removeImportedTxt',
-      'moyuplus.checkImportedTxtFiles',
+      REMOVE_BOOK_COMMAND_ID,
+      RELOCATE_BOOK_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
@@ -98,6 +104,11 @@ describe('typing practice registration and VS Code integration', () => {
       SELECT_READER_FILE_COMMAND_ID,
       INCREASE_READER_FONT_COMMAND_ID,
       DECREASE_READER_FONT_COMMAND_ID,
+      OPEN_READER_LIBRARY_COMMAND_ID,
+      PREVIOUS_READER_CHAPTER_COMMAND_ID,
+      NEXT_READER_CHAPTER_COMMAND_ID,
+      OPEN_READER_TOC_COMMAND_ID,
+      OPEN_READER_SETTINGS_COMMAND_ID,
       START_TYPING_PRACTICE_COMMAND_ID,
       STOP_TYPING_PRACTICE_COMMAND_ID,
       NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -127,7 +138,7 @@ describe('typing practice registration and VS Code integration', () => {
     workspace.workspaceFolders = [{ uri: Uri.file(workspaceDir) }];
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
-    activate(context);
+    await activate(context);
     const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
     window.quickPickResult = { label: 'safe-practice.txt', fileId: imported.id };
 
@@ -160,14 +171,14 @@ describe('typing practice registration and VS Code integration', () => {
     workspace.workspaceFolders = [{ uri: Uri.file(workspaceDir) }];
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
-    activate(context);
+    await activate(context);
     const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
 
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
 
     expect(window.statusBarItems[0]).toMatchObject({
-      text: 'Typing: picked.txt 1/2',
+      text: 'Typing: picked 1/2',
       command: SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
       visible: true
     });
@@ -179,18 +190,18 @@ describe('typing practice registration and VS Code integration', () => {
     window.quickPickResult = { label: 'Next Line', commandId: NEXT_TYPING_PRACTICE_LINE_COMMAND_ID };
     await commands.executeRegisteredCommand(SHOW_TYPING_PRACTICE_MENU_COMMAND_ID);
 
-    expect(window.statusBarItems[0].text).toBe('Typing: picked.txt 2/2');
+    expect(window.statusBarItems[0].text).toBe('Typing: picked 2/2');
     await expect(
       languages.provideInlineCompletionItems(createTextDocument(['']), new Position(0, 0))
     ).resolves.toEqual([{ insertText: 'second' }]);
 
     window.inputBoxResult = '1';
     await commands.executeRegisteredCommand(JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID);
-    expect(window.statusBarItems[0].text).toBe('Typing: picked.txt 1/2');
+    expect(window.statusBarItems[0].text).toBe('Typing: picked 1/2');
 
     await commands.executeRegisteredCommand(NEXT_TYPING_PRACTICE_LINE_COMMAND_ID);
     await commands.executeRegisteredCommand(RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID);
-    expect(window.statusBarItems[0].text).toBe('Typing: picked.txt 1/2');
+    expect(window.statusBarItems[0].text).toBe('Typing: picked 1/2');
 
     await commands.executeRegisteredCommand(STOP_TYPING_PRACTICE_COMMAND_ID);
 
@@ -214,7 +225,7 @@ describe('typing practice registration and VS Code integration', () => {
     workspace.configurationValues['moyuplus.typing.tabMode'] = 'completeRest';
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
-    activate(context);
+    await activate(context);
     const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
@@ -223,7 +234,7 @@ describe('typing practice registration and VS Code integration', () => {
     await commands.executeRegisteredCommand(ROUTE_TAB_COMMAND_ID);
 
     expect(window.activeTextEditor.document.lineAt(0).text).toBe('hello world');
-    expect(window.statusBarItems[0].text).toBe('Typing: picked.txt 1/1');
+    expect(window.statusBarItems[0].text).toBe('Typing: picked 1/1');
 
     workspace.configurationValues['moyuplus.typing.tabMode'] = 'replaceLine';
     window.activeTextEditor = createTextEditor(['draft'], new Position(0, 2));
@@ -239,7 +250,7 @@ describe('typing practice registration and VS Code integration', () => {
       workspaceState: new MemoryMemento(),
       subscriptions: [] as Disposable[]
     };
-    activate(context);
+    await activate(context);
     window.activeTextEditor = createTextEditor([''], new Position(0, 0));
 
     await commands.executeRegisteredCommand(ROUTE_TAB_COMMAND_ID);
@@ -262,11 +273,12 @@ describe('typing practice registration and VS Code integration', () => {
     workspace.configurationValues['moyuplus.enter.nextReaderPage'] = true;
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
-    activate(context);
+    await activate(context);
     const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
     const readerView = createWebviewView();
     await window.registeredWebviewViewProvider(READER_VIEW_ID)?.resolveWebviewView(readerView);
     await readerView.webview.receiveMessage({ type: 'selectFile', fileId: imported.id });
+    await readerView.webview.receiveMessage({ type: 'navigationState', canNextPage: true });
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
     window.activeTextEditor = createTextEditor([''], new Position(0, 0));
@@ -274,7 +286,7 @@ describe('typing practice registration and VS Code integration', () => {
     await commands.executeRegisteredCommand(ROUTE_ENTER_COMMAND_ID);
 
     expect(commands.executedBuiltinCommands()).toEqual([{ commandId: 'type', args: [{ text: '\n' }] }]);
-    expect(window.statusBarItems[0].text).toBe('Typing: picked.txt 2/2');
+    expect(window.statusBarItems[0].text).toBe('Typing: picked 2/2');
     expect(readerView.webview.postedMessages.at(-1)).toEqual({ type: 'command', command: 'nextPage' });
   });
 
@@ -290,7 +302,7 @@ describe('typing practice registration and VS Code integration', () => {
     workspace.workspaceFolders = [{ uri: Uri.file(workspaceDir) }];
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
-    activate(context);
+    await activate(context);
     const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
 
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
@@ -332,7 +344,7 @@ describe('typing practice registration and VS Code integration', () => {
       subscriptions: [] as Disposable[]
     };
 
-    activate(context);
+    await activate(context);
 
     await expect(
       languages.provideInlineCompletionItems(createTextDocument(['']), new Position(0, 0))
