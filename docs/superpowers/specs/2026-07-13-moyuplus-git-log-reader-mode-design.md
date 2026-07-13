@@ -1,7 +1,7 @@
 # MoyuPlus Git Log Reader 模式设计规格
 
 - 日期：2026-07-13
-- 状态：设计已由用户分段确认并通过独立规格评审，待用户书面复核
+- 状态：设计已由用户补充确认持久化锁定与最佳努力恢复，并通过三轮独立规格评审，待用户书面复核
 - 目标产品：MoyuPlus VS Code 扩展
 - 目标体验：通过唯一快捷键在 Reader 与只读、分页式 Git Log 页面之间即时切换
 
@@ -21,6 +21,7 @@ MoyuPlus Reader 当前位于 VS Code Explorer 侧边栏的 `WebviewView` 中。�
 6. Git Log 拥有独立的全局设置，用于控制字段、词条排列方式和最多加载提交数。
 7. 进入页面必须立即获得视觉反馈，不能等待 Git 查询完成后才切换。
 8. Reader 与 Git Log 的状态、消息、数据服务和分页生命周期必须隔离。
+9. Git Log 激活状态按 workspace 持久化；关闭侧边栏、重载扩展或重新进入同一工作区不能绕过专用快捷键退出。
 
 ## 3. 非目标
 
@@ -30,7 +31,7 @@ MoyuPlus Reader 当前位于 VS Code Explorer 侧边栏的 `WebviewView` 中。�
 - 展示其他本地分支、远端分支或 `--all` 历史。
 - 提交搜索、筛选、图谱、diff、文件列表、提交详情展开或提交操作。
 - Git Log 正文滚动、鼠标滚轮翻页或页面内退出按钮。
-- 缓存提交记录、仓库、分支、当前页或上一次 Git Log 会话。
+- 缓存提交记录、仓库、分支、当前页或上一次 Git Log 数据会话；仅持久化模式锁定标记和恢复 Reader 所需的最小目标。
 - 让 Git Log 设置修改 Reader 偏好。
 - 在 Git Log 和 Reader 之间共享业务状态或相互路由功能命令。
 
@@ -52,20 +53,29 @@ MoyuPlus Reader 当前位于 VS Code Explorer 侧边栏的 `WebviewView` 中。�
 
 进入时：
 
-1. 捕获当前顶层视图是书架还是 Reader，以及现有 Reader Webview 状态。
-2. 同步创建全新的 Git Log 会话 ID。
-3. 立即渲染 Git Log 外壳和加载状态。
-4. 在扩展宿主中异步选择仓库并读取 Git 日志。
-5. 仅当结果仍属于当前 Git Log 会话时接收并渲染结果。
+1. 若当前正在阅读，由扩展宿主从 Reader Controller 捕获当前 `bookId`、最新稳定 Locator 和 book progression，组成最小 `resumeTarget`；若当前为书架或 Webview 不存在，则恢复目标为空或沿用尚未消费的目标。
+2. 将 workspace 级 Git Log 模式记录持久化为 active，并保存可选的 `resumeTarget`。模式记录持久化失败时不得进入 Git Log，避免产生无法兑现的锁定语义。
+3. 若 Reader View 已隐藏或尚未 resolve，执行其 focus 命令以显示/解析视图；随后创建全新的 Git Log 会话 ID，并立即渲染 Git Log 外壳和加载状态。不得等待阅读进度 flush 或 Git 查询完成。
+4. 扩展宿主在后台把同一 `resumeTarget` flush 到正常 `ReadingProgressStore`，并保留该 Promise 供退出流程协调。
+5. 在扩展宿主中异步选择仓库并读取 Git 日志。
+6. 仅当结果仍属于当前 Git Log 会话时接收并渲染结果。
 
 退出时：
 
-1. 立即恢复切换前的书架或 Reader 视图。
-2. 尽量保留原书籍、章节、页码、目录/设置抽屉和未保存的 Reader 设置草稿。
-3. 销毁 Git Log 会话并清空提交、分页和加载/错误状态。
-4. 对退出后到达的 Git 查询结果静默丢弃。
+1. 只有 `moyuplus.gitLog.toggle` 可以请求把 workspace 级模式记录持久化为 inactive；原 `Close Reader`、侧边栏关闭、Webview dispose、扩展 deactivate 和窗口关闭都不得清除该标记。
+2. inactive 写入必须先成功。写入失败时保持 active，不销毁当前可见 Git Log、不恢复 Reader，并通过 VS Code 错误提示说明无法退出；下次重载仍按 active bootstrap。
+3. inactive 写入成功后销毁 Git Log 会话并清空提交、分页和加载/错误状态；对随后到达的 Git 查询结果静默丢弃。
+4. 若进入时的 ReadingPosition flush 仍在进行，退出流程在扩展宿主中以有界超时等待它。成功时使用正常 store 位置；失败或超时时使用模式记录中的 `resumeTarget` 作为最佳努力回退，并记录诊断。
+5. 若存在有效恢复目标且 Webview 可见，协调器必须先以串行 workspaceState 更新把 `resumeTarget` 清空，成功取得一次性消费权后，才通过正常 Reader Controller 打开该书并恢复位置。若 Webview 当前不存在，则保留 inactive + pending `resumeTarget`，在下次 resolve/reveal 时执行同一消费协议。
+6. 清空 `resumeTarget` 失败时不得打开书籍，显示书架/Reader 恢复错误和非阻断提示，并保留 pending 目标供下次生命周期重试；由于打开动作从未发生，不会重复恢复旧书。
+7. 成功取得消费权后，若书籍已移除/失效、适配器打开失败或没有有效目标，则安全降级到书架。目标已经清除，不得在后续 resolve 中再次打开。
+8. 不恢复旧 DOM、分页缓存、目录/设置抽屉或未保存设置草稿。
 
-再次进入时必须重新初始化并重新查询，不得恢复上次 Git Log 的提交或页码。
+关闭侧边栏、执行原 `Close Reader`、重载/禁用后重新启用扩展、关闭 VS Code 或重新打开同一 workspace 时，active 标记仍然有效。Reader Webview 下一次解析时必须直接初始化为 Git Log loading 状态并重新查询当前分支，不得先闪现书架，也不得恢复上次 Git Log 的提交或页码。
+
+侧边栏由可见变为隐藏或 Webview dispose 时，扩展宿主必须立即使当前 Git session 失效、尽力取消 Git 子进程并丢弃提交/分页内存；不得把 active 改为 inactive。之后同一视图重新可见或重新 resolve 时，若记录仍为 active，必须创建新 session、先显示 loading 并重新查询。旧 session 的迟到结果必须因 session ID 不匹配而被拒绝。
+
+模式锁定按 workspace 隔离；在另一个 workspace 中打开 MoyuPlus 不继承当前 workspace 的 active 标记。卸载扩展、手动清除 VS Code 扩展存储或删除 workspace storage 属于产品边界之外，无法保证继续锁定。
 
 ### 4.3 功能隔离
 
@@ -82,6 +92,8 @@ Reader 与 Git Log 仅共享以下展示基础：
 - 当前页、导航能力、加载状态或错误状态。
 - Reader Controller、Reader Engine 或书籍/章节命令路由。
 - 设置持久化键和设置草稿。
+
+workspace 级 active 标记和可选 `resumeTarget` 是顶层模式切换协议，不属于 Git Log 数据缓存。它们不得被 Git Log reducer 当作 Reader 业务状态读取或修改。
 
 Git Log 模式下 Reader 翻页、章节、书架、目录和 Reader 设置命令不得改变后台 Reader 状态。返回 Reader 后，Git Log 的翻页和设置动作不得继续生效。
 
@@ -145,6 +157,26 @@ Git Log 设置提供两种排列方式：
 - 保存字段开关或最大提交数后重新查询并回到第一页。
 - 保存纯排列方式后使用当前会话数据本地重排并回到第一页。
 - 关闭设置抽屉时遵循 Reader 设置抽屉现有的草稿/保存语义，但草稿属于 Git Log 独立状态。
+
+另设 workspace 级最小模式存储，例如 `moyuplus.gitLogMode.v1`：
+
+```ts
+interface GitLogModeRecord {
+  active: boolean;
+  resumeTarget?: {
+    bookId: string;
+    locator: ReadingLocator;
+    bookProgression: number;
+  };
+}
+```
+
+- 该记录只决定同一 workspace 下次应启动 Git Log 还是书架，以及通过快捷键退出时可尝试恢复的最小书籍位置。
+- 它不得包含提交、分支、仓库路径、页码、Reader DOM/抽屉或未保存设置草稿。
+- 进入 Git Log 前写入 active；只有专用切换命令正常退出时写入 inactive。
+- `resumeTarget` 同时写入既有 `ReadingProgressStore`；模式记录中的副本只用于应对进入后立即退出、扩展关闭或 flush 失败，消费后必须清除。
+- inactive + pending `resumeTarget` 是合法的延迟恢复状态。消费必须先成功持久化清空目标再打开书籍，以保证至多一次。
+- 若在 pending 目标消费前再次通过快捷键进入 Git Log，新 active 记录必须原样保留该目标，不能把恢复机会覆盖为空。
 
 ## 7. 仓库与 Git 数据
 
@@ -210,16 +242,34 @@ interface GitLogViewState {
 
 ### 8.2 即时响应
 
-快捷键处理顺序必须是“先切 UI，后等待 I/O”。命令处理器不得在发送进入消息前 `await` Git 查询。
+快捷键处理顺序必须是“持久化最小锁定标记、切 UI、后等待其余 I/O”。命令处理器不得在发送进入消息前 `await` 阅读进度 flush 或 Git 查询。workspaceState 的最小 active 写入是进入语义成立的前置条件，但不能与 Git 查询串行绑定。
 
 Webview 收到进入消息后立即：
 
-1. 保存要恢复的顶层 Reader 视图引用/快照。
+1. 只接收 Git session ID、Git Log 设置和 Reader 展示偏好；`resumeTarget` 始终留在扩展宿主，不进入 Git Log reducer。
 2. 创建 Git Log 初始 loading state。
-3. 渲染页面外壳。
+3. 渲染页面外壳并释放 Reader 专属布局对象。
 4. 发出带 session ID 的初始化请求。
 
 扩展宿主返回的成功或错误消息必须带同一个 session ID。Webview 只接受当前活动会话的消息。
+
+Webview 初始启动增加顶层模式 bootstrap：在第一次渲染书架或 Git Log 前先读取扩展宿主提供的 workspace mode。active 时首个产品页面必须是 Git Log loading，不得渲染一帧书架。inactive + pending `resumeTarget` 时首个产品页面为 Reader 恢复 loading，协调器按第 4.2 节先取得一次性消费权再打开书籍；无目标时才直接显示书架。Reader 的书籍打开与章节恢复不能在 active 锁定期间后台初始化。
+
+### 8.3 扩展宿主模式协调器
+
+新增扩展宿主拥有的 `GitLogModeCoordinator`，它是顶层模式切换的唯一写入者：
+
+- `moyuplus.gitLog.toggle` 始终读取/遵循 workspace 持久化记录，而不是依赖 Webview 是否存在或当前内存页面。
+- 协调器通过单一串行队列或互斥锁执行 active/inactive 写入、Git session 失效和 Reader 恢复；不得并行执行两个切换事务。
+- 转换进行中收到的额外快捷键按奇偶语义合并为最终期望模式：偶数次快速连按回到原模式，奇数次快速连按只产生一次净切换。完成当前事务后最多执行一次补偿转换，避免重复查询、重复恢复或交错持久化写入。
+- active 写入失败：保持 inactive，不创建 Git session、不改变 Reader 页面，显示非阻断错误。
+- inactive 写入失败：保持 active，不恢复 Reader；若 Webview 可见则继续保留/重建 Git Log，若不可见则下次 resolve 仍按 active bootstrap。
+- 切换命令在 Webview 隐藏或未 resolve 时仍可工作。进入成功写入 active/恢复目标后必须执行 Reader View focus 命令，使视图显示/resolve 并立即启动 loading；focus 失败不清除 active，显示 VS Code 非阻断错误，之后手动显示视图时仍按 active bootstrap。退出写 inactive；若视图不存在，不强制显示侧边栏，只把尚未消费的恢复目标留给下次 Reader resolve。
+- inactive + pending 恢复由协调器串行消费：先清空持久化目标，再开始 Reader open。清空失败则不打开；清空成功后即使打开失败也只降级到书架，绝不重复消费。
+- pending 目标消费与 toggle 使用同一串行队列。若 toggle-to-active 先取得队列，目标原样保留；若消费先取得队列并成功清空，则后续 toggle 以已经消费/正在打开的 Reader 状态为准捕获新的恢复目标。
+- 每个可见 Git session 具有单独 AbortController/进程句柄和 session ID。hide、dispose、deactivate、切换退出和新 session 建立都会先使旧 session 失效。
+
+协调器的 runtime 队列、Promise 和取消句柄不持久化。扩展重启后只从 `GitLogModeRecord` 重建目标模式。
 
 ## 9. 动态分页
 
@@ -249,6 +299,7 @@ Git Log 使用独立分页状态和生命周期，但读取 Reader 偏好的只�
 - `detachedHead` 不是错误，按第 7.1 节正常展示。
 - `queryTimedOut`：读取超时。
 - `queryFailed`：其他安全归一化失败。
+- `modePersistenceFailed`：无法持久化 active/inactive 模式记录；进入失败时保留 Reader，退出失败时保留 Git Log。
 
 详细诊断写入 MoyuPlus Output Channel，并清理换行、控制字符和长度。Webview 不显示原始命令行、绝对路径、stderr 或异常堆栈。
 
@@ -262,15 +313,29 @@ Git Log 使用独立分页状态和生命周期，但读取 Reader 偏好的只�
 - `moyuplus.gitLog.toggle` 是独立命令，默认绑定 `Alt+Q`。
 - 新命令可出现在 Keyboard Shortcuts，但从 Command Palette 隐藏。
 - 不存在页面按钮、菜单或 View title action 进入/退出 Git Log。
+- 原 `Close Reader` 在 Git Log active 时只隐藏侧边栏；重新打开视图仍直接进入 Git Log loading。
+- 新命令在 Webview 未 resolve、已隐藏或已 dispose 时仍按持久化记录正确切换。
+- inactive→active 在持久化成功后会主动 focus/resolve Reader View 并显示 Git Log loading；不得仅在后台写 active 而没有视觉反馈。
 
 ### 11.2 状态隔离
 
 - 从书架进入/退出后恢复书架。
-- 从阅读状态进入/退出后恢复书籍、章节、页码和抽屉。
+- 从阅读状态进入时保存最小 `resumeTarget` 并 flush 最新 ReadingPosition；退出后通过正常 Reader 打开流程恢复该书及位置，不要求恢复旧 DOM、页码缓存或抽屉。
+- 恢复目标失效或打开失败时降级到书架且不污染 Git Log/Reader 状态。
 - Git Log 命令不调用 Reader 页面/章节命令。
 - Reader 命令在 Git Log 模式下不改变 Reader 后台状态。
 - 退出清空 Git Log 提交和页码；再次进入产生新 session ID 和新查询。
 - 迟到成功/错误结果均被丢弃。
+- active 标记在关闭侧边栏、View dispose、扩展 deactivate、窗口重载和同一 workspace 重开后仍保持；这些生命周期事件均不得把它写成 inactive。
+- bootstrap active 时首帧为 Git Log loading，不闪现书架，也不后台打开 Reader。
+- workspace A 的 active 标记不影响 workspace B。
+- 快速双击/连按按奇偶净效果串行合并，不产生并行模式写入、重复恢复或残留 Git session。
+- active 写入失败保持 Reader；inactive 写入失败保持 Git Log，均不出现持久化模式与可见页面相反的状态。
+- 进入后立即退出会等待同一捕获位置的 flush（有界超时），不会因竞态恢复到更早位置。
+- Webview hide-without-dispose 与 dispose 都使旧 session 失效并清空 Git 数据；再次 reveal/resolve 创建新 session、重新查询并拒绝旧结果。
+- inactive + pending 恢复先清目标再打开，清理失败不打开，打开失败不重复；消费前 toggle 回 active 会保留目标。
+- active 写入完成后才 focus/resolve；active 写入延迟或失败时不提前显示 Git Log，且失败保持 Reader。
+- 用重新实例化 ExtensionContext/Store 的测试覆盖 disable→enable、完整 VS Code restart 和同一 workspace reopen；每次 active bootstrap 只恢复模式与 `resumeTarget`，并发起全新 Git 查询。
 
 ### 11.3 性能与数据
 
@@ -283,7 +348,7 @@ Git Log 使用独立分页状态和生命周期，但读取 Reader 偏好的只�
 ### 11.4 设置与布局
 
 - Git Log 设置跨新会话和重启持久化。
-- 提交、页码、仓库和分支不持久化。
+- workspace 模式锁定和可选最小 `resumeTarget` 按第 6.2 节持久化；提交、页码、仓库和分支不持久化。
 - 全部字段开关组合至少由表驱动测试覆盖。
 - `lines` 与 `inline` 均保持完整文本；`inline` 自然折行且无省略号。
 - 正文无滚动，动态分页无丢失、重复和末尾空白页。
@@ -303,9 +368,10 @@ Git Log 使用独立分页状态和生命周期，但读取 Reader 偏好的只�
 
 1. `Alt+Q` 是 Git Log 唯一产品入口和出口，且命令面板/页面/菜单无替代入口。
 2. 原 `Close Reader` 功能完全保持。
-3. 快捷键触发后立即显示 Git Log loading UI，不等待 Git 查询。
-4. 每次进入重新读取当前分支，退出不保留任何 Git Log 会话数据。
-5. 全局 Git Log 设置正确保留并与 Reader 偏好隔离。
-6. 页面无滚动，Reader 样式驱动排版，所有内容可通过分页完整访问。
-7. Reader 状态在往返切换后尽量原样恢复，且两套功能没有交叉副作用。
-8. 自动测试、构建和真实仓库人工验收全部通过。
+3. 进入后模式锁定按 workspace 保持；关闭侧边栏、重载扩展或重开同一 workspace 不能恢复书架，只有 `Alt+Q` 能正常退出。
+4. 快捷键触发后立即显示 Git Log loading UI，不等待阅读进度 flush 或 Git 查询。
+5. 每次初始化 Git Log 都重新读取当前分支，退出不保留任何 Git Log 数据会话。
+6. 全局 Git Log 设置正确保留并与 Reader 偏好隔离。
+7. 页面无滚动，Reader 样式驱动排版，所有内容可通过分页完整访问。
+8. 退出时最佳努力恢复进入前书籍和最后持久化阅读位置，失败安全降级到书架，且两套功能没有交叉副作用。
+9. 自动测试、构建和真实仓库人工验收全部通过。
