@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.6
+
+- 新增 Git Log Reader 模式，使用 `Alt+Q` 在 Reader 与当前仓库提交历史之间切换。
+- 支持当前分支/`HEAD` 可达提交、Hash/作者/相对时间/绝对日期字段、逐行与内联布局。
+- 新增 Git Log 设置持久化、真实 DOM 分页、无滚动阅读和 Git 异常状态反馈。
+- 保留 Reader 阅读位置，并支持 VS Code 重载、重启和扩展重新激活后的 Git Log 模式恢复。
+- 完成 Git Log 自动测试和人工验收，版本发布产物为 `moyuplus-0.0.6.vsix`。
+
 ## 0.0.5
 
 - Keep page controls and reading locators synchronized after the reader is resized.

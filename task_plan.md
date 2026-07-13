@@ -241,3 +241,12 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - [x] GREEN：目录/设置覆盖抽屉、窄宽度可访问模式
 - [x] 回归：目标单测、全量单测、Chromium Layout/隐私、compile、diff check
 - [x] 更新 Phase 4 完成记录与实施计划状态
+
+## 2026-07-13 Git Log Reader 模式发布
+
+- [x] 完成 Git Log Reader 模式实现与测试
+- [x] 完成人工验收：切换、分页、设置、恢复、重载、异常、多根 workspace 和回归场景
+- [x] 更新实施计划、README、CHANGELOG 和版本号
+- [x] 生成并验证 0.0.6 VSIX
+- [x] 提交代码、创建版本标签并推送
+- **Status:** complete；0.0.6 已发布

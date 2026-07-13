@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BookHandle } from '../adapters/bookAdapter';
 import type { AdapterRegistry } from '../adapters/adapterRegistry';
-import { openBook as createReaderState, type ReaderEngineState } from '../domain/readerEngine';
+import { mapLocatorToBookProgression, openBook as createReaderState, type ReaderEngineState } from '../domain/readerEngine';
 import type { ReadingLocator, ReadingPosition } from '../domain/locators';
 import type { BookLibraryStore } from '../storage/bookLibraryStore';
 import type { ReadingProgressStore } from '../storage/readingProgressStore';
@@ -40,7 +40,7 @@ export class ReaderController {
     this.now = options.now ?? Date.now;
   }
 
-  async openBook(bookId: string, correlatedRequestId?: string): Promise<void> {
+  async openBook(bookId: string, correlatedRequestId?: string): Promise<boolean> {
     await this.flush();
     const requestId = correlatedRequestId ?? this.createRequestId();
     this.requestId = requestId;
@@ -54,13 +54,13 @@ export class ReaderController {
     const book = this.books.get(bookId);
     if (!book) {
       await this.sendError(requestId, bookId, 'notFound', `Book ${bookId} is not in the library.`);
-      return;
+      return false;
     }
     try {
       const handle = await this.adapters.get(book.format).open(book);
-      if (requestId !== this.requestId) { handle.dispose(); return; }
+      if (requestId !== this.requestId) { handle.dispose(); return false; }
       const [toc, sections] = await Promise.all([handle.getToc(), handle.getSections()]);
-      if (requestId !== this.requestId) { handle.dispose(); return; }
+      if (requestId !== this.requestId) { handle.dispose(); return false; }
       if (sections.length === 0) throw new Error('The book contains no readable sections.');
       this.handle = handle;
       this.sections = sections;
@@ -71,8 +71,10 @@ export class ReaderController {
       });
       this.state = transition.state;
       await this.emit({ version: READER_PROTOCOL_VERSION, type: 'bookReady', requestId, bookId, toc, sections, initialSectionId: transition.state.locator.sectionId, initialLocator: transition.state.locator });
+      return true;
     } catch {
       if (requestId === this.requestId) await this.sendError(requestId, bookId, 'openFailed', 'Unable to open this book.');
+      return false;
     }
   }
 
@@ -99,6 +101,20 @@ export class ReaderController {
     this.pendingPosition = { bookId: state.bookId, locator, bookProgression, updatedAt: this.now() };
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => { void this.flush(); }, this.debounceMs);
+  }
+
+  capturePosition(): ReadingPosition | undefined {
+    if (this.pendingPosition) return { ...this.pendingPosition, locator: { ...this.pendingPosition.locator } };
+    const state = this.state;
+    if (!state) return undefined;
+    const persisted = this.progress.get(state.bookId);
+    if (persisted) return { ...persisted, locator: { ...persisted.locator } };
+    return {
+      bookId: state.bookId,
+      locator: { ...state.locator },
+      bookProgression: mapLocatorToBookProgression(state.sections, state.locator),
+      updatedAt: this.now()
+    };
   }
 
   async flush(): Promise<void> {

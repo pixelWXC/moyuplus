@@ -296,6 +296,13 @@
 - 书架状态适合保持为纯 reducer/view model：宿主只需发送书籍、可用性与进度，Webview 统一派生格式、失效状态和允许动作，避免 EPUB/TXT 能力判断散落在 DOM 事件中。
 - 移除确认采用 Webview 内联确认区并明确“不删除原文件”；这既避免阻断式浏览器对话框，也让文件所有权约束在危险操作旁持续可见。
 - Task 4.5 的既定 UI 边界：侧边栏内书架/阅读双页；目录和设置覆盖正文，关闭后恢复完整正文并重排；UI 只发送意图和消费能力状态，Layout Engine 仍是唯一分页实现。
+
+## 2026-07-13 Git Log Reader 发布
+
+- 项目版本由 0.0.5 提升至 0.0.6。
+- `npm run package` 通过：37 个单元测试、11 个布局测试全部通过，并生成 `moyuplus-0.0.6.vsix`。
+- VSIX 内容包含最新 README、CHANGELOG、package manifest、Webview bundle 和 Extension Host bundle。
+- `vsce ls` 因本机未安装 yarn 无法单独执行；不影响 `vsce package` 成功完成。
 - `.impeccable.md` 已提供完整设计上下文：面向 VS Code 内轻量阅读/练习用户，视觉语气为原生、克制、可靠，必须使用 VS Code 主题令牌且不引入外部字体或装饰性视觉。
 - 阅读 UI 每次 reducer 渲染都会替换正文 DOM，因此 Layout Engine 必须随新 viewport 重建，并以当前 progression 恢复位置；不能让 Engine 持有已脱离文档的旧 viewport。
 - Controller 的相邻章节导航以打开时的 section 顺序为唯一依据；越过首尾只发送 `bookStart`/`bookEnd` 正常状态，不将边界记录为错误。

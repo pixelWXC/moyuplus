@@ -1,5 +1,6 @@
 import { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID } from '../commands/shortcutRouter';
 import { TOGGLE_TYPING_PRACTICE_COMMAND_ID } from '../typing/typingPracticeCommands';
+import { TOGGLE_GIT_LOG_COMMAND_ID } from '../git/gitLogModeCoordinator';
 
 export const NEXT_READER_PAGE_COMMAND_ID = 'moyuplus.reader.nextPage';
 export const PREVIOUS_READER_PAGE_COMMAND_ID = 'moyuplus.reader.previousPage';
@@ -41,6 +42,7 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
     action(OPEN_READER_SETTINGS_COMMAND_ID, '阅读器：设置', '打开阅读设置。'),
     action(FOCUS_READER_COMMAND_ID, '阅读器：打开', '打开并聚焦 MoyuPlus Reader。'),
     action(CLOSE_READER_COMMAND_ID, '阅读器：关闭', '关闭当前侧边栏。'),
+    action(TOGGLE_GIT_LOG_COMMAND_ID, 'Git Log：打开或退出', '通过专用快捷键切换分页式当前分支 Git Log。'),
     action(TOGGLE_TYPING_PRACTICE_COMMAND_ID, '打字练习：开启或关闭', '根据当前练习状态开启或关闭打字练习。'),
     {
       commandId: ROUTE_ENTER_COMMAND_ID,

@@ -609,3 +609,11 @@
 - 隐私 Harness 初次因 `//` 匹配 sourcemap 注释误报；收紧为 HTTP(S) URL 后通过，页面实际外部请求数为 0。
 - 当前目标验证：`npm run compile` 通过；`npm run test:layout` 7/7 通过。
 - 全量交付验证：27 个 Vitest 文件、115 个单元测试全部通过；7 个 Chromium Layout/隐私测试全部通过；`npm run compile` 与 `git diff --check` 通过。
+
+### 2026-07-13 Git Log Reader 模式验收与发布准备
+- 用户确认 Git Log Reader 人工验收场景全部通过。
+- Git Log 目标测试 7 个文件、24 个测试通过；全量单元测试 37 个文件、155 个测试通过。
+- 全量布局测试 11 个测试通过；`npm run compile` 和 `git diff --check` 通过。
+- 版本从 0.0.5 提升至 0.0.6，已更新 README、CHANGELOG 和 Git Log 实施计划。
+- `npm run package` 通过，生成并验证 `moyuplus-0.0.6.vsix`。
+- 代码已提交为 `1e7c8d4`；下一步创建 `v0.0.6` 标签并推送。

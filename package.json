@@ -2,7 +2,7 @@
   "name": "moyuplus",
   "displayName": "moyuplus",
   "description": "Local TXT reader and typing practice tools for VS Code.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "local",
   "private": true,
   "engines": {
@@ -33,6 +33,7 @@
     "onCommand:moyuplus.reader.openSettings",
     "onCommand:moyuplus.reader.focus",
     "onCommand:moyuplus.reader.close",
+    "onCommand:moyuplus.gitLog.toggle",
     "onCommand:moyuplus.toggleTypingPractice",
     "onView:moyuplus.readerView"
   ],
@@ -124,11 +125,19 @@
         "title": "MoyuPlus: Close Reader"
       },
       {
+        "command": "moyuplus.gitLog.toggle",
+        "title": "MoyuPlus: Toggle Git Log"
+      },
+      {
         "command": "moyuplus.toggleTypingPractice",
         "title": "MoyuPlus: Toggle Typing Practice"
       }
     ],
     "keybindings": [
+      {
+        "command": "moyuplus.gitLog.toggle",
+        "key": "alt+q"
+      },
       {
         "command": "moyuplus.routeEnter",
         "key": "enter",
@@ -140,6 +149,14 @@
         "when": "editorTextFocus && !editorReadonly && moyuplus.typingPracticeActive && config.moyuplus.shortcuts.enableTabRouter && !suggestWidgetVisible && !inSnippetMode"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "moyuplus.gitLog.toggle",
+          "when": "false"
+        }
+      ]
+    },
     "configuration": {
       "title": "MoyuPlus",
       "properties": {

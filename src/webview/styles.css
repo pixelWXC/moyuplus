@@ -78,6 +78,18 @@ button:disabled { opacity: .42; cursor: default; }
 .range-field input { width: 100%; accent-color: var(--vscode-progressBar-background); }
 .settings-actions { display: flex; justify-content: flex-end; gap: 6px; padding-top: 4px; border-top: 1px solid var(--hairline); }
 
+.boot-view { height: 100vh; overflow: hidden; background: var(--vscode-editor-background); }
+.git-log-view { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100vh; overflow: hidden; background: var(--vscode-editor-background); }
+.git-log-context { justify-content: center; }
+.git-log-content { overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.git-log-document { margin: 0; padding: 0; }
+.git-commit { display: block; margin: 0 0 var(--paragraph-spacing, .75em); padding: 0; border: 0; font: inherit; letter-spacing: inherit; }
+.git-commit:last-child { margin-bottom: 0; }
+.git-commit-line { display: block; margin: 0; padding: 0; font: inherit; letter-spacing: inherit; white-space: normal; overflow-wrap: anywhere; }
+.git-layout-inline .git-commit-line { display: inline; }
+.git-log-settings { inset: 38px 0 34px; }
+.git-check-field input { justify-self: end; accent-color: var(--vscode-progressBar-background); }
+
 @media (max-width: 240px) {
   .library-view { padding-inline: 8px; }
   .book-row { grid-template-columns: 1fr; }

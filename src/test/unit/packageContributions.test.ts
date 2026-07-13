@@ -28,6 +28,7 @@ import {
   RELOCATE_BOOK_COMMAND_ID,
   REMOVE_BOOK_COMMAND_ID
 } from '../../commands/libraryCommands';
+import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 
 describe('package contributions', () => {
   it('exposes only v2 library commands', async () => {
@@ -159,6 +160,7 @@ describe('package contributions', () => {
       OPEN_READER_SETTINGS_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
+      TOGGLE_GIT_LOG_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_COMMAND_ID
     ];
 
@@ -166,5 +168,14 @@ describe('package contributions', () => {
     expect(packageJson.activationEvents).toEqual(
       expect.arrayContaining(settingsCommands.map((commandId) => `onCommand:${commandId}`))
     );
+  });
+
+  it('binds the shortcut-only Git Log toggle globally while hiding it from the command palette', async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
+    expect(packageJson.activationEvents).toContain(`onCommand:${TOGGLE_GIT_LOG_COMMAND_ID}`);
+    expect(packageJson.contributes.commands).toContainEqual(expect.objectContaining({ command: TOGGLE_GIT_LOG_COMMAND_ID }));
+    expect(packageJson.contributes.keybindings).toContainEqual({ command: TOGGLE_GIT_LOG_COMMAND_ID, key: 'alt+q' });
+    expect(packageJson.contributes.menus.commandPalette).toContainEqual({ command: TOGGLE_GIT_LOG_COMMAND_ID, when: 'false' });
+    expect(packageJson.contributes.commands).toContainEqual(expect.objectContaining({ command: CLOSE_READER_COMMAND_ID }));
   });
 });

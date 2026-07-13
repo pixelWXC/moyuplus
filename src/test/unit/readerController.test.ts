@@ -20,6 +20,22 @@ async function setup(open: BookAdapter['open']) {
 }
 
 describe('ReaderController', () => {
+  it('reports whether a resume target was actually opened', async () => {
+    const { controller } = await setup(vi.fn(async () => handle('a')));
+    await expect(controller.openBook('a')).resolves.toBe(true);
+    await expect(controller.openBook('missing')).resolves.toBe(false);
+  });
+  it('captures the latest stable position without mutating Reader state', async () => {
+    const { controller } = await setup(vi.fn(async () => handle('a')));
+    await controller.openBook('a');
+    controller.reportLayout({ kind: 'txt', sectionId: 'a-s', progression: 0.7, offset: 70 }, 0.6);
+
+    expect(controller.capturePosition()).toMatchObject({
+      bookId: 'a', locator: { kind: 'txt', sectionId: 'a-s', progression: 0.7, offset: 70 }, bookProgression: 0.6
+    });
+    await controller.flush();
+    expect(controller.capturePosition()).toMatchObject({ bookId: 'a', bookProgression: 0.6 });
+  });
   it('uses a progress debounce inside the 300-500ms performance budget', () => {
     expect(DEFAULT_PROGRESS_DEBOUNCE_MS).toBeGreaterThanOrEqual(300);
     expect(DEFAULT_PROGRESS_DEBOUNCE_MS).toBeLessThanOrEqual(500);

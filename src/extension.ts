@@ -28,6 +28,9 @@ import { LibraryService } from './library/libraryService';
 import { ReaderController } from './reader/readerController';
 import { migrateV1ToV2 } from './storage/migrations/migrateV1ToV2';
 import { ReaderPreferencesStore } from './storage/readerPreferencesStore';
+import { GitLogPreferencesStore } from './storage/gitLogPreferencesStore';
+import { GitLogModeStore } from './storage/gitLogModeStore';
+import { GitLogService } from './git/gitLogService';
 import {
   IMPORT_BOOK_COMMAND_ID,
   RELOCATE_BOOK_COMMAND_ID,
@@ -73,6 +76,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const books = new BookLibraryStore(context.globalState);
   const progress = new ReadingProgressStore(context.globalState);
   const preferences = new ReaderPreferencesStore(context.globalState);
+  const gitLogPreferences = new GitLogPreferencesStore(context.globalState);
+  const gitLogMode = new GitLogModeStore(context.workspaceState);
+  const gitLogService = new GitLogService();
   const txtAdapter = new TxtAdapter();
   const adapters = new AdapterRegistry([txtAdapter, new EpubAdapter()]);
   const typingSources = new TypingSourceCatalog(books, txtAdapter);
@@ -105,6 +111,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     relocateBook: (bookId) => vscode.commands.executeCommand(RELOCATE_BOOK_COMMAND_ID, bookId),
     startTypingPractice: (bookId) => vscode.commands.executeCommand(START_TYPING_PRACTICE_COMMAND_ID, bookId),
     savePreferences: (value) => preferences.save(value as never)
+  }, {
+    modeStore: gitLogMode,
+    preferencesStore: gitLogPreferences,
+    service: gitLogService,
+    readerPreferences: () => preferences.get(),
+    workspaceRoots: () => (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath),
+    activeFilePath: () => {
+      const document = vscode.window.activeTextEditor?.document as vscode.TextDocument & { uri?: vscode.Uri } | undefined;
+      const uri = document?.uri;
+      return uri?.scheme === 'file' && vscode.workspace.getWorkspaceFolder(uri) ? uri.fsPath : undefined;
+    },
+    saveResumeTarget: async target => { await progress.save({ ...target, updatedAt: Date.now() }); }
   });
   registerTypingPractice(context, typingPracticeController);
   registerShortcutRouter(context, typingPracticeController, readerViewProvider);

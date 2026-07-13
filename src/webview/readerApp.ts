@@ -3,6 +3,10 @@ import { LayoutEngine, type LayoutState } from './layoutEngine';
 import type { BookRecord } from '../domain/books';
 import { isExtensionToReaderV2Message, type ExtensionToReaderV2Message } from '../reader/readerMessages';
 import type { ReaderPreferences } from '../domain/readerPreferences';
+import { isExtensionToGitLogMessage } from '../git/gitLogMessages';
+import type { GitLogPreferences } from '../git/gitLogModels';
+import { GitLogView } from './gitLogView';
+import { applyReaderPreferences } from './readerPreferenceStyles';
 import {
   createInitialReaderAppState, getLibraryBookActions, readerAppReducer,
   type LibraryBookAction, type LibraryBookItem, type ReaderAppAction
@@ -20,6 +24,8 @@ let state = createInitialReaderAppState();
 let layout: LayoutEngine | undefined;
 let requestSequence = 0;
 let currentSectionHtml = '';
+let appMode: 'boot' | 'readerApp' | 'gitLog' = 'boot';
+let gitLogView: GitLogView | undefined;
 
 function dispatch(action: ReaderAppAction): void { state = readerAppReducer(state, action); render(); }
 function post(message: unknown): void { vscode?.postMessage(message); }
@@ -29,6 +35,8 @@ function envelope(type: string, sectionId?: string): Record<string, unknown> {
 
 function render(): void {
   if (!app) return;
+  if (appMode === 'boot') { app.className = 'boot-view'; app.replaceChildren(); return; }
+  if (appMode === 'gitLog') return;
   if (state.view === 'reader') { renderReader(app); return; }
   layout?.dispose(); layout = undefined;
   renderLibrary(app);
@@ -71,7 +79,7 @@ function renderReader(root: HTMLElement): void {
   root.append(chapter);
 
   const viewport = element('main', 'reader-content'); viewport.id = 'reader-content'; viewport.setAttribute('tabindex', '0'); root.append(viewport);
-  applyPreferences(viewport, state.preferencesDraft);
+  applyReaderPreferences(viewport, state.preferencesDraft);
   const priorLayout = state.layout;
   let priorProgression = 0;
   if (priorLayout && priorLayout.sectionId === state.activeSectionId) priorProgression = priorLayout.progression;
@@ -160,7 +168,6 @@ function closeBook(): void {
 function locatorFor(current: LayoutState): Record<string, unknown> { return state.activeBook?.format === 'txt' ? { kind: 'txt', sectionId: current.sectionId, progression: current.progression, offset: current.startOffset } : { kind: 'epub', sectionId: current.sectionId, progression: current.progression }; }
 function wholeBookProgress(current: LayoutState): number { const sections = state.sections ?? []; const total = sections.reduce((sum, section) => sum + Math.max(1, section.progressionWeight), 0); const index = sections.findIndex(section => section.id === current.sectionId); if (total <= 0 || index < 0) return 0; const before = sections.slice(0, index).reduce((sum, section) => sum + Math.max(1, section.progressionWeight), 0); return (before + current.progression * Math.max(1, sections[index].progressionWeight)) / total; }
 
-function applyPreferences(target: HTMLElement, preferences: ReaderPreferences): void { target.dataset.theme = preferences.theme; Object.assign(target.style, { fontFamily: preferences.fontFamily === 'serif' ? 'Georgia, serif' : preferences.fontFamily === 'sans-serif' ? 'Segoe UI, sans-serif' : 'var(--vscode-font-family)', fontSize: `${preferences.fontSize}px`, lineHeight: String(preferences.lineHeight), letterSpacing: `${preferences.letterSpacing}em`, padding: `${preferences.pagePadding}px`, textAlign: preferences.textAlign }); target.style.setProperty('--paragraph-spacing', `${preferences.paragraphSpacing}em`); }
 function currentSectionTitle(): string { return state.sections?.find(section => section.id === state.activeSectionId)?.title ?? '正文'; }
 function formatReadingProgress(): string { const page = state.layout; return page ? `${page.pageIndex + 1} / ${page.pageCount}` : '—'; }
 
@@ -173,7 +180,35 @@ function button(label: string, className: string, handler: () => void, disabled 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] { const target = document.createElement(tag); if (className) target.className = className; if (text !== undefined) target.textContent = text; return target; }
 
 window.addEventListener('message', event => {
+  if (isModeGitLog(event.data) && app) {
+    layout?.dispose(); layout = undefined;
+    gitLogView?.dispose();
+    appMode = 'gitLog';
+    gitLogView = new GitLogView(app, post);
+    gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences);
+    post({ type: 'navigationState', canNextPage: false });
+    return;
+  }
+  if (isModeLibrary(event.data)) {
+    gitLogView?.dispose(); gitLogView = undefined;
+    appMode = 'readerApp';
+    if (event.data.message) dispatch({ type: 'showError', message: event.data.message });
+    else render();
+    return;
+  }
+  if (isModeReaderRestore(event.data)) {
+    gitLogView?.dispose(); gitLogView = undefined;
+    appMode = 'readerApp';
+    if (event.data.preferences) state = readerAppReducer(state, { type: 'preferencesLoaded', preferences: event.data.preferences });
+    dispatch({ type: 'openReader', book: event.data.book, requestId: event.data.requestId });
+    return;
+  }
+  if (isExtensionToGitLogMessage(event.data)) {
+    if (appMode === 'gitLog') gitLogView?.receive(event.data);
+    return;
+  }
   if (isReaderCommand(event.data)) {
+    if (appMode !== 'readerApp') return;
     const command = event.data.command;
     if (command === 'nextPage') nextPage();
     else if (command === 'previousPage') previousPage();
@@ -185,9 +220,9 @@ window.addEventListener('message', event => {
     return;
   }
   const incoming = event.data as Partial<LibraryStateMessage>;
-  if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) { dispatch({ type: 'libraryLoaded', books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} }); if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences }); return; }
+  if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) { appMode = 'readerApp'; dispatch({ type: 'libraryLoaded', books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} }); if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences }); return; }
   if (isLibraryLoadError(event.data)) { dispatch({ type: 'showError', message: event.data.message }); return; }
-  if (!isExtensionToReaderV2Message(event.data)) return;
+  if (appMode !== 'readerApp' || !isExtensionToReaderV2Message(event.data)) return;
   const message: ExtensionToReaderV2Message = event.data;
   if (!state.requestId || message.requestId !== state.requestId || message.bookId !== state.activeBook?.id) return;
   if (message.type === 'bookReady') { dispatch({ type: 'bookReady', requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId, initialProgression: message.initialLocator.progression }); post(envelope('requestSection', message.initialSectionId)); return; }
@@ -208,4 +243,22 @@ function isLibraryLoadError(value: unknown): value is { type: 'libraryLoadError'
     && typeof (value as { message?: unknown }).message === 'string';
 }
 
-render(); post({ type: 'libraryReady' });
+function isModeGitLog(value: unknown): value is { type: 'modeGitLog'; sessionId: string; preferences: GitLogPreferences; readerPreferences: ReaderPreferences } {
+  return isRecord(value) && value.type === 'modeGitLog' && typeof value.sessionId === 'string'
+    && isRecord(value.preferences) && isRecord(value.readerPreferences);
+}
+
+function isModeLibrary(value: unknown): value is { type: 'modeLibrary'; message?: string } {
+  return isRecord(value) && value.type === 'modeLibrary' && (value.message === undefined || typeof value.message === 'string');
+}
+
+function isModeReaderRestore(value: unknown): value is { type: 'modeReaderRestore'; book: LibraryBookItem; requestId: string; preferences?: ReaderPreferences } {
+  return isRecord(value) && value.type === 'modeReaderRestore' && isRecord(value.book)
+    && typeof value.book.id === 'string' && typeof value.requestId === 'string';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+render(); post({ type: 'appReady' });

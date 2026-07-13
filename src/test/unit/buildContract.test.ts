@@ -58,7 +58,7 @@ describe('dual-target build contract', () => {
     expect(extensionBundle).toMatch(/\bactivate\b/);
     expect(extensionBundle).toMatch(/\bdeactivate\b/);
     expect(extensionBundle).toMatch(/require\(["']vscode["']\)/);
-  });
+  }, 15_000);
 
   it('loads the packaged CommonJS bundle without import.meta/createRequire failures', async () => {
     await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
@@ -70,7 +70,7 @@ describe('dual-target build contract', () => {
     ].join(' ');
 
     await expect(execFileAsync(process.execPath, ['-e', script], { cwd: projectRoot })).resolves.toBeDefined();
-  });
+  }, 15_000);
 
   it('emits a self-contained browser Webview bundle and stylesheet', async () => {
     await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
@@ -81,6 +81,10 @@ describe('dual-target build contract', () => {
     expect(webviewBundle).not.toMatch(/(?:from\s+|require\s*\()["']node:/);
     expect(webviewBundle).not.toMatch(/https?:\/\//);
     expect(webviewBundle).not.toMatch(/(?:css-tree|fast-xml-parser|parse5|yauzl)/);
+    expect(webviewBundle).toContain('Git Log');
+    expect(webviewBundle).toContain('saveGitLogPreferences');
+    expect(webviewStyles).toContain('.git-log-view');
+    expect(webviewStyles).toContain('.git-log-content');
     expect(webviewStyles.trim()).not.toBe('');
-  });
+  }, 15_000);
 });

@@ -10,6 +10,7 @@ import {
 } from '../../shortcuts/shortcutSettings';
 import { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID } from '../../commands/shortcutRouter';
 import { TOGGLE_TYPING_PRACTICE_COMMAND_ID } from '../../typing/typingPracticeCommands';
+import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 
 describe('shortcut settings state', () => {
   it('describes every major reader and typing action in a stable order', () => {
@@ -28,6 +29,7 @@ describe('shortcut settings state', () => {
       OPEN_READER_SETTINGS_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
+      TOGGLE_GIT_LOG_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_COMMAND_ID,
       ROUTE_ENTER_COMMAND_ID,
       ROUTE_TAB_COMMAND_ID

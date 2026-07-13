@@ -6,3 +6,5 @@ export const BOOK_LIBRARY_KEY = 'moyuplus.bookLibrary.v2';
 export const READING_PROGRESS_KEY = 'moyuplus.readingProgress.v2';
 export const READER_PREFERENCES_KEY = 'moyuplus.readerPreferences.v1';
 export const READER_V2_MIGRATION_KEY = 'moyuplus.readerV2Migration.v1';
+export const GIT_LOG_PREFERENCES_KEY = 'moyuplus.gitLogPreferences.v1';
+export const GIT_LOG_MODE_KEY = 'moyuplus.gitLogMode.v1';

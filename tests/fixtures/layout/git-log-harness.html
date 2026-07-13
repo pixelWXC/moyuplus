@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:">
+  <style>
+    :root { --vscode-font-family: sans-serif; --vscode-foreground: #222; --vscode-editor-foreground: #222; --vscode-editor-background: #fff; --vscode-sideBar-background: #f7f7f7; --vscode-descriptionForeground: #666; --vscode-toolbar-hoverBackground: #ddd; --vscode-focusBorder: #06c; }
+    html, body, #app { margin: 0; width: 100%; height: 100%; }
+  </style>
+  <script>
+    window.sentMessages = [];
+    window.acquireVsCodeApi = () => ({ postMessage: message => window.sentMessages.push(message) });
+  </script>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="../../../media/readerApp.js"></script>
+  <script>
+    const readerPreferences = {
+      fontFamily: 'system', fontSize: 16, lineHeight: 1.6, letterSpacing: 0,
+      paragraphSpacing: .75, textColor: '#222222', backgroundColor: '#ffffff',
+      pagePadding: 18, textAlign: 'left', theme: 'system'
+    };
+    const defaults = { showHash: true, showAuthor: true, showRelativeTime: true, showAbsoluteDate: true, layout: 'lines', maxCommits: 200 };
+    const send = data => window.dispatchEvent(new MessageEvent('message', { data }));
+    window.gitLogHarness = {
+      load(count, preferences = {}) {
+        const sessionId = `layout-${Date.now()}`;
+        send({ type: 'modeGitLog', sessionId, readerPreferences, preferences: { ...defaults, ...preferences } });
+        send({
+          type: 'gitLogReady', sessionId, repositoryName: 'moyuplus', branchName: 'main', detached: false,
+          commits: Array.from({ length: count }, (_, index) => ({
+            hash: `${String(index).padStart(8, '0')}abcdef`,
+            subject: `Commit ${index + 1} ${'自然换行 mixed English content '.repeat(3)}`,
+            author: 'Purvar', authoredAt: 1700000000 - index * 3600
+          }))
+        });
+      },
+      state() {
+        const content = document.querySelector('#git-log-content');
+        const progress = document.querySelector('#git-log-page-progress');
+        return {
+          progress: progress?.textContent || '', text: content?.textContent || '',
+          scrollHeight: content?.scrollHeight || 0, clientHeight: content?.clientHeight || 0,
+          scrollWidth: content?.scrollWidth || 0, clientWidth: content?.clientWidth || 0,
+          canNext: !document.querySelector('#git-log-next-page')?.disabled,
+          canPrevious: !document.querySelector('#git-log-previous-page')?.disabled
+        };
+      },
+      next() { document.querySelector('#git-log-next-page')?.click(); },
+      previous() { document.querySelector('#git-log-previous-page')?.click(); }
+    };
+  </script>
+</body>
+</html>

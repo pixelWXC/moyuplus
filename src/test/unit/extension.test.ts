@@ -28,6 +28,7 @@ import {
 } from '../../shortcuts/shortcutSettings';
 import { commands, languages, resetVSCodeShim, type Disposable, window } from '../shims/vscode';
 import { BOOK_LIBRARY_KEY, READER_V2_MIGRATION_KEY, TXT_LIBRARY_KEY } from '../../storage/storageKeys';
+import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 
 class MemoryMemento {
   private readonly values = new Map<string, unknown>();
@@ -73,6 +74,7 @@ describe('extension activation', () => {
       NEXT_READER_CHAPTER_COMMAND_ID,
       OPEN_READER_TOC_COMMAND_ID,
       OPEN_READER_SETTINGS_COMMAND_ID,
+      TOGGLE_GIT_LOG_COMMAND_ID,
       START_TYPING_PRACTICE_COMMAND_ID,
       STOP_TYPING_PRACTICE_COMMAND_ID,
       NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -86,7 +88,7 @@ describe('extension activation', () => {
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(26);
+    expect(context.subscriptions).toHaveLength(27);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 
