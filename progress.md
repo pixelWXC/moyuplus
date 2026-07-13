@@ -616,4 +616,4 @@
 - 全量布局测试 11 个测试通过；`npm run compile` 和 `git diff --check` 通过。
 - 版本从 0.0.5 提升至 0.0.6，已更新 README、CHANGELOG 和 Git Log 实施计划。
 - `npm run package` 通过，生成并验证 `moyuplus-0.0.6.vsix`。
-- 代码已提交为 `1e7c8d4`；下一步创建 `v0.0.6` 标签并推送。
+- 代码已提交为 `cd18974`，已创建 `v0.0.6` 标签并推送到 origin/master。
