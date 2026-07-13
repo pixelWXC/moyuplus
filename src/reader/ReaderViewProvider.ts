@@ -3,9 +3,8 @@ import type { ReadingLocator } from '../domain/locators';
 import { isReaderToExtensionV2Message, READER_VIEW_ID, type ReaderToExtensionV2Message } from './readerMessages';
 import { getReaderWebviewHtml } from './webviewHtml';
 import {
-  CLOSE_READER_COMMAND_ID, DECREASE_READER_FONT_COMMAND_ID, FOCUS_READER_COMMAND_ID,
-  INCREASE_READER_FONT_COMMAND_ID, NEXT_READER_PAGE_COMMAND_ID, PREVIOUS_READER_PAGE_COMMAND_ID,
-  SELECT_READER_FILE_COMMAND_ID
+  CLOSE_READER_COMMAND_ID, FOCUS_READER_COMMAND_ID, NEXT_READER_PAGE_COMMAND_ID,
+  PREVIOUS_READER_PAGE_COMMAND_ID
 } from '../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -17,7 +16,7 @@ export type ReaderExternalCommand = 'nextPage' | 'previousPage' | 'nextChapter' 
 export { READER_VIEW_ID };
 
 export interface ReaderViewController {
-  openBook(bookId: string): void | Promise<void>;
+  openBook(bookId: string, requestId?: string): void | Promise<void>;
   requestSection(sectionId: string): void | Promise<void>;
   requestNextSection(sectionId: string): void | Promise<void>;
   requestPreviousSection(sectionId: string): void | Promise<void>;
@@ -26,32 +25,42 @@ export interface ReaderViewController {
   dispose(): void | Promise<void>;
 }
 
+export interface ReaderLibraryBridge {
+  snapshot(): PromiseLike<unknown>;
+  importBook?(): void | PromiseLike<unknown>;
+  removeBook?(bookId: string): void | PromiseLike<unknown>;
+  relocateBook?(bookId: string): void | PromiseLike<unknown>;
+  startTypingPractice?(bookId: string): void | PromiseLike<unknown>;
+  savePreferences?(preferences: unknown): void | PromiseLike<unknown>;
+}
+
 export class ReaderViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private canNextPage = false;
   constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly controller: ReaderViewController
+    private readonly controller: ReaderViewController,
+    private readonly library?: ReaderLibraryBridge
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     const mediaRoot = vscode.Uri.joinPath(this.extensionUri, 'media');
     view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
+    view.webview.onDidReceiveMessage((value: unknown) => this.handleMessage(value));
+    view.onDidChangeVisibility(() => {
+      if (!view.visible) return this.controller.flush();
+      return this.refreshLibrary();
+    });
+    view.onDidDispose(() => this.controller.dispose());
     view.webview.html = getReaderWebviewHtml(
       view.webview,
       view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'readerApp.js')),
       view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'readerApp.css'))
     );
-
-    view.webview.onDidReceiveMessage((value: unknown) => this.handleMessage(value));
-    view.onDidChangeVisibility(() => {
-      if (!view.visible) return this.controller.flush();
-    });
-    view.onDidDispose(() => this.controller.dispose());
+    void this.refreshLibrary();
   }
 
-  // Kept until Phase 5 rewires shortcut routing to Reader v2 navigation state.
   async requestNextPage(): Promise<boolean> {
     if (!this.canNextPage) return false;
     return this.requestReaderCommand('nextPage');
@@ -71,39 +80,50 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider {
       this.canNextPage = value.canNextPage;
       return;
     }
+    if (isRecord(value) && value.type === 'libraryReady') { await this.refreshLibrary(); return; }
+    if (isRecord(value) && value.type === 'importBook') { await this.library?.importBook?.(); await this.refreshLibrary(); return; }
+    if (isBookAction(value, 'removeBook')) { await this.library?.removeBook?.(value.bookId); await this.refreshLibrary(); return; }
+    if (isBookAction(value, 'relocate')) { await this.library?.relocateBook?.(value.bookId); await this.refreshLibrary(); return; }
+    if (isBookAction(value, 'startTypingPractice')) { await this.library?.startTypingPractice?.(value.bookId); return; }
+    if (isRecord(value) && value.type === 'savePreferences') { await this.library?.savePreferences?.(value.preferences); await this.refreshLibrary(); return; }
     if (!isReaderToExtensionV2Message(value)) return;
     await dispatchReaderMessage(this.controller, value);
+  }
+
+  private async refreshLibrary(): Promise<void> {
+    if (!this.library || !this.view) return;
+    try {
+      const snapshot = await this.library.snapshot();
+      await this.view.webview.postMessage({ type: 'libraryState', ...(isRecord(snapshot) ? snapshot : {}) });
+    } catch {
+      await this.view.webview.postMessage({ type: 'libraryLoadError', message: '书架载入失败，请重新打开 MoyuPlus Reader。' });
+    }
   }
 }
 
 async function dispatchReaderMessage(controller: ReaderViewController, message: ReaderToExtensionV2Message): Promise<void> {
   switch (message.type) {
-    case 'openBook': await controller.openBook(message.bookId); return;
+    case 'openBook': await controller.openBook(message.bookId, message.requestId); return;
     case 'requestSection': await controller.requestSection(message.sectionId); return;
     case 'requestNextSection': await controller.requestNextSection(message.sectionId); return;
     case 'requestPreviousSection': await controller.requestPreviousSection(message.sectionId); return;
     case 'layoutStable': controller.reportLayout(message.locator, message.bookProgression); return;
+    case 'closeBook': controller.reportLayout(message.locator, message.bookProgression); await controller.flush(); return;
   }
 }
 
 export function registerReaderView(
   context: vscode.ExtensionContext,
-  controllerOrLegacyDependency: ReaderViewController | unknown,
-  _legacySessionStore?: unknown
+  controller: ReaderViewController,
+  library?: ReaderLibraryBridge
 ): ReaderViewProvider {
-  const controller = isReaderViewController(controllerOrLegacyDependency)
-    ? controllerOrLegacyDependency
-    : createTransitionController();
-  const provider = new ReaderViewProvider(context.extensionUri ?? vscode.Uri.file('.'), controller);
+  const provider = new ReaderViewProvider(context.extensionUri ?? vscode.Uri.file('.'), controller, library);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(READER_VIEW_ID, provider),
     vscode.commands.registerCommand(NEXT_READER_PAGE_COMMAND_ID, () => provider.requestNextPage()),
     vscode.commands.registerCommand(PREVIOUS_READER_PAGE_COMMAND_ID, () => provider.requestPreviousPage()),
     vscode.commands.registerCommand(FOCUS_READER_COMMAND_ID, () => vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`)),
     vscode.commands.registerCommand(CLOSE_READER_COMMAND_ID, () => vscode.commands.executeCommand('workbench.action.closeSidebar')),
-    vscode.commands.registerCommand(SELECT_READER_FILE_COMMAND_ID, () => provider.requestReaderCommand('openLibrary')),
-    vscode.commands.registerCommand(INCREASE_READER_FONT_COMMAND_ID, () => provider.requestReaderCommand('openSettings')),
-    vscode.commands.registerCommand(DECREASE_READER_FONT_COMMAND_ID, () => provider.requestReaderCommand('openSettings')),
     vscode.commands.registerCommand(OPEN_READER_LIBRARY_COMMAND_ID, () => provider.requestReaderCommand('openLibrary')),
     vscode.commands.registerCommand(PREVIOUS_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('previousChapter')),
     vscode.commands.registerCommand(NEXT_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('nextChapter')),
@@ -119,19 +139,10 @@ function isNavigationState(value: unknown): value is { type: 'navigationState'; 
     && typeof (value as { canNextPage?: unknown }).canNextPage === 'boolean';
 }
 
-function isReaderViewController(value: unknown): value is ReaderViewController {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<Record<keyof ReaderViewController, unknown>>;
-  const methods: Array<keyof ReaderViewController> = [
-    'openBook', 'requestSection', 'requestNextSection', 'requestPreviousSection', 'reportLayout', 'flush', 'dispose'
-  ];
-  return methods
-    .every(key => typeof candidate[key] === 'function');
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function createTransitionController(): ReaderViewController {
-  return {
-    openBook() {}, requestSection() {}, requestNextSection() {}, requestPreviousSection() {},
-    reportLayout() {}, flush() {}, dispose() {}
-  };
+function isBookAction(value: unknown, type: string): value is { type: string; bookId: string } {
+  return isRecord(value) && value.type === type && typeof value.bookId === 'string' && value.bookId.length > 0;
 }

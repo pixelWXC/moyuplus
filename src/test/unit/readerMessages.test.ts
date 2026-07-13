@@ -80,6 +80,7 @@ describe('Reader v2 message protocol', () => {
       requestId: 'request-1',
       bookId: 'book-1',
       initialSectionId: 'section-1',
+      initialLocator: { kind: 'epub', sectionId: 'section-1', progression: 0.4 },
       toc: [{ title: 'Chapter', sectionId: 'section-1', children: [] }],
       sections: [{ id: 'section-1', title: 'Chapter', order: 0, progressionWeight: 1 }]
     })).toBe(true);
@@ -89,6 +90,7 @@ describe('Reader v2 message protocol', () => {
       requestId: 'request-1',
       bookId: 'book-1',
       initialSectionId: 'section-1',
+      initialLocator: { kind: 'epub', sectionId: 'section-1', progression: 0.4 },
       toc: [{ title: '', sectionId: 42 }],
       sections: [{ id: 'section-1', order: -1, progressionWeight: 2 }]
     })).toBe(false);

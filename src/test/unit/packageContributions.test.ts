@@ -15,12 +15,9 @@ import {
 } from '../../extension';
 import {
   CLOSE_READER_COMMAND_ID,
-  DECREASE_READER_FONT_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
-  INCREASE_READER_FONT_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID,
-  SELECT_READER_FILE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -28,13 +25,12 @@ import {
 } from '../../shortcuts/shortcutSettings';
 import {
   IMPORT_BOOK_COMMAND_ID,
-  IMPORT_TXT_ALIAS_COMMAND_ID,
   RELOCATE_BOOK_COMMAND_ID,
   REMOVE_BOOK_COMMAND_ID
 } from '../../commands/libraryCommands';
 
 describe('package contributions', () => {
-  it('exposes v2 library commands while keeping the TXT alias hidden', async () => {
+  it('exposes only v2 library commands', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
     const commandIds = packageJson.contributes.commands.map((command: { command: string }) => command.command);
 
@@ -43,8 +39,7 @@ describe('package contributions', () => {
       REMOVE_BOOK_COMMAND_ID,
       RELOCATE_BOOK_COMMAND_ID
     ]));
-    expect(commandIds).not.toContain(IMPORT_TXT_ALIAS_COMMAND_ID);
-    expect(packageJson.activationEvents).toContain(`onCommand:${IMPORT_TXT_ALIAS_COMMAND_ID}`);
+    expect(packageJson.activationEvents).not.toContain('onCommand:moyuplus.importTxt');
   });
   it('contributes the reader webview to the VS Code sidebar', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
@@ -164,9 +159,6 @@ describe('package contributions', () => {
       OPEN_READER_SETTINGS_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
-      SELECT_READER_FILE_COMMAND_ID,
-      INCREASE_READER_FONT_COMMAND_ID,
-      DECREASE_READER_FONT_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_COMMAND_ID
     ];
 

@@ -1,5 +1,14 @@
 # 发现与决策
 
+## 2026-07-13 缩放翻页与进度恢复根因
+
+- 旧实现每次翻页都经过完整 reducer render，导致正文 DOM 和 Layout Engine 被销毁重建；它与 resize 的异步 animation-frame 重排存在竞态。
+- resize 重排只更新 Layout Engine 内部页码，未同步 Webview 的导航能力和按钮禁用状态，因此视觉按钮可能持有旧状态。
+- 返回书架只切换 Webview 视图，没有发送最后一帧 Locator，也没有等待防抖进度写入完成。
+- Controller 虽读取持久化 Locator，但原协议只发 `initialSectionId`，章节内 progression 丢失。
+- 决策：稳定重排统一回调、翻页采用非破坏性状态提交、退出采用 `closeBook(locator)+flush`、打开传递完整 `initialLocator`。
+- 0.0.5 人工验收结论：TXT/EPUB 相关复测全部通过，未发现新的阻断问题；Reader v2 Phase 6 可以关闭。
+
 ## Requirements
 - 用户要求：根据 [指导文档.md](D:/wxc_work_file/projects/harnessplace/moyuplus/指导文档.md) 启动开发计划。
 - 当前阶段目标是先读取指导文档和项目现状，形成计划；在设计确认前不实施业务代码。
@@ -105,6 +114,13 @@
 | Phase 6 Enter 组合行为由 VS Code Settings 控制 | 用户可分别控制真实换行、下一练习行、阅读器下一页，不把组合动作硬编码到 session |
 | 阅读器下一页路由通过 Webview command handoff 实现 | 当前页范围由 Webview DOM 测量产生，扩展主进程不应凭字符数估算下一页 |
 | Phase 6 Settings 说明使用中文 | 当前使用者在人工验证中需要快速理解开关含义和风险；中文说明比英文配置描述更直接 |
+| Reader v2 Phase 6 打包必须先清理 `out/` | esbuild 单文件 bundle 不会自动删除历史 `tsc` 产物；若不清理，VSIX 会夹带已删除的旧 Reader 模块。构建脚本现已在完整构建前递归清理 `out/`。 |
+| Reader v2 Phase 6 错误消息不透传适配器异常 | EPUB/TXT 解析异常可能包含正文片段；ReaderController 现在仅向 Webview 发送结构化 code 与通用安全文案。 |
+| Reader v2 Phase 6 VSIX 最小内容 | 最终包仅含 package.json、README/CHANGELOG、media 的 JS/CSS 和 out/extension.js，共 8 个文件、约 393 KB。 |
+| Reader v2 Webview 需要显式书架握手 | `readerApp.ts` 启动后发送 `libraryReady`；Provider 必须返回包含 books、availability、progress、preferences 的 `libraryState`，否则 reducer 永远停留在 loading。 |
+| css-tree ESM 入口不能直接打入 CommonJS Extension bundle | 其 `createRequire(import.meta.url)` 在 esbuild CJS 输出中变成 `createRequire(undefined)`，导致 VS Code activation 崩溃；使用包的 CommonJS export，并以实际 require bundle 测试约束。 |
+| Reader v2 请求 ID 必须端到端透传 | Webview 生成的 openBook requestId 是丢弃过期响应的关联依据；Controller 不得另生成 ID，否则所有 bookReady/sectionReady 都会被视为过期。 |
+| 真实 EPUB 常含显式 ZIP 目录条目 | `META-INF/`、`OEBPS/` 等目录需要安全校验后跳过索引，不能按普通文件路径的空尾段规则拒绝。 |
 
 ## Issues Encountered
 | Issue | Resolution |

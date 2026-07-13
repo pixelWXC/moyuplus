@@ -1,5 +1,16 @@
 # 进度日志
 
+## 2026-07-13 Reader v2 Phase 6 人工复测修复（0.0.5）
+
+- 修复窗口缩放后分页状态与按钮状态不同步，Layout Engine 在合并重排完成后主动回报最新页面状态。
+- 翻页只更新分页状态与页脚，不再重建正文 DOM 和 Layout Engine，消除缩放/翻页竞态。
+- “返回书架”先上报最终 Locator 并强制 flush；重新打开前也会 flush 待保存进度。
+- `bookReady` 传递完整初始 Locator，恢复章节的同时恢复章节内位置。
+- 自动验证：128 项 Vitest、7 项 Chromium Layout/隐私测试、TypeScript 编译和 VSIX 打包全部通过。
+- 交付物：`moyuplus-0.0.5.vsix`。
+- 2026-07-13 用户确认 TXT/EPUB 缩放翻页、返回书架和阅读位置恢复均测试通过。
+- **Reader v2 Phase 6 Status：complete；自动验证与人工验收全部通过，工作结束。**
+
 ## Session: 2026-07-08
 
 ### Phase 1: 需求与项目发现
@@ -409,6 +420,49 @@
 - Reader previous/next chapter、open library/TOC/settings 命令已接通；Webview 上报 canNextPage，Enter route 在书尾不发送推进命令。
 - Phase 5 完成回归：30 个 Vitest 文件 125 个测试、7 个 Playwright Chromium 测试、compile 与 diff check 全部通过。
 - **Reader v2 Phase 5 Status：complete。下一步进入 Phase 6 清理旧栈、隐私硬化、性能与打包验收。**
+
+### Reader v2 Phase 6：旧栈清理、隐私/性能硬化与打包
+
+- 按 TDD 新增旧栈删除结构契约，确认 5 个断言因遗留文件/引用 RED 后，删除旧 TXT service/store/commands 和 v1 Reader 运行时消息/session。
+- 将迁移所需的 v1 TXT 与 Reader shape 收拢到 `migrateV1ToV2.ts`，业务路径 `rg` 无旧栈引用。
+- 新增错误正文脱敏与 300–500ms 防抖契约；ReaderController 默认防抖设为 400ms，错误只发送安全通用文案。
+- 新增 `.vscodeignore`、README 与 CHANGELOG；完整构建前清理 `out/`，避免历史编译产物进入 VSIX。
+- `npm run package` 通过：30 个 Vitest 文件、119 个测试，7 个 Chromium Layout/隐私测试通过。
+- `vsce ls --tree` 审计通过：VSIX 仅 8 个运行时/说明文件，约 393 KB；无源码、测试、fixture、map、EPUB/TXT 用户文件或旧模块。
+- `git diff --check` 通过（仅报告 Windows CRLF 转换提示，无 whitespace error）。
+- **Status：自动验收完成，等待人工验收。**
+
+#### Phase 6 人工验收缺陷修复：书架永久加载
+
+- 人工验收发现导入后打开 MoyuPlus Reader 永久停在“正在载入书架”。
+- 根因：Webview 已发送 `libraryReady`，但 ReaderViewProvider 未处理握手，也未返回 `libraryState`。
+- 按 TDD 新增握手失败测试，确认 RED 后接通书架 snapshot；同时补齐 Webview 导入、移除、重新定位、练习启动和偏好保存桥接。
+- 修复后 `npm run package` 通过：30 个测试文件、120 个单测和 7 个 Chromium 测试通过；VSIX 仍为 8 个文件、约 395 KB。
+- **Status：已生成修复版 VSIX，等待从人工验收步骤 1 重新验证。**
+
+- 首次修复版复验仍永久 loading；进一步确认真实 Webview 生命周期存在启动消息先于监听注册的竞态。
+- Provider 已改为先注册消息监听再设置 HTML，并在 resolve/重新显示时主动推送书架 snapshot；snapshot 失败会显示错误态。
+- 包版本提升到 0.0.2，排除 VS Code 同版本覆盖缓存影响。
+- 0.0.2 完整验证通过：121 个单测、7 个 Chromium 测试，VSIX 8 个文件、约 395 KB。
+
+- 用户提供的 Extension Host 日志确认 0.0.2 activation 在 bundle 加载阶段崩溃：`css-tree` ESM 入口的 `import.meta.url` 被 CommonJS bundle 转为空对象，触发 `createRequire(undefined)`。
+- 新增实际 Node `require('./out/extension.js')` 的打包运行时测试，先复现同一错误，再将 css-tree 导入切换到 CommonJS 入口。
+- 发布 0.0.3；完整验证通过：122 个单测、7 个 Chromium 测试，且打包 bundle 真实加载成功。
+
+#### Phase 6 人工验收缺陷修复：书架操作、阅读关联与真实 EPUB
+
+- 修复书架刷新后残留移除确认框：被移除书籍不再存在时 reducer 清空 `pendingRemoval`。
+- 修复阅读响应被丢弃：Webview `openBook.requestId` 现在透传 ReaderController，TXT/EPUB 响应保持同一关联 ID。
+- 修复真实 EPUB 显式 ZIP 目录条目被误判为不安全路径；目录经过同等安全校验但不进入文件索引。
+- 新增 `MoyuPlus` Output 通道，记录 adapter 格式、错误类型和安全截断后的错误原因，不记录正文或资源 bytes。
+- 发布 0.0.4；完整验证通过：125 个单测、7 个 Chromium 测试、实际 bundle require 和 VSIX 打包。
+
+#### Phase 6 最终人工验收
+
+- 发布 0.0.5，修复 resize 重排后的导航状态同步、非破坏性翻页、退出前最终 Locator 原子保存，以及章节内 progression 恢复。
+- 完整验证通过：128 个单测、7 个 Chromium Layout/隐私测试、TypeScript 编译、bundle require 与 VSIX 打包。
+- 2026-07-13 用户确认 TXT 与 EPUB 的缩放翻页和阅读位置恢复测试均通过。
+- **Status：complete；Reader v2 Phase 6 已完成交付。**
 
 ## 2026-07-10 阅读器重塑规划
 - **Status:** in_progress

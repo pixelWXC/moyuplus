@@ -2,7 +2,7 @@
   "name": "moyuplus",
   "displayName": "moyuplus",
   "description": "Local TXT reader and typing practice tools for VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "publisher": "local",
   "private": true,
   "engines": {
@@ -13,12 +13,9 @@
   ],
   "activationEvents": [
     "onCommand:moyuplus.smokeTest",
-    "onCommand:moyuplus.importTxt",
     "onCommand:moyuplus.importBook",
     "onCommand:moyuplus.removeBook",
     "onCommand:moyuplus.relocateBook",
-    "onCommand:moyuplus.removeImportedTxt",
-    "onCommand:moyuplus.checkImportedTxtFiles",
     "onCommand:moyuplus.startTypingPractice",
     "onCommand:moyuplus.stopTypingPractice",
     "onCommand:moyuplus.nextTypingPracticeLine",
@@ -36,9 +33,6 @@
     "onCommand:moyuplus.reader.openSettings",
     "onCommand:moyuplus.reader.focus",
     "onCommand:moyuplus.reader.close",
-    "onCommand:moyuplus.reader.selectFile",
-    "onCommand:moyuplus.reader.increaseFont",
-    "onCommand:moyuplus.reader.decreaseFont",
     "onCommand:moyuplus.toggleTypingPractice",
     "onView:moyuplus.readerView"
   ],
@@ -60,14 +54,6 @@
       {
         "command": "moyuplus.smokeTest",
         "title": "MoyuPlus: Smoke Test"
-      },
-      {
-        "command": "moyuplus.removeImportedTxt",
-        "title": "MoyuPlus: Remove Imported TXT"
-      },
-      {
-        "command": "moyuplus.checkImportedTxtFiles",
-        "title": "MoyuPlus: Check Imported TXT Files"
       },
       {
         "command": "moyuplus.startTypingPractice",
@@ -136,18 +122,6 @@
       {
         "command": "moyuplus.reader.close",
         "title": "MoyuPlus: Close Reader"
-      },
-      {
-        "command": "moyuplus.reader.selectFile",
-        "title": "MoyuPlus: Select Reader File"
-      },
-      {
-        "command": "moyuplus.reader.increaseFont",
-        "title": "MoyuPlus: Increase Reader Font"
-      },
-      {
-        "command": "moyuplus.reader.decreaseFont",
-        "title": "MoyuPlus: Decrease Reader Font"
       },
       {
         "command": "moyuplus.toggleTypingPractice",

@@ -10,6 +10,43 @@ function controller(): ReaderViewController {
 }
 
 describe('ReaderViewProvider v2', () => {
+  it('answers the Webview libraryReady handshake so the shelf leaves loading state', async () => {
+    const library = {
+      snapshot: vi.fn().mockResolvedValue({
+        books: [{ id: 'book-1', title: 'One' }],
+        availability: { 'book-1': true },
+        progress: { 'book-1': 0.4 },
+        preferences: { fontSize: 18 }
+      }),
+      importBook: vi.fn(), removeBook: vi.fn(), relocateBook: vi.fn(), startTypingPractice: vi.fn(), savePreferences: vi.fn()
+    };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller(), library as never);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+
+    await view.webview.receiveMessage({ type: 'libraryReady' });
+
+    expect(library.snapshot).toHaveBeenCalledTimes(2);
+    expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
+      type: 'libraryState', books: [expect.objectContaining({ id: 'book-1' })]
+    }));
+  });
+
+  it('proactively sends the library snapshot even when the startup handshake is missed', async () => {
+    const library = {
+      snapshot: vi.fn().mockResolvedValue({ books: [], availability: {}, progress: {} })
+    };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller(), library);
+    const view = createWebviewView();
+
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(view.webview.postedMessages).toContainEqual({
+      type: 'libraryState', books: [], availability: {}, progress: {}
+    }));
+
+    expect(library.snapshot).toHaveBeenCalledOnce();
+  });
+
   it('accepts only guarded v2 messages and routes them to the controller', async () => {
     const target = controller();
     const provider = new ReaderViewProvider(Uri.file('/extension'), target);
@@ -29,7 +66,7 @@ describe('ReaderViewProvider v2', () => {
     });
 
     expect(target.openBook).toHaveBeenCalledOnce();
-    expect(target.openBook).toHaveBeenCalledWith('book-1');
+    expect(target.openBook).toHaveBeenCalledWith('book-1', 'r1');
     expect(target.reportLayout).toHaveBeenCalledWith(
       { kind: 'txt', sectionId: 's1', progression: 0.5, offset: 12 }, 0.4
     );
@@ -46,6 +83,23 @@ describe('ReaderViewProvider v2', () => {
 
     expect(target.flush).toHaveBeenCalledOnce();
     expect(target.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('persists the final locator atomically when returning to the library', async () => {
+    const target = controller();
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+
+    await view.webview.receiveMessage({
+      version: 2, type: 'closeBook', requestId: 'r1', bookId: 'book-1', sectionId: 's1',
+      locator: { kind: 'txt', sectionId: 's1', progression: 0.75, offset: 75 }, bookProgression: 0.75
+    });
+
+    expect(target.reportLayout).toHaveBeenCalledWith(
+      { kind: 'txt', sectionId: 's1', progression: 0.75, offset: 75 }, 0.75
+    );
+    expect(target.flush).toHaveBeenCalledOnce();
   });
 
   it('routes external reader commands and refuses Enter-style next-page at the book end', async () => {

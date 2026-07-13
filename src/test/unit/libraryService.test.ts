@@ -65,6 +65,15 @@ describe('LibraryService', () => {
     expect(valid.books.list()).toHaveLength(1);
   });
 
+  it('reports each adapter inspection failure for diagnostics', async () => {
+    const reportInspectError = vi.fn();
+    const failure = new Error('invalid package document');
+    const { service } = setup([adapter('epub', vi.fn().mockRejectedValue(failure))], { reportInspectError });
+
+    await expect(service.importBook('file:///books/bad.epub', 'external')).rejects.toThrow();
+    expect(reportInspectError).toHaveBeenCalledWith('epub', failure);
+  });
+
   it('removes plugin state and active sessions without deleting the source file', async () => {
     const clearReader = vi.fn(async () => undefined);
     const clearTyping = vi.fn(async () => undefined);

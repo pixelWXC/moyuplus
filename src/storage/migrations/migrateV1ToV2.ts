@@ -4,7 +4,6 @@ import {
   normalizeBookRecord,
   type BookRecord
 } from '../../domain/books';
-import { normalizeImportedTxtFile, normalizeReaderSession } from '../../domain/models';
 import { BookLibraryStore } from '../bookLibraryStore';
 import type { StateMemento } from '../memento';
 import { ReadingProgressStore } from '../readingProgressStore';
@@ -166,4 +165,54 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+interface LegacyImportedTxtFile {
+  readonly id: string;
+  readonly name: string;
+  readonly uri: string;
+  readonly encoding: 'utf8' | 'gbk';
+  readonly source: 'workspace' | 'external';
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly lastOpenedAt?: number;
+}
+
+interface LegacyReaderSession {
+  readonly fileId?: string;
+  readonly offset: number;
+  readonly approximatePercent: number;
+}
+
+function normalizeImportedTxtFile(value: unknown): LegacyImportedTxtFile | undefined {
+  if (!isRecord(value)
+    || !isNonEmptyString(value.id)
+    || !isNonEmptyString(value.name)
+    || !isNonEmptyString(value.uri)
+    || (value.encoding !== 'utf8' && value.encoding !== 'gbk')
+    || (value.source !== 'workspace' && value.source !== 'external')
+    || !isNonNegativeFiniteNumber(value.createdAt)
+    || !isNonNegativeFiniteNumber(value.updatedAt)) return undefined;
+  return {
+    id: value.id, name: value.name, uri: value.uri, encoding: value.encoding, source: value.source,
+    createdAt: value.createdAt, updatedAt: value.updatedAt,
+    ...(isNonNegativeFiniteNumber(value.lastOpenedAt) ? { lastOpenedAt: value.lastOpenedAt } : {})
+  };
+}
+
+function normalizeReaderSession(value: unknown): LegacyReaderSession {
+  if (!isRecord(value)) return { offset: 0, approximatePercent: 0 };
+  return {
+    ...(isNonEmptyString(value.fileId) ? { fileId: value.fileId } : {}),
+    offset: isNonNegativeFiniteNumber(value.offset) ? value.offset : 0,
+    approximatePercent: isProgression(value.approximatePercent) ? value.approximatePercent : 0
+  };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isProgression(value: unknown): value is number {
+  return isNonNegativeFiniteNumber(value) && value <= 1;
 }

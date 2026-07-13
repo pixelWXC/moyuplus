@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  IMPORT_TXT_COMMAND_ID,
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
   RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
@@ -22,12 +21,9 @@ import { READER_VIEW_ID } from '../../reader/readerMessages';
 import { TYPING_PRACTICE_SESSION_KEY } from '../../storage/storageKeys';
 import {
   CLOSE_READER_COMMAND_ID,
-  DECREASE_READER_FONT_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
-  INCREASE_READER_FONT_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID,
-  SELECT_READER_FILE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -94,16 +90,12 @@ describe('typing practice registration and VS Code integration', () => {
     expect(commands.registeredCommandIds()).toEqual([
       'moyuplus.smokeTest',
       IMPORT_BOOK_COMMAND_ID,
-      IMPORT_TXT_COMMAND_ID,
       REMOVE_BOOK_COMMAND_ID,
       RELOCATE_BOOK_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
-      SELECT_READER_FILE_COMMAND_ID,
-      INCREASE_READER_FONT_COMMAND_ID,
-      DECREASE_READER_FONT_COMMAND_ID,
       OPEN_READER_LIBRARY_COMMAND_ID,
       PREVIOUS_READER_CHAPTER_COMMAND_ID,
       NEXT_READER_CHAPTER_COMMAND_ID,
@@ -139,7 +131,7 @@ describe('typing practice registration and VS Code integration', () => {
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
     await activate(context);
-    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
     window.quickPickResult = { label: 'safe-practice.txt', fileId: imported.id };
 
     await commands.executeRegisteredCommand(TOGGLE_TYPING_PRACTICE_COMMAND_ID);
@@ -172,7 +164,7 @@ describe('typing practice registration and VS Code integration', () => {
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
     await activate(context);
-    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
 
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
@@ -226,7 +218,7 @@ describe('typing practice registration and VS Code integration', () => {
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
     await activate(context);
-    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
     window.activeTextEditor = createTextEditor(['hello'], new Position(0, 5));
@@ -274,7 +266,7 @@ describe('typing practice registration and VS Code integration', () => {
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
     await activate(context);
-    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
     const readerView = createWebviewView();
     await window.registeredWebviewViewProvider(READER_VIEW_ID)?.resolveWebviewView(readerView);
     await readerView.webview.receiveMessage({ type: 'selectFile', fileId: imported.id });
@@ -303,7 +295,7 @@ describe('typing practice registration and VS Code integration', () => {
     window.openDialogResult = [Uri.file(filePath)];
     window.quickPickResult = { label: 'UTF-8', encoding: 'utf8' };
     await activate(context);
-    const imported = await commands.executeRegisteredCommand(IMPORT_TXT_COMMAND_ID);
+    const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
 
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);

@@ -13,6 +13,8 @@ export interface ReaderControllerOptions {
   now?: () => number;
 }
 
+export const DEFAULT_PROGRESS_DEBOUNCE_MS = 400;
+
 export class ReaderController {
   private handle?: BookHandle;
   private state?: ReaderEngineState;
@@ -34,12 +36,13 @@ export class ReaderController {
     options: ReaderControllerOptions = {}
   ) {
     this.createRequestId = options.createRequestId ?? randomUUID;
-    this.debounceMs = options.debounceMs ?? 250;
+    this.debounceMs = options.debounceMs ?? DEFAULT_PROGRESS_DEBOUNCE_MS;
     this.now = options.now ?? Date.now;
   }
 
-  async openBook(bookId: string): Promise<void> {
-    const requestId = this.createRequestId();
+  async openBook(bookId: string, correlatedRequestId?: string): Promise<void> {
+    await this.flush();
+    const requestId = correlatedRequestId ?? this.createRequestId();
     this.requestId = requestId;
     this.sectionGeneration += 1;
     this.abortController?.abort();
@@ -67,9 +70,9 @@ export class ReaderController {
         position: this.progress.get(bookId)
       });
       this.state = transition.state;
-      await this.emit({ version: READER_PROTOCOL_VERSION, type: 'bookReady', requestId, bookId, toc, sections, initialSectionId: transition.state.locator.sectionId });
-    } catch (error) {
-      if (requestId === this.requestId) await this.sendError(requestId, bookId, 'openFailed', messageOf(error));
+      await this.emit({ version: READER_PROTOCOL_VERSION, type: 'bookReady', requestId, bookId, toc, sections, initialSectionId: transition.state.locator.sectionId, initialLocator: transition.state.locator });
+    } catch {
+      if (requestId === this.requestId) await this.sendError(requestId, bookId, 'openFailed', 'Unable to open this book.');
     }
   }
 
@@ -81,8 +84,8 @@ export class ReaderController {
       const section = await handle.getSection(sectionId);
       if (generation !== this.sectionGeneration || requestId !== this.requestId) return;
       await this.emit({ version: READER_PROTOCOL_VERSION, type: 'sectionReady', requestId, bookId: state.bookId, sectionId, section });
-    } catch (error) {
-      if (generation === this.sectionGeneration && requestId === this.requestId) await this.sendError(requestId, state.bookId, 'sectionFailed', messageOf(error));
+    } catch {
+      if (generation === this.sectionGeneration && requestId === this.requestId) await this.sendError(requestId, state.bookId, 'sectionFailed', 'Unable to load this section.');
     }
   }
 
@@ -130,5 +133,3 @@ export class ReaderController {
     await this.emit({ version: READER_PROTOCOL_VERSION, type: 'readerError', requestId, bookId, code, message });
   }
 }
-
-function messageOf(error: unknown): string { return error instanceof Error ? error.message : 'Reader operation failed.'; }

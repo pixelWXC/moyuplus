@@ -1,5 +1,3 @@
-import { type ImportedTxtFile, type PageRange, type ReaderSession, type ReaderViewportSnapshot } from '../domain/models';
-import { type ShortcutEnablement, type ShortcutSettingItem } from '../shortcuts/shortcutSettings';
 import { normalizeReadingLocator, type ReadingLocator } from '../domain/locators';
 import type { SafeSectionDocument, SectionRef, TocNode } from '../adapters/bookAdapter';
 
@@ -17,10 +15,10 @@ interface V2SectionEnvelope extends V2Envelope { sectionId: string }
 export type ReaderToExtensionV2Message =
   | (V2Envelope & { type: 'openBook' })
   | (V2SectionEnvelope & { type: 'requestSection' | 'requestNextSection' | 'requestPreviousSection' })
-  | (V2SectionEnvelope & { type: 'layoutStable'; locator: ReadingLocator; bookProgression: number });
+  | (V2SectionEnvelope & { type: 'layoutStable' | 'closeBook'; locator: ReadingLocator; bookProgression: number });
 
 export type ExtensionToReaderV2Message =
-  | (V2Envelope & { type: 'bookReady'; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string })
+  | (V2Envelope & { type: 'bookReady'; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string; initialLocator: ReadingLocator })
   | (V2SectionEnvelope & { type: 'sectionReady'; section: SafeSectionDocument })
   | (V2SectionEnvelope & { type: 'bookStart' | 'bookEnd' })
   | (V2Envelope & { type: 'readerError'; code: string; message: string });
@@ -30,7 +28,7 @@ export function isReaderToExtensionV2Message(value: unknown): value is ReaderToE
   if (value.type === 'openBook') return true;
   if (!hasSectionEnvelope(value)) return false;
   if (value.type === 'requestSection' || value.type === 'requestNextSection' || value.type === 'requestPreviousSection') return true;
-  if (value.type !== 'layoutStable' || !isProgression(value.bookProgression)) return false;
+  if ((value.type !== 'layoutStable' && value.type !== 'closeBook') || !isProgression(value.bookProgression)) return false;
   const locator = normalizeReadingLocator(value.locator);
   return locator !== undefined && locator.sectionId === value.sectionId;
 }
@@ -42,6 +40,7 @@ export function isExtensionToReaderV2Message(value: unknown): value is Extension
     return Array.isArray(value.toc) && value.toc.every(isTocNode)
       && Array.isArray(value.sections) && value.sections.every(isSectionRef)
       && isNonEmptyString(value.initialSectionId)
+      && normalizeReadingLocator(value.initialLocator)?.sectionId === value.initialSectionId
       && value.sections.some(section => isRecord(section) && section.id === value.initialSectionId);
   }
   if (!hasSectionEnvelope(value)) return false;
@@ -91,36 +90,3 @@ function isNonEmptyString(value: unknown): value is string {
 function isProgression(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
-
-export type ReaderViewToExtensionMessage =
-  | { type: 'ready' }
-  | { type: 'selectFile'; fileId: string }
-  | { type: 'pageRendered'; range: PageRange; viewportSnapshot?: ReaderViewportSnapshot }
-  | { type: 'nextPage'; currentRange: PageRange; viewportSnapshot?: ReaderViewportSnapshot }
-  | { type: 'previousPage' }
-  | { type: 'setFontSize'; fontSize: number }
-  | { type: 'openShortcutSettings' }
-  | { type: 'openShortcutEditor'; commandId: string }
-  | { type: 'setShortcutEnabled'; shortcut: ShortcutEnablement; enabled: boolean }
-  | { type: 'importTxt' }
-  | { type: 'removeActiveFile' }
-  | { type: 'switchActiveFileEncoding' };
-
-export interface ReaderErrorState {
-  kind: 'missing' | 'decode' | 'notImported' | 'generic';
-  message: string;
-}
-
-export interface ReaderStatePayload {
-  files: ImportedTxtFile[];
-  session: ReaderSession;
-  activeFile?: ImportedTxtFile;
-  text?: string;
-  error?: ReaderErrorState;
-  shortcuts: ShortcutSettingItem[];
-}
-
-export type ExtensionToReaderMessage =
-  | { type: 'state'; payload: ReaderStatePayload }
-  | { type: 'error'; message: string }
-  | { type: 'command'; command: 'nextPage' };

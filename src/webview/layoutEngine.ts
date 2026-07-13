@@ -26,7 +26,10 @@ export class LayoutEngine {
   private reflowPasses = 0;
   private readonly scheduleFromEnvironment = (): void => this.requestReflow();
 
-  public constructor(private readonly viewport: HTMLElement) {
+  public constructor(
+    private readonly viewport: HTMLElement,
+    private readonly onReflow?: (state: LayoutState) => void
+  ) {
     this.source = document.createElement('div');
     this.measure = document.createElement('div');
     Object.assign(this.source.style, { position: 'fixed', left: '-100000px', top: '0', visibility: 'hidden' });
@@ -46,6 +49,7 @@ export class LayoutEngine {
   public reflow(): void {
     const anchor = this.pages[this.pageIndex]?.start ?? 0;
     this.paginate(anchor);
+    this.onReflow?.(this.getState());
   }
 
   public requestReflow(): void {

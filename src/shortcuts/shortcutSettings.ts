@@ -5,9 +5,6 @@ export const NEXT_READER_PAGE_COMMAND_ID = 'moyuplus.reader.nextPage';
 export const PREVIOUS_READER_PAGE_COMMAND_ID = 'moyuplus.reader.previousPage';
 export const FOCUS_READER_COMMAND_ID = 'moyuplus.reader.focus';
 export const CLOSE_READER_COMMAND_ID = 'moyuplus.reader.close';
-export const SELECT_READER_FILE_COMMAND_ID = 'moyuplus.reader.selectFile';
-export const INCREASE_READER_FONT_COMMAND_ID = 'moyuplus.reader.increaseFont';
-export const DECREASE_READER_FONT_COMMAND_ID = 'moyuplus.reader.decreaseFont';
 export const OPEN_READER_LIBRARY_COMMAND_ID = 'moyuplus.reader.openLibrary';
 export const PREVIOUS_READER_CHAPTER_COMMAND_ID = 'moyuplus.reader.previousChapter';
 export const NEXT_READER_CHAPTER_COMMAND_ID = 'moyuplus.reader.nextChapter';
@@ -44,9 +41,6 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
     action(OPEN_READER_SETTINGS_COMMAND_ID, '阅读器：设置', '打开阅读设置。'),
     action(FOCUS_READER_COMMAND_ID, '阅读器：打开', '打开并聚焦 MoyuPlus Reader。'),
     action(CLOSE_READER_COMMAND_ID, '阅读器：关闭', '关闭当前侧边栏。'),
-    action(SELECT_READER_FILE_COMMAND_ID, '阅读器：切换文件', '从已导入的 TXT 中选择阅读文件。'),
-    action(INCREASE_READER_FONT_COMMAND_ID, '阅读器：增大字号', '将阅读器字号增大一级。'),
-    action(DECREASE_READER_FONT_COMMAND_ID, '阅读器：减小字号', '将阅读器字号减小一级。'),
     action(TOGGLE_TYPING_PRACTICE_COMMAND_ID, '打字练习：开启或关闭', '根据当前练习状态开启或关闭打字练习。'),
     {
       commandId: ROUTE_ENTER_COMMAND_ID,

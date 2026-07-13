@@ -705,6 +705,15 @@ Phase 6 完成门槛：
 - 已知限制写入 README/CHANGELOG。
 - 提交：`Ship Reader v2`。
 
+### Phase 6 执行状态（2026-07-13）
+
+- [x] Task 6.1：旧 TXT Reader service/store/commands、v1 Reader 消息与运行时 session 已删除；迁移读取所需 v1 shape 已收拢到只读 migration 模块。
+- [x] Task 6.2：CSP/零网络、sanitizer、无正文持久化、错误详情脱敏与资源回收测试通过。
+- [x] Task 6.3：resize 每 animation frame 合并、400ms 进度防抖、按章节加载与切章资源 URL 回收契约通过。
+- [x] Task 6.4：`npm run package`、119 个 Vitest、7 个 Chromium 测试、`git diff --check` 与 VSIX 内容审计通过。
+- [x] Task 6.5：0.0.5 已完成 Extension Development Host / VSIX 人工验收；TXT/EPUB 缩放翻页和阅读位置恢复复测全部通过。
+- **Phase 6 Status：complete（2026-07-13）。**
+
 ## 10. 实施期间的停止条件
 
 出现以下情况时停止当前 Phase，先修订设计或计划：

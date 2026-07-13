@@ -10,6 +10,7 @@ export interface LibraryServiceOptions {
   exists?: (uri: string) => Promise<boolean>;
   clearReader?: (bookId: string) => Promise<void>;
   clearTyping?: (bookId: string) => Promise<void>;
+  reportInspectError?: (format: BookFormat, error: unknown) => void;
 }
 
 export class LibraryService {
@@ -73,7 +74,9 @@ export class LibraryService {
     const preferred = formatFromUri(uri);
     const candidates = this.adapters.list().sort((left, right) => Number(right.format === preferred) - Number(left.format === preferred));
     for (const adapter of candidates) {
-      try { return { format: adapter.format, metadata: await adapter.inspect(uri) }; } catch { /* try content with the next adapter */ }
+      try { return { format: adapter.format, metadata: await adapter.inspect(uri) }; } catch (error) {
+        this.options.reportInspectError?.(adapter.format, error);
+      }
     }
     throw new Error(`Unsupported or invalid book: ${uri}`);
   }

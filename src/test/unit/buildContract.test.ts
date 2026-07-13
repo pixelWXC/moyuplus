@@ -36,6 +36,20 @@ describe('dual-target build contract', () => {
     });
   });
 
+  it('ships only runtime artifacts and excludes development and user-content paths', async () => {
+    const ignore = await readFile(path.join(projectRoot, '.vscodeignore'), 'utf8');
+    expect(ignore).toMatch(/^src\/test\/$/m);
+    expect(ignore).toMatch(/^tests\/$/m);
+    expect(ignore).toMatch(/^test-results\/$/m);
+    expect(ignore).toMatch(/^docs\/$/m);
+    expect(ignore).toMatch(/^\.superpowers\/$/m);
+    expect(ignore).toMatch(/^\*\*\/\*\.epub$/m);
+    expect(ignore).toMatch(/^\*\*\/\*\.txt$/m);
+    expect(ignore).toMatch(/^\*\*\/\*\.map$/m);
+    expect(ignore).not.toMatch(/^out\/$/m);
+    expect(ignore).not.toMatch(/^media\/$/m);
+  });
+
   it('emits an external-vscode CommonJS extension bundle', async () => {
     await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
     const extensionBundle = await readFile(path.join(projectRoot, 'out/extension.js'), 'utf8');
@@ -44,6 +58,18 @@ describe('dual-target build contract', () => {
     expect(extensionBundle).toMatch(/\bactivate\b/);
     expect(extensionBundle).toMatch(/\bdeactivate\b/);
     expect(extensionBundle).toMatch(/require\(["']vscode["']\)/);
+  });
+
+  it('loads the packaged CommonJS bundle without import.meta/createRequire failures', async () => {
+    await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
+    const script = [
+      "const Module = require('module');",
+      'const originalLoad = Module._load;',
+      "Module._load = function(id, parent, main) { if (id === 'vscode') return {}; return originalLoad.call(this, id, parent, main); };",
+      "require('./out/extension.js');"
+    ].join(' ');
+
+    await expect(execFileAsync(process.execPath, ['-e', script], { cwd: projectRoot })).resolves.toBeDefined();
   });
 
   it('emits a self-contained browser Webview bundle and stylesheet', async () => {

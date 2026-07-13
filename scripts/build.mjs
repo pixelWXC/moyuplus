@@ -1,4 +1,8 @@
 import { build } from 'esbuild';
+import { rm } from 'node:fs/promises';
+
+const webviewOnly = process.argv.includes('--webview-only');
+if (!webviewOnly) await rm('out', { recursive: true, force: true });
 
 const sharedOptions = {
   bundle: true,
@@ -16,7 +20,7 @@ const webviewBuild = build({
 });
 
 const builds = [webviewBuild];
-if (!process.argv.includes('--webview-only')) {
+if (!webviewOnly) {
   builds.push(build({
     ...sharedOptions,
     entryPoints: ['src/extension.ts'],

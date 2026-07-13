@@ -79,6 +79,14 @@ describe('reader Webview library state', () => {
     expect(REMOVE_BOOK_CONFIRMATION).toContain('不会删除原文件');
   });
 
+  it('closes a removal confirmation when the refreshed library no longer contains that book', () => {
+    const pending = readerAppReducer(createInitialReaderAppState(), { type: 'requestRemove', bookId: 'txt-1' });
+    const refreshed = readerAppReducer(pending, {
+      type: 'libraryLoaded', books: [], availability: {}, progress: {}
+    });
+    expect(refreshed.pendingRemoval).toBeUndefined();
+  });
+
   it('never exposes typing practice for EPUB books', () => {
     const epub = book('epub-1', 'epub');
     const state = readerAppReducer(createInitialReaderAppState(), {
@@ -100,11 +108,11 @@ describe('reader Webview reading state', () => {
       type: 'bookReady', requestId: 'r1',
       toc: [{ title: 'Part I', sectionId: 'one', children: [{ title: 'Chapter 2', sectionId: 'two' }] }],
       sections: [{ id: 'one', title: 'Chapter 1', order: 0, progressionWeight: 1 }, { id: 'two', title: 'Chapter 2', order: 1, progressionWeight: 1 }],
-      initialSectionId: 'one'
+      initialSectionId: 'one', initialProgression: 0.625
     });
-    expect(ready).toMatchObject({ view: 'reader', status: 'loading', activeSectionId: 'one' });
+    expect(ready).toMatchObject({ view: 'reader', status: 'loading', activeSectionId: 'one', initialProgression: 0.625 });
     expect(ready.toc?.[0].children?.[0].sectionId).toBe('two');
-    expect(readerAppReducer(ready, { type: 'closeReader' }).view).toBe('library');
+    expect(readerAppReducer(ready, { type: 'closeReader' })).toMatchObject({ view: 'library', initialProgression: undefined });
   });
 
   it('derives chapter and page capabilities and exposes non-blocking book-edge feedback', () => {

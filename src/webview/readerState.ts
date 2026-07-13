@@ -25,6 +25,7 @@ export interface ReaderAppState {
   toc?: TocNode[];
   sections?: SectionRef[];
   activeSectionId?: string;
+  initialProgression?: number;
   layout?: LayoutState;
   navigation?: ReaderNavigation;
   drawer?: 'toc' | 'settings';
@@ -53,7 +54,7 @@ export type ReaderAppAction =
   | { type: 'showError'; message: string }
   | { type: 'openReader'; book: BookRecord; requestId: string }
   | { type: 'closeReader' }
-  | { type: 'bookReady'; requestId: string; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string }
+  | { type: 'bookReady'; requestId: string; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string; initialProgression?: number }
   | ({ type: 'layoutChanged' } & LayoutState)
   | { type: 'selectSection'; sectionId: string }
   | { type: 'openDrawer'; drawer: 'toc' | 'settings' }
@@ -86,6 +87,9 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
         view: 'library',
         status: 'ready',
         books,
+        pendingRemoval: state.pendingRemoval && books.some(book => book.id === state.pendingRemoval?.bookId)
+          ? state.pendingRemoval
+          : undefined,
         ...(books.length === 0 ? { emptyAction: 'importBook' as const } : {})
       };
     }
@@ -107,10 +111,10 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
     case 'openReader':
       return { ...state, view: 'reader', status: 'loading', activeBook: action.book, requestId: action.requestId, notice: undefined };
     case 'closeReader':
-      return { ...state, view: 'library', status: 'ready', activeBook: undefined, requestId: undefined, toc: undefined, sections: undefined, activeSectionId: undefined, layout: undefined, navigation: undefined, drawer: undefined, notice: undefined };
+      return { ...state, view: 'library', status: 'ready', activeBook: undefined, requestId: undefined, toc: undefined, sections: undefined, activeSectionId: undefined, initialProgression: undefined, layout: undefined, navigation: undefined, drawer: undefined, notice: undefined };
     case 'bookReady':
       if (state.requestId !== action.requestId) return state;
-      return { ...state, toc: action.toc, sections: action.sections, activeSectionId: action.initialSectionId, status: 'loading', navigation: navigationFor(action.sections, action.initialSectionId) };
+      return { ...state, toc: action.toc, sections: action.sections, activeSectionId: action.initialSectionId, initialProgression: action.initialProgression, status: 'loading', navigation: navigationFor(action.sections, action.initialSectionId) };
     case 'selectSection':
       return { ...state, activeSectionId: action.sectionId, status: 'loading', drawer: undefined, notice: undefined, navigation: navigationFor(state.sections ?? [], action.sectionId) };
     case 'layoutChanged': {

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import * as parse5 from 'parse5';
-import * as csstree from 'css-tree';
+import csstree = require('css-tree');
 import { normalizeArchivePath } from './epubArchive';
 export interface SanitizedResource { path: string; kind: 'image' | 'font' }
 const BLOCKED = new Set(['script', 'iframe', 'object', 'embed', 'form']);

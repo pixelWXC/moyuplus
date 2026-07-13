@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BookAdapter, BookHandle, SafeSectionDocument } from '../../adapters/bookAdapter';
 import { AdapterRegistry } from '../../adapters/adapterRegistry';
 import { createBookCapabilities, type BookRecord } from '../../domain/books';
-import { ReaderController } from '../../reader/readerController';
+import { DEFAULT_PROGRESS_DEBOUNCE_MS, ReaderController } from '../../reader/readerController';
 import { BookLibraryStore } from '../../storage/bookLibraryStore';
 import { ReadingProgressStore } from '../../storage/readingProgressStore';
 
@@ -20,6 +20,11 @@ async function setup(open: BookAdapter['open']) {
 }
 
 describe('ReaderController', () => {
+  it('uses a progress debounce inside the 300-500ms performance budget', () => {
+    expect(DEFAULT_PROGRESS_DEBOUNCE_MS).toBeGreaterThanOrEqual(300);
+    expect(DEFAULT_PROGRESS_DEBOUNCE_MS).toBeLessThanOrEqual(500);
+  });
+
   it('disposes and drops a stale book response when books are switched quickly', async () => {
     const first = deferred<BookHandle>(); const second = deferred<BookHandle>();
     const { controller, messages } = await setup(vi.fn((record: BookRecord) => record.id === 'a' ? first.promise : second.promise));
@@ -46,10 +51,44 @@ describe('ReaderController', () => {
     expect(progress.get('a')).toMatchObject({ bookId: 'a', bookProgression: 0.7, updatedAt: 50 });
   });
 
+  it('flushes pending progress before reopening so restoration cannot read stale state', async () => {
+    const { controller, progress } = await setup(vi.fn(async (record: BookRecord) => handle(record.id)));
+    await controller.openBook('a');
+    controller.reportLayout({ kind: 'txt', sectionId: 'a-s', progression: 0.6, offset: 60 }, 0.6);
+
+    await controller.openBook('b');
+
+    expect(progress.get('a')).toMatchObject({ bookId: 'a', bookProgression: 0.6 });
+  });
+
+  it('returns the persisted locator so the Webview restores within the section', async () => {
+    const { controller, progress, messages } = await setup(vi.fn(async () => handle('a')));
+    await progress.save({
+      bookId: 'a', locator: { kind: 'txt', sectionId: 'a-s', progression: 0.625, offset: 125 },
+      bookProgression: 0.625, updatedAt: 40
+    });
+
+    await controller.openBook('a');
+
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'bookReady', initialSectionId: 'a-s',
+      initialLocator: { kind: 'txt', sectionId: 'a-s', progression: 0.625, offset: 125 }
+    }));
+  });
+
   it('maps open failures to an explicit reader error state', async () => {
     const { controller, messages } = await setup(vi.fn().mockRejectedValue(new Error('cannot open')));
     await controller.openBook('a');
-    expect(messages).toContainEqual(expect.objectContaining({ type: 'readerError', code: 'openFailed', message: 'cannot open' }));
+    expect(messages).toContainEqual(expect.objectContaining({ type: 'readerError', code: 'openFailed', message: 'Unable to open this book.' }));
+  });
+
+  it('redacts adapter error details that may contain book content', async () => {
+    const secret = '正文机密片段 should never leave the extension host';
+    const { controller, messages } = await setup(vi.fn().mockRejectedValue(new Error(secret)));
+    await controller.openBook('a');
+    const error = (messages as Array<{ type?: string; code?: string; message?: string }>).find(message => message.type === 'readerError');
+    expect(error).toMatchObject({ code: 'openFailed', message: 'Unable to open this book.' });
+    expect(JSON.stringify(error)).not.toContain(secret);
   });
 
   it('navigates to adjacent and requested sections while reporting book edges', async () => {

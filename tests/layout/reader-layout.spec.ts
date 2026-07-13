@@ -46,6 +46,7 @@ test('coalesces repeated preference reflows into one animation frame', async ({ 
   const before = await page.evaluate(() => window.readerHarness.state().pageCount);
   const passes = await page.evaluate(() => window.readerHarness.scheduleReflows(8));
   expect(passes).toBe(1);
+  expect(await page.evaluate(() => window.readerHarness.reflowNotifications())).toBe(1);
   expect((await page.evaluate(() => window.readerHarness.state())).pageCount).toBe(before);
 });
 
@@ -65,6 +66,7 @@ declare global {
       previous(): boolean;
       resize(fontSize: number): void;
       scheduleReflows(count: number): Promise<number>;
+      reflowNotifications(): number;
       state(): { pageCount: number; visibleText: string; progression: number; canNextPage: boolean; canPreviousPage: boolean; isSectionStart: boolean; isSectionEnd: boolean };
     };
   }

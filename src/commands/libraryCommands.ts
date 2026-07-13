@@ -3,7 +3,6 @@ import type { BookSource } from '../domain/books';
 import type { LibraryService } from '../library/libraryService';
 
 export const IMPORT_BOOK_COMMAND_ID = 'moyuplus.importBook';
-export const IMPORT_TXT_ALIAS_COMMAND_ID = 'moyuplus.importTxt';
 export const REMOVE_BOOK_COMMAND_ID = 'moyuplus.removeBook';
 export const RELOCATE_BOOK_COMMAND_ID = 'moyuplus.relocateBook';
 
@@ -29,7 +28,6 @@ export function registerLibraryCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand(IMPORT_BOOK_COMMAND_ID, importBook),
-    vscode.commands.registerCommand(IMPORT_TXT_ALIAS_COMMAND_ID, importBook),
     vscode.commands.registerCommand(REMOVE_BOOK_COMMAND_ID, async (bookId: string) => {
       if (typeof bookId !== 'string' || bookId.length === 0) return undefined;
       await library.removeBook(bookId);

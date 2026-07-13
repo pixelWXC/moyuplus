@@ -1,5 +1,14 @@
 # 开发计划：moyuplus
 
+## Reader v2 Phase 6 人工复测状态（2026-07-13）
+
+- [x] 修复缩放后“下一页”偶发无响应
+- [x] 修复返回书架后偶发不能恢复最后位置
+- [x] 增加重排回调、退出原子保存、打开恢复 Locator 的自动测试
+- [x] 完整构建与打包 `moyuplus-0.0.5.vsix`
+- [x] 用户针对 TXT/EPUB 执行人工复测（2026-07-13 全部通过）
+- **Status:** complete
+
 ## Goal
 根据 `指导文档.md` 梳理并启动项目开发计划，形成可持续更新的阶段计划、发现记录和进度日志；在用户确认设计前不进行业务代码实现。
 
@@ -114,6 +123,25 @@ Phase 4: 开发执行（实施计划 Phase 7 快捷键设置页与体验补齐�
 - 设计规格：[docs/superpowers/specs/2026-07-08-moyuplus-design.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/specs/2026-07-08-moyuplus-design.md)
 - 实施计划：[docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md](D:/wxc_work_file/projects/harnessplace/moyuplus/docs/superpowers/plans/2026-07-08-moyuplus-implementation-plan.md)
 - 下一步：进入 Phase 8 测试、打包与人工验收。
+
+### Reader v2 Phase 6（2026-07-13）
+
+- [x] 删除旧阅读栈并隔离只读迁移 shape
+- [x] 完成隐私、错误脱敏和性能契约
+- [x] 完成 compile、unit、layout、package 与 VSIX 内容审计
+- [x] Extension Development Host / VSIX 人工验收
+- **Status:** complete
+
+- [x] 修复人工验收发现的 Reader 书架永久加载问题（`libraryReady` → `libraryState`）
+- [x] 安装修复版 VSIX 后复验书架加载与阅读流程
+- [x] 消除 Webview 启动握手竞态并增加主动 snapshot 与错误态
+- [x] 安装 0.0.2 VSIX 后再次复验
+- [x] 根据 Extension Host 日志修复 `createRequire(undefined)` activation 崩溃
+- [x] 安装 0.0.3 VSIX 并确认书架加载
+- [x] 修复移除确认框、阅读 requestId 与真实 EPUB 目录条目兼容
+- [x] 增加 MoyuPlus 可诊断 Output 通道
+- [x] 安装 0.0.4 VSIX，复验移除、TXT 阅读和真实 EPUB 导入
+- [x] 安装 0.0.5 VSIX，复验缩放后翻页和 TXT/EPUB 阅读位置恢复
 
 ## 2026-07-10 阅读器重塑规划（当前）
 

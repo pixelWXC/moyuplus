@@ -2,8 +2,9 @@
 (() => {
   // src/webview/layoutEngine.ts
   var LayoutEngine = class {
-    constructor(viewport) {
+    constructor(viewport, onReflow) {
       this.viewport = viewport;
+      this.onReflow = onReflow;
       this.source = document.createElement("div");
       this.measure = document.createElement("div");
       Object.assign(this.source.style, { position: "fixed", left: "-100000px", top: "0", visibility: "hidden" });
@@ -13,6 +14,7 @@
       document.fonts?.addEventListener("loadingdone", this.scheduleFromEnvironment);
     }
     viewport;
+    onReflow;
     source;
     measure;
     sectionId = "";
@@ -32,6 +34,7 @@
     reflow() {
       const anchor = this.pages[this.pageIndex]?.start ?? 0;
       this.paginate(anchor);
+      this.onReflow?.(this.getState());
     }
     requestReflow() {
       if (this.scheduledFrame !== void 0) return;
@@ -167,40 +170,84 @@
     }
   };
 
+  // src/domain/locators.ts
+  function normalizeReadingLocator(value) {
+    if (!isRecord(value) || !isNonEmptyString(value.sectionId)) {
+      return void 0;
+    }
+    const base = {
+      sectionId: value.sectionId,
+      progression: normalizeProgression(value.progression)
+    };
+    if (value.kind === "txt") {
+      const locator = { kind: "txt", ...base };
+      if (isNonNegativeFiniteNumber(value.offset)) {
+        locator.offset = Math.trunc(value.offset);
+      }
+      return locator;
+    }
+    if (value.kind === "epub") {
+      const locator = { kind: "epub", ...base };
+      if (isNonEmptyString(value.cfi)) {
+        locator.cfi = value.cfi;
+      }
+      if (isNonEmptyString(value.fragment)) {
+        locator.fragment = value.fragment;
+      }
+      return locator;
+    }
+    return void 0;
+  }
+  function normalizeProgression(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.min(1, Math.max(0, value));
+  }
+  function isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+  function isNonEmptyString(value) {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+  function isNonNegativeFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  }
+
   // src/reader/readerMessages.ts
   var READER_PROTOCOL_VERSION = 2;
   function isExtensionToReaderV2Message(value) {
     if (!hasEnvelope(value)) return false;
-    if (value.type === "readerError") return isNonEmptyString(value.code) && isNonEmptyString(value.message);
+    if (value.type === "readerError") return isNonEmptyString2(value.code) && isNonEmptyString2(value.message);
     if (value.type === "bookReady") {
-      return Array.isArray(value.toc) && value.toc.every(isTocNode) && Array.isArray(value.sections) && value.sections.every(isSectionRef) && isNonEmptyString(value.initialSectionId) && value.sections.some((section) => isRecord(section) && section.id === value.initialSectionId);
+      return Array.isArray(value.toc) && value.toc.every(isTocNode) && Array.isArray(value.sections) && value.sections.every(isSectionRef) && isNonEmptyString2(value.initialSectionId) && normalizeReadingLocator(value.initialLocator)?.sectionId === value.initialSectionId && value.sections.some((section) => isRecord2(section) && section.id === value.initialSectionId);
     }
     if (!hasSectionEnvelope(value)) return false;
     if (value.type === "bookStart" || value.type === "bookEnd") return true;
     return value.type === "sectionReady" && isSafeSection(value.section, value.sectionId);
   }
   function hasEnvelope(value) {
-    return isRecord(value) && value.version === READER_PROTOCOL_VERSION && isNonEmptyString(value.requestId) && isNonEmptyString(value.bookId);
+    return isRecord2(value) && value.version === READER_PROTOCOL_VERSION && isNonEmptyString2(value.requestId) && isNonEmptyString2(value.bookId);
   }
   function hasSectionEnvelope(value) {
-    return isNonEmptyString(value.sectionId);
+    return isNonEmptyString2(value.sectionId);
   }
   function isSafeSection(value, sectionId) {
-    if (!isRecord(value) || value.sectionId !== sectionId || typeof value.sanitizedHtml !== "string" || !isNonEmptyString(value.sourceRevision) || !Array.isArray(value.localResources)) return false;
-    return value.localResources.every((resource) => isRecord(resource) && isNonEmptyString(resource.id) && isNonEmptyString(resource.path) && isNonEmptyString(resource.mimeType));
+    if (!isRecord2(value) || value.sectionId !== sectionId || typeof value.sanitizedHtml !== "string" || !isNonEmptyString2(value.sourceRevision) || !Array.isArray(value.localResources)) return false;
+    return value.localResources.every((resource) => isRecord2(resource) && isNonEmptyString2(resource.id) && isNonEmptyString2(resource.path) && isNonEmptyString2(resource.mimeType));
   }
   function isTocNode(value) {
-    if (!isRecord(value) || !isNonEmptyString(value.title) || !isNonEmptyString(value.sectionId)) return false;
-    if (value.fragment !== void 0 && !isNonEmptyString(value.fragment)) return false;
+    if (!isRecord2(value) || !isNonEmptyString2(value.title) || !isNonEmptyString2(value.sectionId)) return false;
+    if (value.fragment !== void 0 && !isNonEmptyString2(value.fragment)) return false;
     return value.children === void 0 || Array.isArray(value.children) && value.children.every(isTocNode);
   }
   function isSectionRef(value) {
-    return isRecord(value) && isNonEmptyString(value.id) && (value.title === void 0 || isNonEmptyString(value.title)) && Number.isInteger(value.order) && value.order >= 0 && typeof value.progressionWeight === "number" && Number.isFinite(value.progressionWeight) && value.progressionWeight >= 0;
+    return isRecord2(value) && isNonEmptyString2(value.id) && (value.title === void 0 || isNonEmptyString2(value.title)) && Number.isInteger(value.order) && value.order >= 0 && typeof value.progressionWeight === "number" && Number.isFinite(value.progressionWeight) && value.progressionWeight >= 0;
   }
-  function isRecord(value) {
+  function isRecord2(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
-  function isNonEmptyString(value) {
+  function isNonEmptyString2(value) {
     return typeof value === "string" && value.trim().length > 0;
   }
 
@@ -228,7 +275,7 @@
   }
   function normalizeReaderPreferences(value) {
     const defaults = createDefaultReaderPreferences();
-    if (!isRecord2(value)) {
+    if (!isRecord3(value)) {
       return defaults;
     }
     return {
@@ -268,7 +315,7 @@
     }
     return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : void 0;
   }
-  function isRecord2(value) {
+  function isRecord3(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
   function isFontFamily(value) {
@@ -304,6 +351,7 @@
           view: "library",
           status: "ready",
           books,
+          pendingRemoval: state2.pendingRemoval && books.some((book) => book.id === state2.pendingRemoval?.bookId) ? state2.pendingRemoval : void 0,
           ...books.length === 0 ? { emptyAction: "importBook" } : {}
         };
       }
@@ -325,10 +373,10 @@
       case "openReader":
         return { ...state2, view: "reader", status: "loading", activeBook: action.book, requestId: action.requestId, notice: void 0 };
       case "closeReader":
-        return { ...state2, view: "library", status: "ready", activeBook: void 0, requestId: void 0, toc: void 0, sections: void 0, activeSectionId: void 0, layout: void 0, navigation: void 0, drawer: void 0, notice: void 0 };
+        return { ...state2, view: "library", status: "ready", activeBook: void 0, requestId: void 0, toc: void 0, sections: void 0, activeSectionId: void 0, initialProgression: void 0, layout: void 0, navigation: void 0, drawer: void 0, notice: void 0 };
       case "bookReady":
         if (state2.requestId !== action.requestId) return state2;
-        return { ...state2, toc: action.toc, sections: action.sections, activeSectionId: action.initialSectionId, status: "loading", navigation: navigationFor(action.sections, action.initialSectionId) };
+        return { ...state2, toc: action.toc, sections: action.sections, activeSectionId: action.initialSectionId, initialProgression: action.initialProgression, status: "loading", navigation: navigationFor(action.sections, action.initialSectionId) };
       case "selectSection":
         return { ...state2, activeSectionId: action.sectionId, status: "loading", drawer: void 0, notice: void 0, navigation: navigationFor(state2.sections ?? [], action.sectionId) };
       case "layoutChanged": {
@@ -440,7 +488,7 @@
     root.className = "reader-view";
     root.replaceChildren();
     const toolbar = element("header", "reader-toolbar");
-    toolbar.append(iconButton("\u2190", "\u8FD4\u56DE\u4E66\u67B6", () => dispatch({ type: "closeReader" })), element("strong", "reader-title", state.activeBook?.title ?? "\u9605\u8BFB"));
+    toolbar.append(iconButton("\u2190", "\u8FD4\u56DE\u4E66\u67B6", closeBook), element("strong", "reader-title", state.activeBook?.title ?? "\u9605\u8BFB"));
     const tools = element("div", "reader-tools");
     tools.append(iconButton("\u2630", "\u76EE\u5F55", () => dispatch({ type: "openDrawer", drawer: "toc" })), iconButton("Aa", "\u9605\u8BFB\u8BBE\u7F6E", () => dispatch({ type: "openDrawer", drawer: "settings" })));
     toolbar.append(tools);
@@ -462,18 +510,20 @@
     let priorProgression = 0;
     if (priorLayout && priorLayout.sectionId === state.activeSectionId) priorProgression = priorLayout.progression;
     layout?.dispose();
-    layout = new LayoutEngine(viewport);
+    layout = new LayoutEngine(viewport, (current) => commitLayout(current));
     if (currentSectionHtml && state.activeSectionId) {
-      layout.setContent(state.activeSectionId, currentSectionHtml, priorProgression);
+      layout.setContent(state.activeSectionId, currentSectionHtml, priorLayout ? priorProgression : state.initialProgression ?? 0);
       state = readerAppReducer(state, { type: "layoutChanged", ...layout.getState() });
     } else if (state.status === "loading") viewport.append(element("p", "notice", "\u6B63\u5728\u8F7D\u5165\u7AE0\u8282\u2026"));
     if (state.status === "error") viewport.append(element("p", "notice notice-error", state.error ?? "\u7AE0\u8282\u8F7D\u5165\u5931\u8D25\u3002"));
     const footer = element("footer", "reader-footer");
-    footer.append(
-      button("\u4E0A\u4E00\u9875", "page-action", previousPage, !state.navigation?.canPreviousPage),
-      element("span", "page-progress", formatReadingProgress()),
-      button("\u4E0B\u4E00\u9875", "page-action", nextPage, !state.navigation?.canNextPage)
-    );
+    const previous = button("\u4E0A\u4E00\u9875", "page-action", previousPage, !state.navigation?.canPreviousPage);
+    previous.id = "previous-page";
+    const progress = element("span", "page-progress", formatReadingProgress());
+    progress.id = "page-progress";
+    const next = button("\u4E0B\u4E00\u9875", "page-action", nextPage, !state.navigation?.canNextPage);
+    next.id = "next-page";
+    footer.append(previous, progress, next);
     root.append(footer);
     if (state.notice) {
       const notice = element("div", "reader-toast", state.notice);
@@ -597,10 +647,25 @@
     else dispatch({ type: "bookBoundary", edge: "start" });
   }
   function updateLayout() {
-    if (!layout) return;
-    const current = layout.getState();
-    dispatch({ type: "layoutChanged", ...current });
+    if (layout) commitLayout(layout.getState());
+  }
+  function commitLayout(current) {
+    state = readerAppReducer(state, { type: "layoutChanged", ...current });
+    const previous = document.querySelector("#previous-page");
+    if (previous) previous.disabled = !state.navigation?.canPreviousPage;
+    const next = document.querySelector("#next-page");
+    if (next) next.disabled = !state.navigation?.canNextPage;
+    const progress = document.querySelector("#page-progress");
+    if (progress) progress.textContent = formatReadingProgress();
+    post({ type: "navigationState", canNextPage: Boolean(state.navigation?.canNextPage) });
     post({ ...envelope("layoutStable", current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
+  }
+  function closeBook() {
+    if (layout) {
+      const current = layout.getState();
+      post({ ...envelope("closeBook", current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
+    }
+    dispatch({ type: "closeReader" });
   }
   function locatorFor(current) {
     return state.activeBook?.format === "txt" ? { kind: "txt", sectionId: current.sectionId, progression: current.progression, offset: current.startOffset } : { kind: "epub", sectionId: current.sectionId, progression: current.progression };
@@ -682,7 +747,7 @@
       else if (command === "previousPage") previousPage();
       else if (command === "nextChapter") requestAdjacent("requestNextSection");
       else if (command === "previousChapter") requestAdjacent("requestPreviousSection");
-      else if (command === "openLibrary") dispatch({ type: "closeReader" });
+      else if (command === "openLibrary") closeBook();
       else if (command === "openToc") dispatch({ type: "openDrawer", drawer: "toc" });
       else if (command === "openSettings") dispatch({ type: "openDrawer", drawer: "settings" });
       return;
@@ -693,11 +758,15 @@
       if (incoming.preferences) dispatch({ type: "preferencesLoaded", preferences: incoming.preferences });
       return;
     }
+    if (isLibraryLoadError(event.data)) {
+      dispatch({ type: "showError", message: event.data.message });
+      return;
+    }
     if (!isExtensionToReaderV2Message(event.data)) return;
     const message = event.data;
     if (!state.requestId || message.requestId !== state.requestId || message.bookId !== state.activeBook?.id) return;
     if (message.type === "bookReady") {
-      dispatch({ type: "bookReady", requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId });
+      dispatch({ type: "bookReady", requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId, initialProgression: message.initialLocator.progression });
       post(envelope("requestSection", message.initialSectionId));
       return;
     }
@@ -716,6 +785,9 @@
   function isReaderCommand(value) {
     if (typeof value !== "object" || value === null || value.type !== "command") return false;
     return ["nextPage", "previousPage", "nextChapter", "previousChapter", "openLibrary", "openToc", "openSettings"].includes(String(value.command));
+  }
+  function isLibraryLoadError(value) {
+    return typeof value === "object" && value !== null && value.type === "libraryLoadError" && typeof value.message === "string";
   }
   render();
   post({ type: "libraryReady" });

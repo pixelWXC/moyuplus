@@ -10,18 +10,21 @@
   <script src="../../../media/readerApp.js"></script>
   <script>
     const reader = document.querySelector('#reader');
-    const engine = new window.MoyuplusReader.LayoutEngine(reader);
+    let reflowNotifications = 0;
+    const engine = new window.MoyuplusReader.LayoutEngine(reader, () => { reflowNotifications += 1; });
     window.readerHarness = {
       load: html => engine.setContent('section-1', html),
       next: () => engine.nextPage(),
       previous: () => engine.previousPage(),
       resize: fontSize => { reader.style.fontSize = `${fontSize}px`; engine.reflow(); },
       scheduleReflows: async count => {
+        reflowNotifications = 0;
         const before = engine.getReflowPasses();
         for (let index = 0; index < count; index += 1) engine.requestReflow();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         return engine.getReflowPasses() - before;
       },
+      reflowNotifications: () => reflowNotifications,
       state: () => ({ ...engine.getState(), visibleText: reader.textContent || '' })
     };
   </script>

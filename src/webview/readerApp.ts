@@ -59,7 +59,7 @@ function renderLibrary(root: HTMLElement): void {
 function renderReader(root: HTMLElement): void {
   root.className = 'reader-view'; root.replaceChildren();
   const toolbar = element('header', 'reader-toolbar');
-  toolbar.append(iconButton('←', '返回书架', () => dispatch({ type: 'closeReader' })), element('strong', 'reader-title', state.activeBook?.title ?? '阅读'));
+  toolbar.append(iconButton('←', '返回书架', closeBook), element('strong', 'reader-title', state.activeBook?.title ?? '阅读'));
   const tools = element('div', 'reader-tools');
   tools.append(iconButton('☰', '目录', () => dispatch({ type: 'openDrawer', drawer: 'toc' })), iconButton('Aa', '阅读设置', () => dispatch({ type: 'openDrawer', drawer: 'settings' })));
   toolbar.append(tools); root.append(toolbar);
@@ -75,17 +75,18 @@ function renderReader(root: HTMLElement): void {
   const priorLayout = state.layout;
   let priorProgression = 0;
   if (priorLayout && priorLayout.sectionId === state.activeSectionId) priorProgression = priorLayout.progression;
-  layout?.dispose(); layout = new LayoutEngine(viewport);
+  layout?.dispose(); layout = new LayoutEngine(viewport, current => commitLayout(current));
   if (currentSectionHtml && state.activeSectionId) {
-    layout.setContent(state.activeSectionId, currentSectionHtml, priorProgression);
+    layout.setContent(state.activeSectionId, currentSectionHtml, priorLayout ? priorProgression : (state.initialProgression ?? 0));
     state = readerAppReducer(state, { type: 'layoutChanged', ...layout.getState() });
   } else if (state.status === 'loading') viewport.append(element('p', 'notice', '正在载入章节…'));
   if (state.status === 'error') viewport.append(element('p', 'notice notice-error', state.error ?? '章节载入失败。'));
 
   const footer = element('footer', 'reader-footer');
-  footer.append(button('上一页', 'page-action', previousPage, !state.navigation?.canPreviousPage),
-    element('span', 'page-progress', formatReadingProgress()),
-    button('下一页', 'page-action', nextPage, !state.navigation?.canNextPage)); root.append(footer);
+  const previous = button('上一页', 'page-action', previousPage, !state.navigation?.canPreviousPage); previous.id = 'previous-page';
+  const progress = element('span', 'page-progress', formatReadingProgress()); progress.id = 'page-progress';
+  const next = button('下一页', 'page-action', nextPage, !state.navigation?.canNextPage); next.id = 'next-page';
+  footer.append(previous, progress, next); root.append(footer);
   if (state.notice) { const notice = element('div', 'reader-toast', state.notice); notice.setAttribute('role', 'status'); root.append(notice); }
   if (state.drawer === 'toc') root.append(renderTocDrawer());
   if (state.drawer === 'settings') root.append(renderSettingsDrawer());
@@ -140,7 +141,22 @@ function selectSection(sectionId: string): void { dispatch({ type: 'selectSectio
 function requestAdjacent(type: 'requestNextSection' | 'requestPreviousSection'): void { const id = state.activeSectionId; if (id) post(envelope(type, id)); }
 function nextPage(): void { if (layout?.nextPage()) updateLayout(); else if (state.navigation?.canNextSection) requestAdjacent('requestNextSection'); else dispatch({ type: 'bookBoundary', edge: 'end' }); }
 function previousPage(): void { if (layout?.previousPage()) updateLayout(); else if (state.navigation?.canPreviousSection) requestAdjacent('requestPreviousSection'); else dispatch({ type: 'bookBoundary', edge: 'start' }); }
-function updateLayout(): void { if (!layout) return; const current = layout.getState(); dispatch({ type: 'layoutChanged', ...current }); post({ ...envelope('layoutStable', current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) }); }
+function updateLayout(): void { if (layout) commitLayout(layout.getState()); }
+function commitLayout(current: LayoutState): void {
+  state = readerAppReducer(state, { type: 'layoutChanged', ...current });
+  const previous = document.querySelector<HTMLButtonElement>('#previous-page'); if (previous) previous.disabled = !state.navigation?.canPreviousPage;
+  const next = document.querySelector<HTMLButtonElement>('#next-page'); if (next) next.disabled = !state.navigation?.canNextPage;
+  const progress = document.querySelector<HTMLElement>('#page-progress'); if (progress) progress.textContent = formatReadingProgress();
+  post({ type: 'navigationState', canNextPage: Boolean(state.navigation?.canNextPage) });
+  post({ ...envelope('layoutStable', current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
+}
+function closeBook(): void {
+  if (layout) {
+    const current = layout.getState();
+    post({ ...envelope('closeBook', current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
+  }
+  dispatch({ type: 'closeReader' });
+}
 function locatorFor(current: LayoutState): Record<string, unknown> { return state.activeBook?.format === 'txt' ? { kind: 'txt', sectionId: current.sectionId, progression: current.progression, offset: current.startOffset } : { kind: 'epub', sectionId: current.sectionId, progression: current.progression }; }
 function wholeBookProgress(current: LayoutState): number { const sections = state.sections ?? []; const total = sections.reduce((sum, section) => sum + Math.max(1, section.progressionWeight), 0); const index = sections.findIndex(section => section.id === current.sectionId); if (total <= 0 || index < 0) return 0; const before = sections.slice(0, index).reduce((sum, section) => sum + Math.max(1, section.progressionWeight), 0); return (before + current.progression * Math.max(1, sections[index].progressionWeight)) / total; }
 
@@ -163,17 +179,18 @@ window.addEventListener('message', event => {
     else if (command === 'previousPage') previousPage();
     else if (command === 'nextChapter') requestAdjacent('requestNextSection');
     else if (command === 'previousChapter') requestAdjacent('requestPreviousSection');
-    else if (command === 'openLibrary') dispatch({ type: 'closeReader' });
+    else if (command === 'openLibrary') closeBook();
     else if (command === 'openToc') dispatch({ type: 'openDrawer', drawer: 'toc' });
     else if (command === 'openSettings') dispatch({ type: 'openDrawer', drawer: 'settings' });
     return;
   }
   const incoming = event.data as Partial<LibraryStateMessage>;
   if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) { dispatch({ type: 'libraryLoaded', books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} }); if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences }); return; }
+  if (isLibraryLoadError(event.data)) { dispatch({ type: 'showError', message: event.data.message }); return; }
   if (!isExtensionToReaderV2Message(event.data)) return;
   const message: ExtensionToReaderV2Message = event.data;
   if (!state.requestId || message.requestId !== state.requestId || message.bookId !== state.activeBook?.id) return;
-  if (message.type === 'bookReady') { dispatch({ type: 'bookReady', requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId }); post(envelope('requestSection', message.initialSectionId)); return; }
+  if (message.type === 'bookReady') { dispatch({ type: 'bookReady', requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId, initialProgression: message.initialLocator.progression }); post(envelope('requestSection', message.initialSectionId)); return; }
   if (message.type === 'sectionReady') { currentSectionHtml = message.section.sanitizedHtml; dispatch({ type: 'selectSection', sectionId: message.sectionId }); updateLayout(); return; }
   if (message.type === 'bookStart' || message.type === 'bookEnd') { dispatch({ type: 'bookBoundary', edge: message.type === 'bookStart' ? 'start' : 'end' }); return; }
   if (message.type === 'readerError') dispatch({ type: 'showError', message: message.message });
@@ -183,6 +200,12 @@ function isReaderCommand(value: unknown): value is { type: 'command'; command: '
   if (typeof value !== 'object' || value === null || (value as { type?: unknown }).type !== 'command') return false;
   return ['nextPage', 'previousPage', 'nextChapter', 'previousChapter', 'openLibrary', 'openToc', 'openSettings']
     .includes(String((value as { command?: unknown }).command));
+}
+
+function isLibraryLoadError(value: unknown): value is { type: 'libraryLoadError'; message: string } {
+  return typeof value === 'object' && value !== null
+    && (value as { type?: unknown }).type === 'libraryLoadError'
+    && typeof (value as { message?: unknown }).message === 'string';
 }
 
 render(); post({ type: 'libraryReady' });
