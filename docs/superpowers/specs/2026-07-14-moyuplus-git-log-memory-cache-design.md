@@ -268,7 +268,7 @@ type ExtensionToGitLogMessage =
 ### 12.3 Webview 状态与渲染
 
 - `begin` 携带缓存时首次状态为 ready，不经过可见 loading。
-- Webview 拒绝小于当前 `modeGeneration` 的迟到顶层模式消息。
+- Webview 拒绝小于或等于当前 `modeGeneration` 的迟到或重复顶层模式消息。
 - 刷新结果一致时没有 reducer/render 动作。
 - 刷新结果变化时更新数据并重置页码。
 - `gitLogRefreshFailed` 保留 ready、commits、页码和翻页能力，并设置提示。
