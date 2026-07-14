@@ -53,7 +53,14 @@ interface GitLogUiSession {
   queryKey: string;
   presentedFingerprint?: string;
   usedCache: boolean;
+  modeDelivered: boolean;
+  observedJobToken?: symbol;
+  deferredOutcome?: GitLogRefreshOutcome;
 }
+
+type GitLogRefreshOutcome =
+  | { jobToken: symbol; type: 'success'; result: GitLogResult }
+  | { jobToken: symbol; type: 'error'; error: GitLogError };
 
 interface GitLogRefreshControllerState {
   activeJob?: GitLogRefreshJob;
@@ -133,14 +140,15 @@ Provider 使用同一个纯函数一次性构造它：workspace roots 与活动�
 
 1. 捕获唯一查询快照；
 2. 递增顶层 `modeGeneration`；
-3. 先登记唯一 `GitLogUiSession`；
+3. 先登记唯一 `GitLogUiSession`；如果此时有相同 key、尚未 abort 的活动 job，只记录其 token 到 `observedJobToken`，不追加 Promise 回调；
 4. 投递携带 generation 的缓存首帧或 loading 首帧；
-5. 投递返回后再次验证 Provider 未 dispose、mode store 仍 active、view 仍可见，且 session ID/generation 仍为当前值；
-6. 只有验证通过才请求启动或复用刷新。
+5. 投递返回后再次验证 Provider 未 dispose、mode store 仍 active、view 仍可见，且 session ID/generation 仍为当前值，然后设置 `modeDelivered = true`；
+6. 若等待投递期间 matching job 已完成，消费唯一 `deferredOutcome`：成功结果按指纹决定静默或发 ready，失败按是否使用缓存决定提示或错误；该 outcome 被消费后不得再次启动查询；
+7. 若 matching job 仍在运行则继续复用；只有既没有 matching job、也没有已消费 outcome 时才请求新刷新。新启动任务的 token 必须写入该 session 的 `observedJobToken`。
 
 协调器在等待该操作返回后同样复核自己的 `currentSessionId`；取消操作必须携带 session ID，旧取消不能解除新 session。
 
-所有能切换顶层页面的消息——`modeGitLog`、`modeLibrary` 和 `modeReaderRestore`——都携带由 Provider 单调递增的 `modeGeneration`。Webview 保存已接受的最大 generation，拒绝更小的顶层模式消息。这样即使旧 `postMessage` 延迟送达，也不能在已经退出、隐藏或恢复 Reader 后重新激活 Git Log。普通 Git 数据消息仍同时使用 session ID 隔离。
+所有能切换顶层页面的消息——`modeGitLog`、`modeLibrary`、`modeReaderRestore` 和仅用于推进代际的 `modeInvalidated` tombstone——都携带由 Provider 单调递增的 `modeGeneration`。Webview 保存已接受的最大 generation，拒绝小于或等于该值的重复/迟到顶层模式消息。取消、hide 或 detach UI session 时，即使没有可立即展示的 Reader/Library 目标，也必须递增 generation，并向仍存在的 Webview 投递 `modeInvalidated`；Webview 接受后释放当前 Git view、进入空白 boot 状态并推进 generation。后续 reveal/bootstrap 再投递更高 generation 的真实目标模式。这样即使旧 `postMessage` 延迟送达，也不能在已经退出、隐藏或恢复 Reader 后重新激活 Git Log。普通 Git 数据消息仍同时使用 session ID 隔离。
 
 ## 8. 单飞刷新与频繁切换
 
@@ -152,7 +160,9 @@ Provider 在任意时刻最多维护一个活动 `GitLogRefreshJob` 和一个 la
 - 等待旧任务 settle 期间再次收到请求时，只替换唯一的 `pendingSnapshot`。即使最新请求重新变为正在退出的 job key，也不能复用已请求 abort 的任务；旧任务 settle 后按最新快照重新启动。
 - 切出 Git Log、隐藏 Webview 或取消 UI session 时，只解除 `GitLogUiSession` 并使页面消息失效；相同上下文的刷新任务可以继续，在完成后仅更新缓存。
 - 刷新任务完成时通过任务 token 验证自己仍是当前活动任务，并通过 `abortRequested` 决定是否允许写缓存或发消息。它的 `finally` 只有在 token 仍匹配时才清除 active job，随后 drain 唯一 pending；旧任务不得清除或覆盖已建立的新任务。
-- 完成处理器读取当时唯一的当前 UI session；没有有效 session 时不发送 UI 消息。
+- 完成处理器读取当时唯一的当前 UI session。只有 `uiSession.queryKey === job.queryKey`、`uiSession.observedJobToken === job.token`、session/generation 仍有效且 `abortRequested === false` 时，该 job 才可能为该 session 产生结果；消息的 session ID 必须取自这个已匹配 session。key/token 不匹配时，成功结果最多更新单条缓存，失败保持静默。
+- matching session 的 `modeDelivered === false` 时，完成处理器不得立即 post 数据消息，而是只保存一个带 job token 的 `deferredOutcome`。投递首帧完成后由第 7.3 节的原子操作消费它，保证 `gitLogReady`/错误不会先于 `modeGitLog` 到达，也不会再次启动同 key 查询。
+- matching session 的 `modeDelivered === true` 时才允许按现有指纹/错误规则立即发消息。没有有效 session 时不发送 UI 消息。
 - abort 被视为内部控制流：被替换或 dispose 的任务不得产生刷新失败提示或错误页。
 
 现有协调器对快速连续快捷键的奇偶合并继续生效。单飞刷新进一步保证已经启动的同上下文查询不会因切出再切入而反复创建。
@@ -202,6 +212,7 @@ type ExtensionToGitLogMessage =
       cached?: GitLogDisplayResult;
     }
   | { type: 'gitLogRefreshFailed'; sessionId: string; code: string; message: string }
+  | { type: 'modeInvalidated'; sessionId?: string; modeGeneration: number }
   // existing messages remain
 ```
 
@@ -241,12 +252,16 @@ type ExtensionToGitLogMessage =
 - 查询在切出后完成时只更新缓存，不发送 UI 消息。
 - 旧 token、旧 session 和迟到结果不能覆盖当前任务或页面。
 - 延迟 `postMessage` 期间发生 hide、退出或 Webview dispose 时，不会启动查询或让迟到 `modeGitLog` 复活页面；mode generation 有独立测试。
+- 活动 A 在 delayed `modeGitLog(B)` 期间成功或失败时，不得向 B session 发送 A 的 ready/error；A 成功最多更新 A 缓存，A 失败保持静默。
+- 同 key job 在 `modeGitLog` 投递等待期间 settle 时只生成/消费一个 deferred outcome，首帧交付后不再启动第二次 `service.load`；ready/error 不得先于建会话消息到达。
+- `modeGitLog` 尚未交付时执行 hide → hidden exit → 迟到交付 → reveal，tombstone generation 会拒绝旧模式且 reveal 前不闪现 Git 页面。
 - hide、Webview dispose、Webview 重建和扩展 deactivate 分别测试：前几者保留缓存/允许刷新，deactivate abort、清空并静默所有迟到回调。
 - Provider dispose 通过 `context.subscriptions` 的真实注册测试验证，不只直接调用实例方法。
 - 缓存始终只有一个条目；新 key 成功后替换旧条目。
 - 查询快照 getter 每项只读取一次；覆盖 roots 顺序、路径规范化、active file、max clamp/round 和带分隔符路径不会产生 key 碰撞。
 - 实际投递的 cached/ready 消息严格等于 `GitLogDisplayResult` 白名单，不含 `repositoryRoot`、`fingerprint` 或其他额外字段。
 - 可计数 job harness 断言每个真实 job 只安装一个完成处理器，不能仅用 `service.load` 次数间接推断。
+- runner 忽略 abort 并让 `abortRequested` job 成功 resolve 时，该结果不得写缓存或发消息，finally 只启动一次最新 pending；同场景 reject 时不得显示 `gitLogError`/`gitLogRefreshFailed`，且仍正确释放 active 并 drain pending。
 
 测试使用 deferred Promise 和可观察的 AbortSignal，不依赖真实延时。
 
