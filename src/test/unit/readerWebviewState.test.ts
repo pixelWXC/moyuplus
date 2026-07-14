@@ -26,7 +26,7 @@ function book(id: string, format: 'txt' | 'epub'): BookRecord {
 }
 
 describe('reader Webview library state', () => {
-  it('represents an empty library as a ready empty state with an import call to action', () => {
+  it('represents an empty library as ready without a duplicate import action', () => {
     const state = readerAppReducer(createInitialReaderAppState(), {
       type: 'libraryLoaded',
       books: [],
@@ -37,7 +37,7 @@ describe('reader Webview library state', () => {
     expect(state.view).toBe('library');
     expect(state.status).toBe('ready');
     expect(state.books).toEqual([]);
-    expect(state.emptyAction).toBe('importBook');
+    expect(state).not.toHaveProperty('emptyAction');
   });
 
   it('keeps EPUB and TXT metadata and progress together in a mixed library', () => {

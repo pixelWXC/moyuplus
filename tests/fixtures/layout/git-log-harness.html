@@ -23,10 +23,26 @@
     };
     const defaults = { showHash: true, showAuthor: true, showRelativeTime: true, showAbsoluteDate: true, layout: 'lines', maxCommits: 200 };
     const send = data => window.dispatchEvent(new MessageEvent('message', { data }));
+    let modeGeneration = 0;
+    const libraryBooks = [
+      {
+        schemaVersion: 2, id: 'book-1', uri: 'file:///books/one.txt', source: 'external', title: 'One', authors: [],
+        capabilities: { readable: true, typing: true, toc: true }, createdAt: 1, updatedAt: 1,
+        format: 'txt', formatData: { encoding: 'utf8' }
+      },
+      {
+        schemaVersion: 2, id: 'book-2', uri: 'file:///books/two.epub', source: 'external', title: 'Two', authors: ['Author'],
+        capabilities: { readable: true, typing: false, toc: true }, createdAt: 1, updatedAt: 1,
+        format: 'epub', formatData: {}
+      }
+    ];
     window.gitLogHarness = {
+      loadLibrary() {
+        send({ type: 'libraryState', books: [], availability: {}, progress: {} });
+      },
       load(count, preferences = {}) {
         const sessionId = `layout-${Date.now()}`;
-        send({ type: 'modeGitLog', sessionId, readerPreferences, preferences: { ...defaults, ...preferences } });
+        send({ type: 'modeGitLog', sessionId, modeGeneration: ++modeGeneration, readerPreferences, preferences: { ...defaults, ...preferences } });
         send({
           type: 'gitLogReady', sessionId, repositoryName: 'moyuplus', branchName: 'main', detached: false,
           commits: Array.from({ length: count }, (_, index) => ({
@@ -36,6 +52,15 @@
           }))
         });
       },
+      restoreReaderFromGit() {
+        this.load(1);
+        send({
+          type: 'modeReaderRestore', modeGeneration: ++modeGeneration, book: libraryBooks[0], requestId: 'restore-1',
+          books: libraryBooks, availability: { 'book-1': true, 'book-2': true },
+          progress: { 'book-1': .4, 'book-2': .2 }, preferences: readerPreferences
+        });
+      },
+      returnToLibrary() { document.querySelector('[aria-label="返回书架"]')?.click(); },
       state() {
         const content = document.querySelector('#git-log-content');
         const progress = document.querySelector('#git-log-page-progress');

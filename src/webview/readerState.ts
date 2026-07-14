@@ -17,7 +17,6 @@ export interface ReaderAppState {
   view: 'library' | 'reader';
   status: 'loading' | 'ready' | 'error';
   books: LibraryBookItem[];
-  emptyAction?: 'importBook';
   pendingRemoval?: { bookId: string; message: string };
   error?: string;
   activeBook?: BookRecord;
@@ -89,8 +88,7 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
         books,
         pendingRemoval: state.pendingRemoval && books.some(book => book.id === state.pendingRemoval?.bookId)
           ? state.pendingRemoval
-          : undefined,
-        ...(books.length === 0 ? { emptyAction: 'importBook' as const } : {})
+          : undefined
       };
     }
     case 'requestRemove':
@@ -103,8 +101,7 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
       return {
         ...state,
         books: state.books.filter(book => book.id !== action.bookId),
-        pendingRemoval: undefined,
-        ...(state.books.length === 1 ? { emptyAction: 'importBook' as const } : {})
+        pendingRemoval: undefined
       };
     case 'showError':
       return { ...state, status: 'error', error: action.message };

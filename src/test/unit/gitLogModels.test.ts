@@ -4,6 +4,7 @@ import {
   normalizeGitLogCommit,
   normalizeGitLogPreferences
 } from '../../git/gitLogModels';
+import * as gitLogModels from '../../git/gitLogModels';
 
 describe('Git Log models', () => {
   it('creates the approved visible-field and pagination defaults', () => {
@@ -25,6 +26,19 @@ describe('Git Log models', () => {
       maxCommits: 1000
     });
     expect(normalizeGitLogPreferences('damaged')).toEqual(createDefaultGitLogPreferences());
+  });
+
+  it('shares one commit-limit normalizer for rounding, clamping, and invalid fallback', () => {
+    const normalize = (gitLogModels as unknown as {
+      normalizeGitLogMaxCommits?: (value: unknown) => number;
+    }).normalizeGitLogMaxCommits;
+
+    expect(normalize).toBeTypeOf('function');
+    expect(normalize?.(19.6)).toBe(20);
+    expect(normalize?.(20.6)).toBe(21);
+    expect(normalize?.(1000.6)).toBe(1000);
+    expect(normalize?.(Number.POSITIVE_INFINITY)).toBe(200);
+    expect(normalize?.('200')).toBe(200);
   });
 
   it('accepts only complete commits with a finite authored timestamp', () => {

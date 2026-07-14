@@ -250,3 +250,72 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - [x] 生成并验证 0.0.6 VSIX
 - [x] 提交代码、创建版本标签并推送
 - **Status:** complete；0.0.6 已发布
+
+## 2026-07-14 Git Log 内存缓存实施（当前）
+
+### Goal
+执行 `docs/superpowers/plans/2026-07-14-moyuplus-git-log-memory-cache-implementation-plan.md`，完成单条内存缓存、严格单飞刷新、缓存首帧、mode generation、生命周期释放与完整回归验证。
+
+### Phases
+
+- [x] Phase 0：确认基线并补齐可控异步夹具
+- [x] Phase 1：查询模型、结果指纹与 Webview 白名单协议
+- [x] Phase 2：严格串行刷新控制器
+- [x] Phase 3：原子 Git session、Provider 缓存与生命周期
+- [x] Phase 4：Webview 缓存首帧、刷新提示与代际防护
+- [x] Phase 5：集成、资源上限与完整自动验证
+- [x] Phase 6：人工验收（Extension Development Host）
+- **Status:** complete；自动验证与人工验收均通过
+
+## 2026-07-14 Reader / Git Log 回归修复（当前）
+
+### Goal
+修复三项人工验收回归：从书架进入 Git Log 不得错误恢复上次阅读位置；插件启动即 Git Log 后恢复阅读并返回书架时必须保留完整书架；空书架移除重复导入入口和异常“文”字标记。
+
+### Phases
+
+- [x] Phase R1：RED——补充宿主模式来源、启动恢复快照和空状态文案测试
+- [x] Phase R2：GREEN——以最小改动引入可见阅读态并让恢复消息携带完整书架
+- [x] Phase R3：GREEN——简化空书架 UI
+- [x] Phase R4：回归——目标测试、全量单测、布局测试、编译和 diff 检查
+- **Status:** complete；自动验证与人工验收均通过
+
+## 2026-07-14 发布 0.0.7（当前）
+
+- [x] 确认 Git Log 内存缓存与 Reader 回归修复人工验收通过
+- [x] 版本号统一更新为 0.0.7
+- [x] 更新 README、CHANGELOG 与实施记录
+- [x] 执行完整 package 门禁并核对 VSIX 内容
+- [x] 提交 0.0.7 代码与文档
+- **Status:** complete
+
+### Package verification
+
+- `npm run package` 通过：39 个单测文件 182/182，Chromium 布局/隐私测试 15/15。
+- 生成 `moyuplus-0.0.7.vsix`，包内版本为 0.0.7，共 8 个运行时条目，无源码、测试、计划、source map、lockfile 或书籍文件。
+- VSIX SHA-256：`E13BD2B38790F13C834DD092159DC2B5F2DC8AC6A64ECCCF1DEC1D79F7E9F09A`。
+- `vsce` 提示 manifest 缺少 repository 字段和 LICENSE 文件；与既有本地发布方式一致，不阻断 VSIX 生成，本轮不推断仓库 URL 或许可类型。
+
+### RED evidence
+
+- 宿主目标测试 15 项中新增 2 项按预期失败：书架进入 Git Log 后错误得到 `resumeTarget`；`modeReaderRestore` 缺少 `books`、`availability`、`progress`。
+- 首次并行执行单测与布局测试时，单测非零退出使编排调用只返回单测输出；布局 RED 改为单独执行，不重复相同失败命令。
+- 空书架 DOM 测试按预期看到旧标题、两个导入入口和 `.empty-mark`；启动恢复 DOM 测试按预期在返回书架后得到 0 个 `.book-row`。
+- reducer 残留的 `emptyAction: importBook` 测试先按预期失败，移除后目标状态测试 9/9 通过。
+
+### Confirmed behavior
+
+- 阅读页进入 Git Log：退出后恢复原书与原位置。
+- 书架进入 Git Log：退出后返回书架，不得使用 ReaderController 中的历史位置。
+- 插件启动即 Git Log：若持久化了有效恢复目标，退出后恢复该书；随后返回书架时完整书籍必须存在。
+
+### Execution constraints
+
+- 严格 RED → GREEN → REFACTOR；每个新增行为先观察目标测试按预期失败。
+- 保留用户改动；不重置、不清理、不自动提交。
+- 缓存最多一条、active job 最多一个、pending snapshot 最多一个。
+- 不手工编辑 Webview bundle；仅通过构建脚本生成。
+
+### Error log
+
+- 2026-07-14：首次读取技能文件遗漏 `ok-skills` 目录层级；已改用技能目录清单中的完整路径，未重复失败调用。

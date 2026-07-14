@@ -11,11 +11,15 @@ import {
   OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID
 } from '../shortcuts/shortcutSettings';
 import type { ReadingPosition } from '../domain/locators';
-import { isGitLogToExtensionMessage } from '../git/gitLogMessages';
+import { isGitLogToExtensionMessage, toGitLogDisplayResult } from '../git/gitLogMessages';
 import { GitLogError, type GitLogResult, type GitLogService } from '../git/gitLogService';
 import {
-  GitLogModeCoordinator, TOGGLE_GIT_LOG_COMMAND_ID, type GitLogCoordinatorSessions, type GitLogCoordinatorView
+  GitLogModeCoordinator, TOGGLE_GIT_LOG_COMMAND_ID, type GitLogCoordinatorView
 } from '../git/gitLogModeCoordinator';
+import {
+  GitLogRefreshController, type GitLogRefreshOutcome
+} from '../git/gitLogRefreshController';
+import { createGitLogQuerySnapshot } from '../git/gitLogQuery';
 import type { GitLogPreferencesStore } from '../storage/gitLogPreferencesStore';
 import type { GitLogModeStore, GitLogResumeTarget } from '../storage/gitLogModeStore';
 
@@ -53,22 +57,35 @@ export interface ReaderLibraryBridge {
   savePreferences?(preferences: unknown): void | PromiseLike<unknown>;
 }
 
-export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoordinatorView, GitLogCoordinatorSessions {
+export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoordinatorView, vscode.Disposable {
   private view?: vscode.WebviewView;
   private canNextPage = false;
   private coordinator?: GitLogModeCoordinator;
-  private gitSession?: { id: string; abort: AbortController };
+  private readonly gitRefresh?: GitLogRefreshController;
+  private gitCache?: { queryKey: string; result: GitLogResult };
+  private gitUiSession?: GitLogUiSession;
+  private modeGeneration = 0;
   private bootstrapped = false;
+  private readerPageActive = false;
+  private disposed = false;
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly controller: ReaderViewController,
     private readonly library?: ReaderLibraryBridge,
     private readonly git?: ReaderGitLogBridge
-  ) {}
+  ) {
+    if (git) {
+      this.gitRefresh = new GitLogRefreshController(
+        request => git.service.load(request),
+        outcome => this.handleGitRefreshOutcome(outcome)
+      );
+    }
+  }
 
   attachCoordinator(coordinator: GitLogModeCoordinator): void { this.coordinator = coordinator; }
 
   resolveWebviewView(view: vscode.WebviewView): void {
+    if (this.disposed) return;
     this.view = view;
     this.bootstrapped = false;
     const mediaRoot = vscode.Uri.joinPath(this.extensionUri, 'media');
@@ -101,44 +118,67 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     await vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`);
   }
 
-  async showGitLoading(sessionId: string): Promise<void> {
-    if (!this.git) return;
-    await this.postMessage({
+  async openGitSession(sessionId: string): Promise<void> {
+    const git = this.git;
+    const refresh = this.gitRefresh;
+    const view = this.view;
+    if (!git || !refresh || !view || !view.visible || this.disposed) return;
+
+    const preferences = git.preferencesStore.get();
+    const snapshot = createGitLogQuerySnapshot({
+      getWorkspaceRoots: () => git.workspaceRoots(),
+      getActiveFilePath: () => git.activeFilePath(),
+      getMaxCommits: () => preferences.maxCommits
+    });
+    const cached = this.gitCache?.queryKey === snapshot.queryKey ? this.gitCache.result : undefined;
+    const session: GitLogUiSession = {
+      id: sessionId,
+      queryKey: snapshot.queryKey,
+      generation: this.nextModeGeneration(),
+      presentedFingerprint: cached?.fingerprint,
+      usedCache: cached !== undefined,
+      modeDelivered: false
+    };
+    this.gitUiSession = session;
+    session.observedJobToken = refresh.request(snapshot).token;
+
+    await view.webview.postMessage({
       type: 'modeGitLog',
       sessionId,
-      preferences: this.git.preferencesStore.get(),
-      readerPreferences: this.git.readerPreferences()
+      modeGeneration: session.generation,
+      preferences,
+      readerPreferences: git.readerPreferences(),
+      ...(cached ? { cached: toGitLogDisplayResult(cached) } : {})
     });
+
+    if (!this.isCurrentGitSession(session, view)) return;
+    session.modeDelivered = true;
+    const deferredOutcome = session.deferredOutcome;
+    session.deferredOutcome = undefined;
+    if (deferredOutcome) this.deliverGitRefreshOutcome(session, deferredOutcome);
+  }
+
+  detachGitSession(sessionId: string): void {
+    const session = this.gitUiSession;
+    if (!session || session.id !== sessionId) return;
+    this.gitUiSession = undefined;
+    const modeGeneration = this.nextModeGeneration();
+    void this.postMessage({ type: 'modeInvalidated', sessionId, modeGeneration });
   }
 
   async showLibrary(message?: string): Promise<void> {
-    await this.postMessage({ type: 'modeLibrary', ...(message ? { message } : {}) });
+    this.gitUiSession = undefined;
+    this.readerPageActive = false;
+    await this.postMessage({ type: 'modeLibrary', modeGeneration: this.nextModeGeneration(), ...(message ? { message } : {}) });
     await this.refreshLibrary();
+  }
+
+  captureVisibleReaderPosition(): ReadingPosition | undefined {
+    return this.readerPageActive ? this.controller.capturePosition?.() : undefined;
   }
 
   async showError(message: string): Promise<void> {
     await vscode.window.showErrorMessage(message);
-  }
-
-  start(sessionId: string): void {
-    if (!this.git || !this.isVisible()) return;
-    this.cancel();
-    const abort = new AbortController();
-    this.gitSession = { id: sessionId, abort };
-    void this.git.service.load({
-      workspaceRoots: this.git.workspaceRoots(),
-      activeFilePath: this.git.activeFilePath(),
-      maxCommits: this.git.preferencesStore.get().maxCommits,
-      signal: abort.signal
-    }).then(result => this.finishGitSession(sessionId, result)).catch(error => this.failGitSession(sessionId, error));
-  }
-
-  cancel(): void {
-    const session = this.gitSession;
-    this.gitSession = undefined;
-    if (!session) return;
-    session.abort.abort();
-    void this.postMessage({ type: 'gitLogInvalidated', sessionId: session.id });
   }
 
   async requestNextPage(): Promise<boolean> {
@@ -152,10 +192,11 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   }
 
   async postMessage(message: unknown): Promise<boolean> {
-    return this.view ? this.view.webview.postMessage(message) : false;
+    return !this.disposed && this.view ? this.view.webview.postMessage(message) : false;
   }
 
   private async handleMessage(value: unknown): Promise<void> {
+    if (this.disposed) return;
     if (isNavigationState(value)) {
       this.canNextPage = value.canNextPage;
       return;
@@ -183,7 +224,26 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     if (isBookAction(value, 'startTypingPractice')) { await this.library?.startTypingPractice?.(value.bookId); return; }
     if (isRecord(value) && value.type === 'savePreferences') { await this.library?.savePreferences?.(value.preferences); await this.refreshLibrary(); return; }
     if (!isReaderToExtensionV2Message(value)) return;
-    await dispatchReaderMessage(this.controller, value);
+    await this.dispatchReaderMessage(value);
+  }
+
+  private async dispatchReaderMessage(message: ReaderToExtensionV2Message): Promise<void> {
+    switch (message.type) {
+      case 'openBook': {
+        const opened = await this.controller.openBook(message.bookId, message.requestId);
+        if (opened !== false) this.readerPageActive = true;
+        return;
+      }
+      case 'requestSection': await this.controller.requestSection(message.sectionId); return;
+      case 'requestNextSection': await this.controller.requestNextSection(message.sectionId); return;
+      case 'requestPreviousSection': await this.controller.requestPreviousSection(message.sectionId); return;
+      case 'layoutStable': this.controller.reportLayout(message.locator, message.bookProgression); return;
+      case 'closeBook':
+        this.readerPageActive = false;
+        this.controller.reportLayout(message.locator, message.bookProgression);
+        await this.controller.flush();
+        return;
+    }
   }
 
   private async refreshLibrary(): Promise<void> {
@@ -202,39 +262,90 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     const books = isRecord(snapshot) && Array.isArray(snapshot.books) ? snapshot.books : [];
     const book = books.find(item => isRecord(item) && item.id === target.bookId);
     if (!book) return false;
+    const availability = isRecord(snapshot) && isRecord(snapshot.availability) ? snapshot.availability : {};
+    const progress = isRecord(snapshot) && isRecord(snapshot.progress) ? snapshot.progress : {};
     const requestId = `git-log-restore-${Date.now()}`;
     await this.view.webview.postMessage({
-      type: 'modeReaderRestore', book, requestId,
+      type: 'modeReaderRestore', modeGeneration: this.nextModeGeneration(), book, requestId,
+      books, availability, progress,
       ...(isRecord(snapshot) && isRecord(snapshot.preferences) ? { preferences: snapshot.preferences } : {})
     });
     const opened = await this.controller.openBook(target.bookId, requestId);
+    this.readerPageActive = opened !== false;
     return opened !== false;
   }
 
-  private async finishGitSession(sessionId: string, result: GitLogResult): Promise<void> {
-    if (this.gitSession?.id !== sessionId || !this.isVisible()) return;
-    this.gitSession = undefined;
-    await this.postMessage({ type: 'gitLogReady', sessionId, ...result });
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.coordinator?.dispose();
+    this.gitUiSession = undefined;
+    this.gitCache = undefined;
+    this.readerPageActive = false;
+    this.gitRefresh?.dispose();
+    this.view = undefined;
+    void this.controller.dispose();
   }
 
-  private async failGitSession(sessionId: string, error: unknown): Promise<void> {
-    if (this.gitSession?.id !== sessionId || !this.isVisible()) return;
-    this.gitSession = undefined;
-    const code = error instanceof GitLogError ? error.code : 'queryFailed';
-    const message = error instanceof GitLogError ? error.message : 'Unable to read Git history.';
-    await this.postMessage({ type: 'gitLogError', sessionId, code, message });
+  private handleGitRefreshOutcome(outcome: GitLogRefreshOutcome): void {
+    if (this.disposed) return;
+    if (outcome.status === 'success') this.gitCache = { queryKey: outcome.queryKey, result: outcome.result };
+    const session = this.gitUiSession;
+    if (!session || session.queryKey !== outcome.queryKey || session.observedJobToken !== outcome.token) return;
+    if (!this.git?.modeStore.get().active || !this.isVisible()) return;
+    if (!session.modeDelivered) {
+      session.deferredOutcome = outcome;
+      return;
+    }
+    this.deliverGitRefreshOutcome(session, outcome);
+  }
+
+  private deliverGitRefreshOutcome(session: GitLogUiSession, outcome: GitLogRefreshOutcome): void {
+    if (this.gitUiSession !== session || !this.git?.modeStore.get().active || !this.isVisible()) return;
+    if (outcome.status === 'success') {
+      if (outcome.result.fingerprint === session.presentedFingerprint) return;
+      session.presentedFingerprint = outcome.result.fingerprint;
+      void this.postMessage({ type: 'gitLogReady', sessionId: session.id, ...toGitLogDisplayResult(outcome.result) });
+      return;
+    }
+    const { code, message } = toGitLogFailure(outcome.error);
+    void this.postMessage({
+      type: session.usedCache ? 'gitLogRefreshFailed' : 'gitLogError',
+      sessionId: session.id,
+      code,
+      message
+    });
+  }
+
+  private isCurrentGitSession(session: GitLogUiSession, view: vscode.WebviewView): boolean {
+    return !this.disposed
+      && this.gitUiSession === session
+      && this.view === view
+      && view.visible
+      && this.git?.modeStore.get().active === true;
+  }
+
+  private nextModeGeneration(): number {
+    this.modeGeneration += 1;
+    return this.modeGeneration;
   }
 }
 
-async function dispatchReaderMessage(controller: ReaderViewController, message: ReaderToExtensionV2Message): Promise<void> {
-  switch (message.type) {
-    case 'openBook': await controller.openBook(message.bookId, message.requestId); return;
-    case 'requestSection': await controller.requestSection(message.sectionId); return;
-    case 'requestNextSection': await controller.requestNextSection(message.sectionId); return;
-    case 'requestPreviousSection': await controller.requestPreviousSection(message.sectionId); return;
-    case 'layoutStable': controller.reportLayout(message.locator, message.bookProgression); return;
-    case 'closeBook': controller.reportLayout(message.locator, message.bookProgression); await controller.flush(); return;
-  }
+interface GitLogUiSession {
+  readonly id: string;
+  readonly queryKey: string;
+  readonly generation: number;
+  presentedFingerprint?: string;
+  readonly usedCache: boolean;
+  observedJobToken?: number;
+  modeDelivered: boolean;
+  deferredOutcome?: GitLogRefreshOutcome;
+}
+
+function toGitLogFailure(error: unknown): { code: string; message: string } {
+  return error instanceof GitLogError
+    ? { code: error.code, message: error.message }
+    : { code: 'queryFailed', message: 'Unable to read Git history.' };
 }
 
 export function registerReaderView(
@@ -249,7 +360,7 @@ export function registerReaderView(
     git.modeStore,
     {
       capturePosition: () => {
-        capturedPosition = controller.capturePosition?.();
+        capturedPosition = provider.captureVisibleReaderPosition();
         return capturedPosition;
       },
       flush: async () => {
@@ -266,11 +377,11 @@ export function registerReaderView(
       },
       restore: target => provider.restoreReader(target)
     },
-    provider,
     provider
   ) : undefined;
   if (coordinator) provider.attachCoordinator(coordinator);
   context.subscriptions.push(
+    provider,
     vscode.window.registerWebviewViewProvider(READER_VIEW_ID, provider),
     vscode.commands.registerCommand(NEXT_READER_PAGE_COMMAND_ID, () => provider.requestNextPage()),
     vscode.commands.registerCommand(PREVIOUS_READER_PAGE_COMMAND_ID, () => provider.requestPreviousPage()),

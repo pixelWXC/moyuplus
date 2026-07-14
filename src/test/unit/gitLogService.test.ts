@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { GitLogError, GitLogService, parseGitLogOutput, type GitCommandRunner } from '../../git/gitLogService';
+import * as gitLogService from '../../git/gitLogService';
 
 function runner(outputs: Array<string | Error>): GitCommandRunner & { run: ReturnType<typeof vi.fn> } {
   return {
@@ -37,13 +38,30 @@ describe('GitLogService', () => {
       repositoryName: 'repo',
       branchName: 'feature/git-log',
       detached: false,
-      commits: [{ hash: 'abc1234', subject: 'Ship it', author: 'Purvar', authoredAt: 50 }]
+      commits: [{ hash: 'abc1234', subject: 'Ship it', author: 'Purvar', authoredAt: 50 }],
+      fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/)
     });
 
     expect(target.run.mock.calls[2][0]).toEqual(expect.arrayContaining([
       '-C', path.normalize('D:/repo'), '--no-pager', 'log', '--no-color', '-z', '-n', '200', 'HEAD'
     ]));
     expect(target.run.mock.calls[2][0]).not.toContain('--all');
+  });
+
+  it('creates an unambiguous stable fingerprint from repository metadata and raw output', () => {
+    const createFingerprint = (gitLogService as unknown as {
+      createGitLogFingerprint?: (repositoryRoot: string, branchName: string, detached: boolean, output: string) => string;
+    }).createGitLogFingerprint;
+
+    expect(createFingerprint).toBeTypeOf('function');
+    const output = ['abc', 'subject', 'author', '50', ''].join('\0');
+    const changedOutput = ['abc', 'subject', 'author', '51', ''].join('\0');
+    const fingerprint = createFingerprint?.(`D:/仓库${String.fromCharCode(0)}a`, 'main|topic', false, output);
+    expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(createFingerprint?.(`D:/仓库${String.fromCharCode(0)}a`, 'main|topic', false, output)).toBe(fingerprint);
+    expect(createFingerprint?.('D:/仓库', '0amain|topic', false, output)).not.toBe(fingerprint);
+    expect(createFingerprint?.(`D:/仓库${String.fromCharCode(0)}a`, 'main|topic', true, output)).not.toBe(fingerprint);
+    expect(createFingerprint?.(`D:/仓库${String.fromCharCode(0)}a`, 'main|topic', false, changedOutput)).not.toBe(fingerprint);
   });
 
   it('tries the active editor folder before workspace roots and supports detached HEAD', async () => {

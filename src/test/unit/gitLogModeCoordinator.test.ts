@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GitLogModeCoordinator, type GitLogCoordinatorReader, type GitLogCoordinatorSessions, type GitLogCoordinatorView } from '../../git/gitLogModeCoordinator';
+import { GitLogModeCoordinator, type GitLogCoordinatorReader, type GitLogCoordinatorView } from '../../git/gitLogModeCoordinator';
 import { GitLogModeStore } from '../../storage/gitLogModeStore';
 
 class MemoryMemento {
@@ -26,28 +26,25 @@ function setup(initial: Record<string, unknown> = {}) {
   const view: GitLogCoordinatorView = {
     isVisible: () => visible,
     focus: vi.fn(async () => { visible = true; }),
-    showGitLoading: vi.fn(async () => undefined),
+    openGitSession: vi.fn(async () => undefined),
+    detachGitSession: vi.fn(),
     showLibrary: vi.fn(async () => undefined),
     showError: vi.fn(async () => undefined)
   };
-  const sessions: GitLogCoordinatorSessions = {
-    start: vi.fn(), cancel: vi.fn()
-  };
-  const coordinator = new GitLogModeCoordinator(store, reader, view, sessions, {
+  const coordinator = new GitLogModeCoordinator(store, reader, view, {
     createSessionId: (() => { let id = 0; return () => `git-${++id}`; })(),
     flushTimeoutMs: 20
   });
-  return { coordinator, store, reader, view, sessions, setVisible: (value: boolean) => { visible = value; } };
+  return { coordinator, store, reader, view, setVisible: (value: boolean) => { visible = value; } };
 }
 
 describe('GitLogModeCoordinator', () => {
   it('persists active with a minimal resume target before showing Git loading', async () => {
-    const { coordinator, store, reader, view, sessions } = setup();
+    const { coordinator, store, reader, view } = setup();
     await coordinator.toggle();
     expect(store.get()).toMatchObject({ active: true, resumeTarget: { bookId: 'book-1', bookProgression: 0.5 } });
     expect(reader.flush).toHaveBeenCalledOnce();
-    expect(view.showGitLoading).toHaveBeenCalledWith('git-1');
-    expect(sessions.start).toHaveBeenCalledWith('git-1');
+    expect(view.openGitSession).toHaveBeenCalledWith('git-1');
   });
 
   it('focuses an absent view on entry but leaves a hidden view closed on exit', async () => {
@@ -83,10 +80,25 @@ describe('GitLogModeCoordinator', () => {
     await target.coordinator.toggle();
     target.setVisible(false);
     await target.coordinator.visibilityChanged();
-    expect(target.sessions.cancel).toHaveBeenCalledOnce();
+    expect(target.view.detachGitSession).toHaveBeenCalledWith('git-1');
     target.setVisible(true);
     await target.coordinator.visibilityChanged();
-    expect(target.view.showGitLoading).toHaveBeenLastCalledWith('git-2');
-    expect(target.sessions.start).toHaveBeenLastCalledWith('git-2');
+    expect(target.view.openGitSession).toHaveBeenLastCalledWith('git-2');
+  });
+
+  it('does not keep a session alive when atomic opening finishes after hide', async () => {
+    let release!: () => void;
+    const opened = new Promise<void>(resolve => { release = resolve; });
+    const target = setup();
+    vi.mocked(target.view.openGitSession).mockReturnValueOnce(opened);
+
+    const entering = target.coordinator.toggle();
+    await vi.waitFor(() => expect(target.view.openGitSession).toHaveBeenCalledWith('git-1'));
+    target.setVisible(false);
+    await target.coordinator.visibilityChanged();
+    release();
+    await entering;
+
+    expect(target.view.detachGitSession).toHaveBeenCalledWith('git-1');
   });
 });

@@ -27,19 +27,22 @@ export function createDefaultGitLogPreferences(): GitLogPreferences {
   };
 }
 
+export function normalizeGitLogMaxCommits(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(Math.min(1000, Math.max(20, value)))
+    : createDefaultGitLogPreferences().maxCommits;
+}
+
 export function normalizeGitLogPreferences(value: unknown): GitLogPreferences {
   const defaults = createDefaultGitLogPreferences();
   if (!isRecord(value)) return defaults;
-  const maxCommits = typeof value.maxCommits === 'number' && Number.isFinite(value.maxCommits)
-    ? Math.round(Math.min(1000, Math.max(20, value.maxCommits)))
-    : defaults.maxCommits;
   return {
     showHash: booleanOr(value.showHash, defaults.showHash),
     showAuthor: booleanOr(value.showAuthor, defaults.showAuthor),
     showRelativeTime: booleanOr(value.showRelativeTime, defaults.showRelativeTime),
     showAbsoluteDate: booleanOr(value.showAbsoluteDate, defaults.showAbsoluteDate),
     layout: value.layout === 'inline' || value.layout === 'lines' ? value.layout : defaults.layout,
-    maxCommits
+    maxCommits: normalizeGitLogMaxCommits(value.maxCommits)
   };
 }
 

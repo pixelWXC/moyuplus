@@ -24,8 +24,14 @@ export interface Webview {
   readonly postedMessages: unknown[];
   onDidReceiveMessage(callback: MessageCallback): Disposable;
   postMessage(message: unknown): Promise<boolean>;
+  deferNextPostMessage(): DeferredPostMessage;
   receiveMessage(message: unknown): Promise<void>;
   asWebviewUri(uri: Uri): Uri;
+}
+
+export interface DeferredPostMessage {
+  readonly message: unknown;
+  resolve(result?: boolean): void;
 }
 
 export interface WebviewView {
@@ -347,6 +353,7 @@ class TestWebview implements Webview {
   readonly cspSource = 'vscode-resource:';
   readonly postedMessages: unknown[] = [];
   private readonly messageCallbacks: MessageCallback[] = [];
+  private readonly deferredPosts: TestDeferredPostMessage[] = [];
 
   onDidReceiveMessage(callback: MessageCallback): Disposable {
     this.messageCallbacks.push(callback);
@@ -362,9 +369,22 @@ class TestWebview implements Webview {
   }
 
   async postMessage(message: unknown): Promise<boolean> {
+    const deferred = this.deferredPosts.shift();
+    if (deferred) {
+      deferred.capture(message);
+      const result = await deferred.promise;
+      if (result) this.postedMessages.push(message);
+      return result;
+    }
     this.postedMessages.push(message);
     return true;
   }
+
+  readonly deferNextPostMessage = (): DeferredPostMessage => {
+    const deferred = new TestDeferredPostMessage();
+    this.deferredPosts.push(deferred);
+    return deferred;
+  };
 
   async receiveMessage(message: unknown): Promise<void> {
     for (const callback of this.messageCallbacks) {
@@ -374,6 +394,24 @@ class TestWebview implements Webview {
 
   asWebviewUri(uri: Uri): Uri {
     return Uri.file(`/webview/${encodeURIComponent(uri.toString())}`);
+  }
+}
+
+class TestDeferredPostMessage implements DeferredPostMessage {
+  message: unknown;
+  readonly promise: Promise<boolean>;
+  private resolvePromise!: (result: boolean) => void;
+
+  constructor() {
+    this.promise = new Promise<boolean>(resolve => { this.resolvePromise = resolve; });
+  }
+
+  capture(message: unknown): void {
+    this.message = message;
+  }
+
+  resolve(result = true): void {
+    this.resolvePromise(result);
   }
 }
 

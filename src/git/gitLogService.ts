@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { normalizeGitLogCommit, type GitLogCommit } from './gitLogModels';
+import { normalizeGitLogCommit, normalizeGitLogMaxCommits, type GitLogCommit } from './gitLogModels';
 
 export type GitLogErrorCode = 'noWorkspace' | 'notGitRepository' | 'gitUnavailable' | 'noCommits' | 'queryTimedOut' | 'queryFailed';
 
@@ -30,6 +31,7 @@ export interface GitLogResult {
   branchName: string;
   detached: boolean;
   commits: GitLogCommit[];
+  fingerprint: string;
 }
 
 export class GitLogService {
@@ -55,7 +57,7 @@ export class GitLogService {
       }
     }
 
-    const maxCommits = Math.round(Math.min(1000, Math.max(20, request.maxCommits)));
+    const maxCommits = normalizeGitLogMaxCommits(request.maxCommits);
     let output: string;
     try {
       output = (await this.runner.run([
@@ -68,7 +70,14 @@ export class GitLogService {
     if (output.length === 0) throw new GitLogError('noCommits', 'The current branch has no commits.');
     const commits = parseGitLogOutput(output);
     if (commits.length === 0) throw new GitLogError('noCommits', 'The current branch has no commits.');
-    return { repositoryRoot, repositoryName: path.basename(repositoryRoot), branchName, detached, commits };
+    return {
+      repositoryRoot,
+      repositoryName: path.basename(repositoryRoot),
+      branchName,
+      detached,
+      commits,
+      fingerprint: createGitLogFingerprint(repositoryRoot, branchName, detached, output)
+    };
   }
 
   private async findRepository(candidates: string[], signal?: AbortSignal): Promise<string | undefined> {
@@ -84,6 +93,23 @@ export class GitLogService {
     if (unavailable) throw new GitLogError('gitUnavailable', 'Git is not available.');
     return undefined;
   }
+}
+
+export function createGitLogFingerprint(
+  repositoryRoot: string,
+  branchName: string,
+  detached: boolean,
+  output: string
+): string {
+  const metadata = JSON.stringify([repositoryRoot, branchName, detached]);
+  return createHash('sha256')
+    .update(String(Buffer.byteLength(metadata, 'utf8')))
+    .update(':')
+    .update(metadata)
+    .update(String(Buffer.byteLength(output, 'utf8')))
+    .update(':')
+    .update(output)
+    .digest('hex');
 }
 
 export function parseGitLogOutput(output: string): GitLogCommit[] {

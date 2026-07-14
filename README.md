@@ -17,6 +17,10 @@ MoyuPlus 是一个离线优先的 VS Code 侧边栏阅读器，支持 TXT、EPUB
 
 ## 使用
 
-在资源管理器中打开 **MoyuPlus Reader**，点击“导入书籍”选择 TXT 或 EPUB。按 `Alt+Q` 可在 Reader 与当前 Git 仓库的 Git Log Reader 模式之间切换；再次按下即可返回原书和最后阅读位置。Git Log 的字段、排列方式和最大加载数量可在页面右上角设置。
+在资源管理器中打开 **MoyuPlus Reader**，点击“导入”选择 TXT 或 EPUB。按 `Alt+Q` 可在 Reader 与当前 Git 仓库的 Git Log Reader 模式之间切换。Git Log 的字段、排列方式和最大加载数量可在页面右上角设置。
+
+Git Log 首次进入时读取当前仓库与分支；同一扩展运行期间再次进入会立即显示上次结果，并在后台刷新。仓库没有变化时页面和分页保持不动，刷新失败时已有缓存仍可阅读。缓存只存在于内存中，Reload Window、重启 VS Code 或扩展重新激活后会自然清空。
+
+返回目标由进入 Git Log 时的页面决定：从阅读页进入会恢复原书和最后位置，从书架进入会返回书架。如果插件启动时已经处于 Git Log，并保存了阅读恢复目标，退出后会恢复该书；之后返回书架仍会保留完整书籍列表。
 
 快捷键路由默认关闭，可在 VS Code 的 MoyuPlus 设置中按需开启。Git Log 切换命令默认绑定 `Alt+Q`，不会出现在命令面板中，但可以在 Keyboard Shortcuts 中重新绑定。

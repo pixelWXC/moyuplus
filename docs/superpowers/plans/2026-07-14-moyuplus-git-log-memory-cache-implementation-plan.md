@@ -4,7 +4,15 @@
 - 依据：[Git Log 内存缓存设计规格](../specs/2026-07-14-moyuplus-git-log-memory-cache-design.md)
 - 当前基线：`0.0.6`，Git Log Reader 已发布
 - 策略：测试先行、单条内存缓存、严格单飞、首帧缓存渲染、后台校验、显式生命周期释放
-- 当前状态：待实施
+- 当前状态：实现与自动验证完成，待 Phase 6 人工验收
+
+## 实施结果（2026-07-14）
+
+- 已完成 Phase 0–5：查询指纹、不可变快照、白名单消息、严格单飞、单条缓存、原子 session、mode generation、缓存首帧、刷新失败提示与生命周期释放均已实现。
+- 全量单元测试：39 个文件、180 个测试通过。
+- 全量 Chromium 布局与隐私测试：13 个测试通过。
+- TypeScript 检查、生产构建与 `git diff --check` 通过，Webview 生成物已与源文件同步。
+- Phase 6 仍需在真实 Extension Development Host 与真实 Git 仓库中人工执行本计划第 10 节场景。
 
 ## 1. 执行原则
 
@@ -443,6 +451,8 @@ git diff --check
 `npm run compile` 会重新生成 Webview bundle。验证 `media/readerApp.js`、`media/readerApp.css` 和 source map 与源文件同步，禁止手工修补构建产物。
 
 ## 10. Phase 6：人工验收
+
+**结果：2026-07-14 已通过。** 缓存首帧、后台静默校验、更新/失败提示、快速切换、Webview 重建、启动即 Git Log、Reader 原位置恢复、书架返回与空书架展示均在真实 Extension Development Host 中完成验收。
 
 在真实 Extension Development Host 和真实 Git 仓库中验证：
 

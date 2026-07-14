@@ -617,3 +617,54 @@
 - 版本从 0.0.5 提升至 0.0.6，已更新 README、CHANGELOG 和 Git Log 实施计划。
 - `npm run package` 通过，生成并验证 `moyuplus-0.0.6.vsix`。
 - 代码已提交为 `cd18974`，已创建 `v0.0.6` 标签并推送到 origin/master。
+
+### 2026-07-14 Git Log 内存缓存实施
+
+- **Status:** in_progress
+- 已读取并确认正式设计、实施计划、TDD 与文件化计划约束。
+- 实施开始时 `git status --short` 无输出；最近提交为 `7c0e60f Plan Git log memory cache implementation`。
+- 下一步：运行 Phase 0 基线测试与编译，然后从测试夹具和纯查询模型开始 RED。
+- Phase 0 基线：目标单测 5 个文件 17/17 通过；Git Log Chromium 布局 4/4 通过；`npm run compile` 通过。
+- Phase 1.1 首次 RED 因测试字符串中的 `\050` 触发 ESM 旧式八进制转义错误；已改为数组 `join('\\0')` 构造原始输出，重新验证 RED。
+- Phase 1.1 RED：共享 maxCommits helper、fingerprint 导出与结果字段均按预期缺失；GREEN 后 2 个目标文件 9/9 通过。
+- Phase 1.2 初次 RED 因新模块缺失而无法收集测试；补最小可加载骨架后确认 3 个行为断言全部失败，GREEN 后 3/3 通过。
+- Phase 1.3 RED：generation、投影 helper、刷新失败与 tombstone 均按预期失败；首次 GREEN 发现 ready 顶层 envelope 被内部 display 严格键检查误拒，拆分 envelope/display 校验后 3 个目标文件 12/12 通过。
+- Phase 2 RED：控制器模块缺失；补可加载骨架后 5 个行为测试全部失败。GREEN 后 5/5 通过，同 key 100 次请求只触发一次 load/outcome，不同 key 最大并发为 1。
+- Phase 3.1 RED：原子 session 接口缺失导致 5/6 失败；切换为 `openGitSession`/`detachGitSession(sessionId)` 并增加迟到复核后 6/6 通过。
+- Phase 0.2 异步夹具 RED：`deferNextPostMessage` 缺失；GREEN 后可逐调用控制 Webview 投递 resolve 与真实投递顺序，不使用 timer。
+- Phase 3 Provider RED：旧 Provider 无 `openGitSession`，7 个集成场景失败并产生预期接口错误；接入缓存/session/generation/单飞后协调器+Provider 14/14 通过。
+- Phase 3 生命周期回归首次仅因新增 Provider disposable 使 activation subscriptions 从 27 增至 28 而失败；已更新既有契约。
+- Phase 3 完整目标回归：协调器、Provider、extension、Reader Provider 共 25/25 通过；`npm run compile` 通过。
+- Phase 4 reducer RED：cached begin 与 refreshFailed 2 个场景按预期失败；GREEN 后 5/5 通过。
+- Phase 4 Chromium RED：缓存首帧仍显示 loading、tombstone 无法阻止迟到模式；实现 GitLogView cached begin/非阻断提示与 readerApp generation guard 后 Git Log 布局 6/6 通过。
+- Phase 5 补充单条缓存替换与 Webview dispose/rebuild active-job 复用回归；Provider 目标测试 13/13 通过。
+- Phase 5 最终门禁：全量单测 39 文件 180/180、全部 Chromium 布局/隐私 13/13、`npm run compile`、生产 bundle 生成和 `git diff --check` 全部通过。
+- **Implementation status:** complete；Phase 6 真实 Extension Development Host 人工验收尚未执行。
+
+### 2026-07-14 Reader / Git Log 人工验收回归修复
+
+- **Status:** in_progress
+- 用户补充并确认确定性触发路径：插件首次显示 Reader View 时已经处于 Git Log。
+- 已确认产品行为：该启动路径若保存了恢复目标，退出 Git Log 后应恢复原书。
+- 已完成根因定位与设计批准；开始按 RED → GREEN → REFACTOR 实施。
+- RED（宿主）：`gitLogViewProvider.test.ts` 新增 2 项均因目标缺陷失败，原有 13 项通过。
+- 工具记录：并行测试调用因单测预期非零退出而未返回布局分支输出；后续单独执行布局目标用例。
+- GREEN（宿主）：Provider 以 `readerPageActive` 区分当前书架/阅读页；目标 Provider 测试 21/21 通过。
+- GREEN（Webview）：`modeReaderRestore` 原子灌入完整书架后再打开目标书；空状态与启动恢复两条 Chromium 测试 2/2 通过。
+- 空状态现在只保留页头“导入”，正文显示“书架中还没有书”和右上角导入提示，已删除“文”字节点及样式。
+- RED/GREEN（状态清理）：移除 reducer 中未使用的 `emptyAction: importBook`，确保模型也不再表达重复导入动作。
+- 最终验证：`npm run compile` 通过；全量单测 39 文件 182/182；Chromium 布局/隐私测试 15/15；`git diff --check` 通过。
+- **Implementation status:** complete；尚待真实 Extension Development Host 人工验收。
+
+### 2026-07-14 发布 0.0.7
+
+- 用户确认 Git Log 缓存和 Reader 回归修复人工测试通过。
+- 已将 `package.json`、`package-lock.json` 统一更新为 0.0.7。
+- 已更新 README、CHANGELOG、实施计划和文件化工作记录。
+- **Status:** in_progress；下一步执行完整 package 门禁并核对 VSIX 后提交。
+- `npm run package` 通过：编译、39 文件 182 项单测、15 项 Chromium 测试全部成功。
+- 生成 `moyuplus-0.0.7.vsix`（469391 bytes，8 个条目），包内 manifest/package 版本为 0.0.7，禁止内容检查为空。
+- SHA-256：`E13BD2B38790F13C834DD092159DC2B5F2DC8AC6A64ECCCF1DEC1D79F7E9F09A`。
+- `vsce` 非阻断警告：缺少 repository 字段与 LICENSE；未在没有用户许可选择和远端 URL 依据时擅自补充。
+- 0.0.7 源码、测试、生成 bundle、版本和发布文档已提交；VSIX 按 `.gitignore` 保留为本地交付产物。
+- **Status:** complete。

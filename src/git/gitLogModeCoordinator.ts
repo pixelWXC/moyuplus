@@ -12,14 +12,10 @@ export interface GitLogCoordinatorReader {
 export interface GitLogCoordinatorView {
   isVisible(): boolean;
   focus(): Promise<void>;
-  showGitLoading(sessionId: string): Promise<void>;
+  openGitSession(sessionId: string): Promise<void>;
+  detachGitSession(sessionId: string): void;
   showLibrary(message?: string): Promise<void>;
   showError(message: string): Promise<void>;
-}
-
-export interface GitLogCoordinatorSessions {
-  start(sessionId: string): void;
-  cancel(): void;
 }
 
 export interface GitLogModeCoordinatorOptions {
@@ -40,7 +36,6 @@ export class GitLogModeCoordinator {
     private readonly store: GitLogModeStore,
     private readonly reader: GitLogCoordinatorReader,
     private readonly view: GitLogCoordinatorView,
-    private readonly sessions: GitLogCoordinatorSessions,
     options: GitLogModeCoordinatorOptions = {}
   ) {
     this.createSessionId = options.createSessionId ?? (() => `git-log-${Date.now()}-${++this.sessionSequence}`);
@@ -122,14 +117,18 @@ export class GitLogModeCoordinator {
     this.cancelSession();
     const sessionId = this.createSessionId();
     this.currentSessionId = sessionId;
-    await this.view.showGitLoading(sessionId);
-    this.sessions.start(sessionId);
+    await this.view.openGitSession(sessionId);
+    if (this.currentSessionId !== sessionId || !this.store.get().active || !this.view.isVisible()) {
+      this.view.detachGitSession(sessionId);
+      if (this.currentSessionId === sessionId) this.currentSessionId = undefined;
+    }
   }
 
   private cancelSession(): void {
-    if (!this.currentSessionId) return;
+    const sessionId = this.currentSessionId;
+    if (!sessionId) return;
     this.currentSessionId = undefined;
-    this.sessions.cancel();
+    this.view.detachGitSession(sessionId);
   }
 
   private async restorePendingTarget(): Promise<void> {

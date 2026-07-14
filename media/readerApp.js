@@ -262,17 +262,19 @@
       maxCommits: 200
     };
   }
+  function normalizeGitLogMaxCommits(value) {
+    return typeof value === "number" && Number.isFinite(value) ? Math.round(Math.min(1e3, Math.max(20, value))) : createDefaultGitLogPreferences().maxCommits;
+  }
   function normalizeGitLogPreferences(value) {
     const defaults = createDefaultGitLogPreferences();
     if (!isRecord3(value)) return defaults;
-    const maxCommits = typeof value.maxCommits === "number" && Number.isFinite(value.maxCommits) ? Math.round(Math.min(1e3, Math.max(20, value.maxCommits))) : defaults.maxCommits;
     return {
       showHash: booleanOr(value.showHash, defaults.showHash),
       showAuthor: booleanOr(value.showAuthor, defaults.showAuthor),
       showRelativeTime: booleanOr(value.showRelativeTime, defaults.showRelativeTime),
       showAbsoluteDate: booleanOr(value.showAbsoluteDate, defaults.showAbsoluteDate),
       layout: value.layout === "inline" || value.layout === "lines" ? value.layout : defaults.layout,
-      maxCommits
+      maxCommits: normalizeGitLogMaxCommits(value.maxCommits)
     };
   }
   function normalizeGitLogCommit(value) {
@@ -293,16 +295,40 @@
 
   // src/git/gitLogMessages.ts
   function isExtensionToGitLogMessage(value) {
-    if (!isRecord4(value) || !isNonEmptyString4(value.type) || !isNonEmptyString4(value.sessionId)) return false;
-    if (value.type === "gitLogReady") {
-      return isNonEmptyString4(value.repositoryName) && isNonEmptyString4(value.branchName) && typeof value.detached === "boolean" && Array.isArray(value.commits) && value.commits.every((commit) => normalizeGitLogCommit(commit) !== void 0);
+    if (!isRecord4(value) || !isNonEmptyString4(value.type)) return false;
+    if (value.type === "modeInvalidated") {
+      return hasOnlyKeys(value, ["type", "sessionId", "modeGeneration"]) && (value.sessionId === void 0 || isNonEmptyString4(value.sessionId)) && isModeGeneration(value.modeGeneration);
     }
-    if (value.type === "gitLogError") return isNonEmptyString4(value.code) && isNonEmptyString4(value.message);
-    if (value.type === "gitLogInvalidated") return true;
-    return value.type === "modeGitLog" && isStrictPreferences(value.preferences) && isRecord4(value.readerPreferences);
+    if (!isNonEmptyString4(value.sessionId)) return false;
+    if (value.type === "gitLogReady") {
+      return hasOnlyKeys(value, ["type", "sessionId", "repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
+    }
+    if (value.type === "gitLogError" || value.type === "gitLogRefreshFailed") {
+      return hasOnlyKeys(value, ["type", "sessionId", "code", "message"]) && isNonEmptyString4(value.code) && isNonEmptyString4(value.message);
+    }
+    if (value.type === "gitLogInvalidated") {
+      return hasOnlyKeys(value, ["type", "sessionId"]);
+    }
+    return value.type === "modeGitLog" && hasOnlyKeys(value, ["type", "sessionId", "modeGeneration", "preferences", "readerPreferences", "cached"]) && isModeGeneration(value.modeGeneration) && isStrictPreferences(value.preferences) && isRecord4(value.readerPreferences) && (value.cached === void 0 || isStrictDisplayResult(value.cached));
+  }
+  function isStrictDisplayResult(value) {
+    return isRecord4(value) && hasOnlyKeys(value, ["repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
+  }
+  function hasDisplayFields(value) {
+    return isNonEmptyString4(value.repositoryName) && isNonEmptyString4(value.branchName) && typeof value.detached === "boolean" && Array.isArray(value.commits) && value.commits.every(isStrictCommit);
+  }
+  function isStrictCommit(value) {
+    return isRecord4(value) && hasOnlyKeys(value, ["hash", "subject", "author", "authoredAt"]) && normalizeGitLogCommit(value) !== void 0;
   }
   function isStrictPreferences(value) {
-    return isRecord4(value) && typeof value.showHash === "boolean" && typeof value.showAuthor === "boolean" && typeof value.showRelativeTime === "boolean" && typeof value.showAbsoluteDate === "boolean" && (value.layout === "lines" || value.layout === "inline") && typeof value.maxCommits === "number" && Number.isFinite(value.maxCommits) && value.maxCommits >= 20 && value.maxCommits <= 1e3;
+    return isRecord4(value) && hasOnlyKeys(value, ["showHash", "showAuthor", "showRelativeTime", "showAbsoluteDate", "layout", "maxCommits"]) && typeof value.showHash === "boolean" && typeof value.showAuthor === "boolean" && typeof value.showRelativeTime === "boolean" && typeof value.showAbsoluteDate === "boolean" && (value.layout === "lines" || value.layout === "inline") && typeof value.maxCommits === "number" && Number.isInteger(value.maxCommits) && value.maxCommits >= 20 && value.maxCommits <= 1e3;
+  }
+  function isModeGeneration(value) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  }
+  function hasOnlyKeys(value, allowed) {
+    const allowedKeys = new Set(allowed);
+    return Object.keys(value).every((key) => allowedKeys.has(key));
   }
   function isRecord4(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -368,7 +394,17 @@
   function gitLogReducer(state2, action) {
     switch (action.type) {
       case "begin":
-        return { ...createInitialGitLogState(), sessionId: action.sessionId, status: "loading", preferences: state2.preferences, preferencesDraft: state2.preferences };
+        return action.cached ? {
+          ...createInitialGitLogState(),
+          sessionId: action.sessionId,
+          status: action.cached.commits.length ? "ready" : "empty",
+          repositoryName: action.cached.repositoryName,
+          branchName: action.cached.branchName,
+          detached: action.cached.detached,
+          commits: action.cached.commits,
+          preferences: state2.preferences,
+          preferencesDraft: state2.preferences
+        } : { ...createInitialGitLogState(), sessionId: action.sessionId, status: "loading", preferences: state2.preferences, preferencesDraft: state2.preferences };
       case "ready":
         if (state2.sessionId !== action.sessionId) return state2;
         return {
@@ -380,10 +416,13 @@
           commits: action.commits,
           pageIndex: 0,
           pageCount: 1,
-          error: void 0
+          error: void 0,
+          refreshNotice: void 0
         };
       case "error":
         return state2.sessionId === action.sessionId ? { ...state2, status: "error", error: action.message, commits: [] } : state2;
+      case "refreshFailed":
+        return state2.sessionId === action.sessionId && state2.status === "ready" ? { ...state2, refreshNotice: action.message } : state2;
       case "invalidate":
         return state2.sessionId === action.sessionId ? { ...createInitialGitLogState(), sessionId: void 0, preferences: state2.preferences, preferencesDraft: state2.preferences } : state2;
       case "preferencesLoaded": {
@@ -428,9 +467,9 @@
     state = createInitialGitLogState();
     readerPreferences;
     paginator;
-    begin(sessionId, preferences, readerPreferences) {
+    begin(sessionId, preferences, readerPreferences, cached) {
       this.readerPreferences = readerPreferences;
-      this.reduce({ type: "begin", sessionId }, false);
+      this.reduce({ type: "begin", sessionId, ...cached ? { cached } : {} }, false);
       this.reduce({ type: "preferencesLoaded", preferences }, false);
       this.render();
     }
@@ -446,6 +485,13 @@
         });
       } else if (message.type === "gitLogError") {
         this.reduce({ type: "error", sessionId: message.sessionId, message: localError(message.code, message.message) });
+      } else if (message.type === "gitLogRefreshFailed") {
+        this.reduce({
+          type: "refreshFailed",
+          sessionId: message.sessionId,
+          message: "\u5237\u65B0\u5931\u8D25\uFF0C\u6B63\u5728\u663E\u793A\u4E0A\u6B21\u7ED3\u679C\u3002"
+        }, false);
+        this.updateRefreshNotice();
       } else if (message.type === "gitLogInvalidated") {
         this.reduce({ type: "invalidate", sessionId: message.sessionId });
       }
@@ -485,6 +531,7 @@
       next.id = "git-log-next-page";
       footer.append(previous, progress, next);
       this.root.append(toolbar, context, viewport, footer);
+      this.updateRefreshNotice();
       if (this.state.status === "loading") viewport.append(node("p", "notice", "\u6B63\u5728\u8BFB\u53D6\u5F53\u524D\u5206\u652F\u2026"));
       else if (this.state.status === "error") viewport.append(node("p", "notice notice-error", this.state.error ?? "\u65E0\u6CD5\u8BFB\u53D6 Git \u5386\u53F2\u3002"));
       else if (this.state.status === "empty") viewport.append(node("p", "notice", "\u5F53\u524D\u5206\u652F\u6CA1\u6709\u63D0\u4EA4\u3002"));
@@ -493,6 +540,15 @@
         this.paginator.setContent(this.commitContent());
       }
       if (this.state.settingsOpen) this.root.append(this.settingsDrawer());
+    }
+    updateRefreshNotice() {
+      this.root.querySelector(".git-log-refresh-notice")?.remove();
+      if (!this.state.refreshNotice) return;
+      const context = this.root.querySelector(".git-log-context");
+      if (!context) return;
+      const notice = node("span", "git-log-refresh-notice", this.state.refreshNotice);
+      notice.setAttribute("role", "status");
+      context.append(notice);
     }
     contextLabel() {
       if (!this.state.repositoryName && !this.state.branchName) return "\u5F53\u524D\u5DE5\u4F5C\u533A \xB7 \u5F53\u524D\u5206\u652F";
@@ -744,8 +800,7 @@
           view: "library",
           status: "ready",
           books,
-          pendingRemoval: state2.pendingRemoval && books.some((book) => book.id === state2.pendingRemoval?.bookId) ? state2.pendingRemoval : void 0,
-          ...books.length === 0 ? { emptyAction: "importBook" } : {}
+          pendingRemoval: state2.pendingRemoval && books.some((book) => book.id === state2.pendingRemoval?.bookId) ? state2.pendingRemoval : void 0
         };
       }
       case "requestRemove":
@@ -758,8 +813,7 @@
         return {
           ...state2,
           books: state2.books.filter((book) => book.id !== action.bookId),
-          pendingRemoval: void 0,
-          ...state2.books.length === 1 ? { emptyAction: "importBook" } : {}
+          pendingRemoval: void 0
         };
       case "showError":
         return { ...state2, status: "error", error: action.message };
@@ -825,6 +879,7 @@
   var currentSectionHtml = "";
   var appMode = "boot";
   var gitLogView;
+  var acceptedModeGeneration = 0;
   function dispatch(action) {
     state = readerAppReducer(state, action);
     render();
@@ -871,10 +926,8 @@
     if (state.books.length === 0) {
       const empty = element("section", "empty-library");
       empty.append(
-        element("span", "empty-mark", "\u6587"),
-        element("h2", void 0, "\u628A\u4E0B\u4E00\u672C\u4E66\u653E\u5728\u624B\u8FB9"),
-        element("p", void 0, "\u5BFC\u5165\u672C\u5730 EPUB \u6216 TXT\u3002\u6587\u4EF6\u7559\u5728\u539F\u5904\uFF0CMoyuPlus \u53EA\u4FDD\u5B58\u7D22\u5F15\u3002"),
-        button2("\u5BFC\u5165 EPUB / TXT", "primary-action", () => post({ type: "importBook" }))
+        element("h2", void 0, "\u4E66\u67B6\u4E2D\u8FD8\u6CA1\u6709\u4E66"),
+        element("p", void 0, "\u70B9\u51FB\u53F3\u4E0A\u89D2\u201C\u5BFC\u5165\u201D\uFF0C\u6DFB\u52A0\u672C\u5730 EPUB \u6216 TXT\u3002")
       );
       root.append(empty);
       return;
@@ -1138,16 +1191,18 @@
   }
   window.addEventListener("message", (event) => {
     if (isModeGitLog(event.data) && app) {
+      if (!acceptModeGeneration(event.data.modeGeneration)) return;
       layout?.dispose();
       layout = void 0;
       gitLogView?.dispose();
       appMode = "gitLog";
       gitLogView = new GitLogView(app, post);
-      gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences);
+      gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences, event.data.cached);
       post({ type: "navigationState", canNextPage: false });
       return;
     }
     if (isModeLibrary(event.data)) {
+      if (!acceptModeGeneration(event.data.modeGeneration)) return;
       gitLogView?.dispose();
       gitLogView = void 0;
       appMode = "readerApp";
@@ -1156,11 +1211,28 @@
       return;
     }
     if (isModeReaderRestore(event.data)) {
+      if (!acceptModeGeneration(event.data.modeGeneration)) return;
       gitLogView?.dispose();
       gitLogView = void 0;
       appMode = "readerApp";
+      state = readerAppReducer(state, {
+        type: "libraryLoaded",
+        books: event.data.books,
+        availability: event.data.availability,
+        progress: event.data.progress
+      });
       if (event.data.preferences) state = readerAppReducer(state, { type: "preferencesLoaded", preferences: event.data.preferences });
       dispatch({ type: "openReader", book: event.data.book, requestId: event.data.requestId });
+      return;
+    }
+    if (isModeInvalidated(event.data)) {
+      if (!acceptModeGeneration(event.data.modeGeneration)) return;
+      layout?.dispose();
+      layout = void 0;
+      gitLogView?.dispose();
+      gitLogView = void 0;
+      appMode = "boot";
+      render();
       return;
     }
     if (isExtensionToGitLogMessage(event.data)) {
@@ -1218,13 +1290,24 @@
     return typeof value === "object" && value !== null && value.type === "libraryLoadError" && typeof value.message === "string";
   }
   function isModeGitLog(value) {
-    return isRecord6(value) && value.type === "modeGitLog" && typeof value.sessionId === "string" && isRecord6(value.preferences) && isRecord6(value.readerPreferences);
+    return isExtensionToGitLogMessage(value) && value.type === "modeGitLog";
   }
   function isModeLibrary(value) {
-    return isRecord6(value) && value.type === "modeLibrary" && (value.message === void 0 || typeof value.message === "string");
+    return isRecord6(value) && value.type === "modeLibrary" && isModeGeneration2(value.modeGeneration) && (value.message === void 0 || typeof value.message === "string");
   }
   function isModeReaderRestore(value) {
-    return isRecord6(value) && value.type === "modeReaderRestore" && isRecord6(value.book) && typeof value.book.id === "string" && typeof value.requestId === "string";
+    return isRecord6(value) && value.type === "modeReaderRestore" && isRecord6(value.book) && Array.isArray(value.books) && value.books.every(isRecord6) && isRecord6(value.availability) && isRecord6(value.progress) && isModeGeneration2(value.modeGeneration) && typeof value.book.id === "string" && typeof value.requestId === "string";
+  }
+  function isModeInvalidated(value) {
+    return isRecord6(value) && value.type === "modeInvalidated" && isModeGeneration2(value.modeGeneration);
+  }
+  function isModeGeneration2(value) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  }
+  function acceptModeGeneration(generation) {
+    if (generation <= acceptedModeGeneration) return false;
+    acceptedModeGeneration = generation;
+    return true;
   }
   function isRecord6(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);

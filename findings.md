@@ -166,6 +166,19 @@
 ---
 *本文件会在每次关键发现后更新。*
 
+## 2026-07-14 Reader / Git Log 回归根因
+
+- `GitLogModeCoordinator.bootstrap()` 在持久化模式为 active 时直接打开 Git Log，不调用 `refreshLibrary()`；因此“插件启动即 Git Log”会让 Webview 的书架 state 保持初始空数组。
+- `ReaderViewProvider.restoreReader()` 当前只向 `modeReaderRestore` 发送目标 `book` 和 preferences，没有发送 snapshot 中的 `books`、`availability`、`progress`；恢复书籍后关闭阅读器会暴露未初始化的空书架。
+- `ReaderController.capturePosition()` 在阅读器关闭后仍保留最后阅读位置，这是持久化职责所需；但 Provider/Coordinator 把它错误地当成“当前阅读页可见”的依据，导致书架进入 Git Log 后恢复旧书。
+- 修复边界：Provider 负责当前可见 Reader surface，Controller 继续负责长期阅读位置；恢复消息必须是包含完整书架快照的原子消息。
+
+## 2026-07-14 发布决策
+
+- Git Log 内存缓存、生命周期加固和 Reader 回归修复作为补丁版本 0.0.7 一并发布。
+- `package-lock.json` 根版本此前仍为 0.0.5，本次与 `package.json` 统一为 0.0.7。
+- VSIX 继续只包含运行时 bundle、media、manifest、README、CHANGELOG 和许可相关文件，不包含源码、测试、计划、source map 或本地书籍。
+
 ## 2026-07-10 阅读器重塑需求
 
 ### 已确认的产品方向
@@ -306,3 +319,17 @@
 - `.impeccable.md` 已提供完整设计上下文：面向 VS Code 内轻量阅读/练习用户，视觉语气为原生、克制、可靠，必须使用 VS Code 主题令牌且不引入外部字体或装饰性视觉。
 - 阅读 UI 每次 reducer 渲染都会替换正文 DOM，因此 Layout Engine 必须随新 viewport 重建，并以当前 progression 恢复位置；不能让 Engine 持有已脱离文档的旧 viewport。
 - Controller 的相邻章节导航以打开时的 section 顺序为唯一依据；越过首尾只发送 `bookStart`/`bookEnd` 正常状态，不将边界记录为错误。
+
+## 2026-07-14 Git Log 内存缓存实施发现
+
+- 正式设计与实施计划已经分别由提交 `e3cc372`、`7c0e60f` 固化；本轮用户明确要求执行计划，可直接进入测试先行实现。
+- 当前工作树在实施开始时干净，基线版本为 0.0.6。
+- 计划要求新增 `gitLogQuery.ts` 与 `gitLogRefreshController.ts`，Provider 只保留单条缓存、单个 UI session、单调 mode generation 与幂等 dispose。
+- 当前仓库已有 37 个单元测试文件和独立 Git Log Chromium 布局测试，适合按目标测试→全量单测→布局→compile 的顺序回归。
+- 旧协调器使用 `showGitLoading()` 后再 `sessions.start()` 的两阶段协议，等待 `postMessage` 时 hide/exit 会让迟到 continuation 仍启动查询；需合并为 Provider 的原子 `openGitSession(sessionId)`。
+- 旧 Provider 的 `cancel()` 会直接 abort 查询，Webview dispose 还会调用协调器 dispose；这与“UI detach 后后台刷新可完成并写缓存”的新生命周期冲突。
+- 现有 VS Code shim 已区分 visibility 与 Webview dispose，但 `postMessage` 总是立即 resolve；Provider 竞态测试需要加入逐调用 deferred delivery 控制。
+- `registerReaderView()` 当前只注册 Webview provider/commands，没有把 Provider 自身作为 extension-level disposable 注册；需新增独立 subscription 并同步更新 activation 订阅数量。
+- 最终实现使用一个 `gitCache`、一个 `gitUiSession`、一个 `active` job 和一个 `pending` snapshot；代码结构本身不包含多仓库 Map、session 历史或订阅者数组。
+- Webview 顶层模式统一使用 Provider 单调递增 generation；`modeInvalidated` 先进入 boot 并释放 GitLogView，迟到或重复 generation 被拒绝。
+- 最终全量自动验证为 39 个 Vitest 文件 180 个测试、13 个 Chromium 布局/隐私测试全部通过，TypeScript、生产构建和 `git diff --check` 通过。

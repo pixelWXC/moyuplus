@@ -88,7 +88,7 @@ describe('extension activation', () => {
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(27);
+    expect(context.subscriptions).toHaveLength(28);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 

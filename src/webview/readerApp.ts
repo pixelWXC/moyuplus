@@ -3,7 +3,7 @@ import { LayoutEngine, type LayoutState } from './layoutEngine';
 import type { BookRecord } from '../domain/books';
 import { isExtensionToReaderV2Message, type ExtensionToReaderV2Message } from '../reader/readerMessages';
 import type { ReaderPreferences } from '../domain/readerPreferences';
-import { isExtensionToGitLogMessage } from '../git/gitLogMessages';
+import { isExtensionToGitLogMessage, type ExtensionToGitLogMessage } from '../git/gitLogMessages';
 import type { GitLogPreferences } from '../git/gitLogModels';
 import { GitLogView } from './gitLogView';
 import { applyReaderPreferences } from './readerPreferenceStyles';
@@ -15,6 +15,9 @@ import {
 export const READER_APP_BUILD_TARGET = 'webview';
 interface VsCodeApi { postMessage(message: unknown): void }
 interface LibraryStateMessage { type: 'libraryState'; books: BookRecord[]; availability: Record<string, boolean>; progress: Record<string, number>; preferences?: ReaderPreferences }
+type ModeReaderRestoreMessage = Omit<LibraryStateMessage, 'type'> & {
+  type: 'modeReaderRestore'; modeGeneration: number; book: BookRecord; requestId: string;
+};
 declare global { interface Window { MoyuplusReader: { LayoutEngine: typeof LayoutEngine }; acquireVsCodeApi?: () => VsCodeApi } }
 window.MoyuplusReader = { LayoutEngine };
 
@@ -26,6 +29,7 @@ let requestSequence = 0;
 let currentSectionHtml = '';
 let appMode: 'boot' | 'readerApp' | 'gitLog' = 'boot';
 let gitLogView: GitLogView | undefined;
+let acceptedModeGeneration = 0;
 
 function dispatch(action: ReaderAppAction): void { state = readerAppReducer(state, action); render(); }
 function post(message: unknown): void { vscode?.postMessage(message); }
@@ -54,9 +58,8 @@ function renderLibrary(root: HTMLElement): void {
   if (state.status === 'error') { root.append(element('p', 'notice notice-error', state.error ?? '书架载入失败。')); return; }
   if (state.books.length === 0) {
     const empty = element('section', 'empty-library');
-    empty.append(element('span', 'empty-mark', '文'), element('h2', undefined, '把下一本书放在手边'),
-      element('p', undefined, '导入本地 EPUB 或 TXT。文件留在原处，MoyuPlus 只保存索引。'),
-      button('导入 EPUB / TXT', 'primary-action', () => post({ type: 'importBook' })));
+    empty.append(element('h2', undefined, '书架中还没有书'),
+      element('p', undefined, '点击右上角“导入”，添加本地 EPUB 或 TXT。'));
     root.append(empty); return;
   }
   const list = element('ol', 'book-list'); list.setAttribute('aria-label', '已导入书籍');
@@ -181,15 +184,17 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: stri
 
 window.addEventListener('message', event => {
   if (isModeGitLog(event.data) && app) {
+    if (!acceptModeGeneration(event.data.modeGeneration)) return;
     layout?.dispose(); layout = undefined;
     gitLogView?.dispose();
     appMode = 'gitLog';
     gitLogView = new GitLogView(app, post);
-    gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences);
+    gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences, event.data.cached);
     post({ type: 'navigationState', canNextPage: false });
     return;
   }
   if (isModeLibrary(event.data)) {
+    if (!acceptModeGeneration(event.data.modeGeneration)) return;
     gitLogView?.dispose(); gitLogView = undefined;
     appMode = 'readerApp';
     if (event.data.message) dispatch({ type: 'showError', message: event.data.message });
@@ -197,10 +202,23 @@ window.addEventListener('message', event => {
     return;
   }
   if (isModeReaderRestore(event.data)) {
+    if (!acceptModeGeneration(event.data.modeGeneration)) return;
     gitLogView?.dispose(); gitLogView = undefined;
     appMode = 'readerApp';
+    state = readerAppReducer(state, {
+      type: 'libraryLoaded', books: event.data.books,
+      availability: event.data.availability, progress: event.data.progress
+    });
     if (event.data.preferences) state = readerAppReducer(state, { type: 'preferencesLoaded', preferences: event.data.preferences });
     dispatch({ type: 'openReader', book: event.data.book, requestId: event.data.requestId });
+    return;
+  }
+  if (isModeInvalidated(event.data)) {
+    if (!acceptModeGeneration(event.data.modeGeneration)) return;
+    layout?.dispose(); layout = undefined;
+    gitLogView?.dispose(); gitLogView = undefined;
+    appMode = 'boot';
+    render();
     return;
   }
   if (isExtensionToGitLogMessage(event.data)) {
@@ -243,18 +261,37 @@ function isLibraryLoadError(value: unknown): value is { type: 'libraryLoadError'
     && typeof (value as { message?: unknown }).message === 'string';
 }
 
-function isModeGitLog(value: unknown): value is { type: 'modeGitLog'; sessionId: string; preferences: GitLogPreferences; readerPreferences: ReaderPreferences } {
-  return isRecord(value) && value.type === 'modeGitLog' && typeof value.sessionId === 'string'
-    && isRecord(value.preferences) && isRecord(value.readerPreferences);
+function isModeGitLog(value: unknown): value is {
+  type: 'modeGitLog'; sessionId: string; modeGeneration: number; preferences: GitLogPreferences;
+  readerPreferences: ReaderPreferences; cached?: Extract<ExtensionToGitLogMessage, { type: 'modeGitLog' }>['cached'];
+} {
+  return isExtensionToGitLogMessage(value) && value.type === 'modeGitLog';
 }
 
-function isModeLibrary(value: unknown): value is { type: 'modeLibrary'; message?: string } {
-  return isRecord(value) && value.type === 'modeLibrary' && (value.message === undefined || typeof value.message === 'string');
+function isModeLibrary(value: unknown): value is { type: 'modeLibrary'; modeGeneration: number; message?: string } {
+  return isRecord(value) && value.type === 'modeLibrary' && isModeGeneration(value.modeGeneration)
+    && (value.message === undefined || typeof value.message === 'string');
 }
 
-function isModeReaderRestore(value: unknown): value is { type: 'modeReaderRestore'; book: LibraryBookItem; requestId: string; preferences?: ReaderPreferences } {
+function isModeReaderRestore(value: unknown): value is ModeReaderRestoreMessage {
   return isRecord(value) && value.type === 'modeReaderRestore' && isRecord(value.book)
-    && typeof value.book.id === 'string' && typeof value.requestId === 'string';
+    && Array.isArray(value.books) && value.books.every(isRecord)
+    && isRecord(value.availability) && isRecord(value.progress)
+    && isModeGeneration(value.modeGeneration) && typeof value.book.id === 'string' && typeof value.requestId === 'string';
+}
+
+function isModeInvalidated(value: unknown): value is { type: 'modeInvalidated'; modeGeneration: number } {
+  return isRecord(value) && value.type === 'modeInvalidated' && isModeGeneration(value.modeGeneration);
+}
+
+function isModeGeneration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function acceptModeGeneration(generation: number): boolean {
+  if (generation <= acceptedModeGeneration) return false;
+  acceptedModeGeneration = generation;
+  return true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,5 +1,5 @@
 import type { ReaderPreferences } from '../domain/readerPreferences';
-import type { ExtensionToGitLogMessage } from '../git/gitLogMessages';
+import type { ExtensionToGitLogMessage, GitLogDisplayResult } from '../git/gitLogMessages';
 import { createDefaultGitLogPreferences, type GitLogCommit, type GitLogPreferences } from '../git/gitLogModels';
 import { GitLogPaginator, type GitLogPageState } from './gitLogPaginator';
 import { createInitialGitLogState, gitLogReducer, type GitLogAction, type GitLogState } from './gitLogState';
@@ -12,9 +12,14 @@ export class GitLogView {
 
   constructor(private readonly root: HTMLElement, private readonly post: (message: unknown) => void) {}
 
-  begin(sessionId: string, preferences: GitLogPreferences, readerPreferences: ReaderPreferences): void {
+  begin(
+    sessionId: string,
+    preferences: GitLogPreferences,
+    readerPreferences: ReaderPreferences,
+    cached?: GitLogDisplayResult
+  ): void {
     this.readerPreferences = readerPreferences;
-    this.reduce({ type: 'begin', sessionId }, false);
+    this.reduce({ type: 'begin', sessionId, ...(cached ? { cached } : {}) }, false);
     this.reduce({ type: 'preferencesLoaded', preferences }, false);
     this.render();
   }
@@ -25,6 +30,13 @@ export class GitLogView {
         branchName: message.branchName, detached: message.detached, commits: message.commits });
     } else if (message.type === 'gitLogError') {
       this.reduce({ type: 'error', sessionId: message.sessionId, message: localError(message.code, message.message) });
+    } else if (message.type === 'gitLogRefreshFailed') {
+      this.reduce({
+        type: 'refreshFailed',
+        sessionId: message.sessionId,
+        message: '刷新失败，正在显示上次结果。'
+      }, false);
+      this.updateRefreshNotice();
     } else if (message.type === 'gitLogInvalidated') {
       this.reduce({ type: 'invalidate', sessionId: message.sessionId });
     }
@@ -67,6 +79,7 @@ export class GitLogView {
     const next = button('下一页', 'page-action', () => this.moveNext(), true); next.id = 'git-log-next-page';
     footer.append(previous, progress, next);
     this.root.append(toolbar, context, viewport, footer);
+    this.updateRefreshNotice();
 
     if (this.state.status === 'loading') viewport.append(node('p', 'notice', '正在读取当前分支…'));
     else if (this.state.status === 'error') viewport.append(node('p', 'notice notice-error', this.state.error ?? '无法读取 Git 历史。'));
@@ -76,6 +89,16 @@ export class GitLogView {
       this.paginator.setContent(this.commitContent());
     }
     if (this.state.settingsOpen) this.root.append(this.settingsDrawer());
+  }
+
+  private updateRefreshNotice(): void {
+    this.root.querySelector('.git-log-refresh-notice')?.remove();
+    if (!this.state.refreshNotice) return;
+    const context = this.root.querySelector('.git-log-context');
+    if (!context) return;
+    const notice = node('span', 'git-log-refresh-notice', this.state.refreshNotice);
+    notice.setAttribute('role', 'status');
+    context.append(notice);
   }
 
   private contextLabel(): string {
