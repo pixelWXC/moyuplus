@@ -17,13 +17,14 @@ import {
 } from '../../extension';
 import { IMPORT_BOOK_COMMAND_ID, RELOCATE_BOOK_COMMAND_ID, REMOVE_BOOK_COMMAND_ID } from '../../commands/libraryCommands';
 import { createDefaultTypingPracticeSession } from '../../domain/models';
-import { READER_VIEW_ID } from '../../reader/readerMessages';
+import { READER_PROTOCOL_VERSION, READER_VIEW_ID } from '../../reader/readerMessages';
 import { TYPING_PRACTICE_SESSION_KEY } from '../../storage/storageKeys';
 import {
   CLOSE_READER_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  UNDO_READER_LOCATION_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -95,6 +96,7 @@ describe('typing practice registration and VS Code integration', () => {
       RELOCATE_BOOK_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
+      UNDO_READER_LOCATION_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
       OPEN_READER_LIBRARY_COMMAND_ID,
@@ -271,8 +273,18 @@ describe('typing practice registration and VS Code integration', () => {
     const imported = await commands.executeRegisteredCommand(IMPORT_BOOK_COMMAND_ID);
     const readerView = createWebviewView();
     await window.registeredWebviewViewProvider(READER_VIEW_ID)?.resolveWebviewView(readerView);
-    await readerView.webview.receiveMessage({ type: 'selectFile', fileId: imported.id });
-    await readerView.webview.receiveMessage({ type: 'navigationState', canNextPage: true });
+    await readerView.webview.receiveMessage({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId: 'r1', bookId: imported.id });
+    const bookReady = readerView.webview.postedMessages.find(message => (message as { type?: string }).type === 'bookReady') as { initialSectionId: string };
+    await readerView.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'requestSection', requestId: 'r1', bookId: imported.id,
+      sectionId: bookReady.initialSectionId
+    });
+    const sectionReady = readerView.webview.postedMessages.find(message => (message as { type?: string }).type === 'sectionReady') as { sectionGeneration: number };
+    await readerView.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'navigationState', requestId: 'r1', bookId: imported.id,
+      sectionId: bookReady.initialSectionId, sectionGeneration: sectionReady.sectionGeneration,
+      canPreviousPage: false, canNextPage: true, canUndoLocation: false
+    });
     window.quickPickResult = { label: 'picked.txt', fileId: imported.id };
     await commands.executeRegisteredCommand(START_TYPING_PRACTICE_COMMAND_ID);
     window.activeTextEditor = createTextEditor([''], new Position(0, 0));

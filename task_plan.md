@@ -1,5 +1,100 @@
 # 开发计划：moyuplus
 
+## 2026-07-15 长书初始化、目录与跨章注解性能修复（设计阶段）
+
+### Goal
+
+定位并修复统一排版版本在多章节长 EPUB 上的初始化、目录打开和远距离跨章注解跳转卡顿；图片入口改为普通超链接文字外观，同时保持安全预览、内部导航和分页正确性。
+
+### Phases
+
+- [x] P0：只读诊断长书加载、目录渲染、跨章预检与图片入口路径
+- [x] P1：确认性能目标与交互边界
+- [x] P2：比较方案、形成设计并取得用户批准
+- [x] P3：落盘设计与实施计划
+- [x] P4：按 TDD 实施并运行完整回归
+- **Status:** complete（2026-07-16 人工验收通过）
+
+### Performance package verification
+
+- `npm run package -- --out moyuplus-0.0.7-performance-fix.vsix` 通过：210/210 unit、28/28 Chromium layout/privacy。
+- VSIX 包内版本 0.0.7，共 8 个运行时/说明文件，不含源码、测试、计划、source map、lockfile 或书籍文件。
+- SHA-256：`40F9E90F7A4CDBDEAC6725ACA1FEC0AA7529073C83A171B4A0B05000C4272EDB`。
+
+### Approved implementation direction
+
+- 用 `Range.cloneContents()` 截取页内内容，并重建从共同祖先到 `.moyuplus-book-content` 的浅层结构，避免每次 fits 克隆整章。
+- 打开/关闭目录和设置抽屉只增删 overlay DOM，不销毁或重新创建 Layout Engine。
+- 跨章目标在隐藏 staging 上完整分页一次；成功后直接提升该 Layout Engine 到可见 page，失败时旧页面不动，不再预检后重复分页。
+- 同书、同窗口、同设置下初始化和目录打开目标不超过 0.0.6 的 1.25 倍；不牺牲精确页码、双轴边界、原子跳转、撤回和安全协议。
+
+## 2026-07-15 图片入口文本链接样式与测试包（当前）
+
+### Goal
+
+不改图片安全预览协议与按钮语义，仅将 `.moyuplus-image-link` 视觉重置为普通 VS Code 文本超链接，并生成独立 VSIX 供真实环境测试。
+
+### Phases
+
+- [x] I0：确认范围——性能问题延期，只处理图片入口视觉
+- [x] I1：RED——真实 Reader harness 断言图片入口不是白色按钮外观
+- [x] I2：GREEN——最小 CSS 重置为文本链接
+- [x] I3：完整回归、文档、独立 VSIX 与内容核对
+- **Status:** complete
+
+### Constraints
+
+- 保留 `<button type="button">`、键盘可访问性、opaque resource id 与安全预览消息。
+- 不修改长书分页、目录渲染或跨章导航性能路径。
+- 不升级版本、不提交、不发布；新 VSIX 不覆盖已有测试包。
+
+### Constraints
+
+- 设计获批前不修改生产代码。
+- 优先消除与整章全文分页/预检相关的同步 DOM 工作，不牺牲定位、原子跳转和撤回语义。
+- 图片仍使用不暴露路径的安全预览协议，只改变正文入口的视觉呈现。
+
+### Error log
+
+- 2026-07-15：首次合并读取三个技能文件在 10 秒超时；改用 30 秒超时后完整读取，不重复原调用参数。
+- 2026-07-15：首次将源码检索与 Git 状态合并在 10 秒内执行再次超时；后续拆分为仅源码检索并使用 30 秒上限，不重复该组合。
+- 2026-07-15：首个浏览器性能基线脚本用全局内部链接选择器，命中 visible/source 两份克隆导致 Playwright strict violation；重试时限定 `#reader-content` 可见页面，不重复全局选择。
+- 2026-07-15：首轮性能规格复核指出“最小切片预检成功”不能保证随后全章分页成功，原子性定义不足，且缺少空章与 v0.0.6 同条件基准；已改为候选 Layout Engine 单次完整分页后原子提升，并补齐空章和中位数对比方法，进入第二轮复核。
+- 2026-07-15：跨章实现首个大补丁因 sectionReady 上下文与预期不完全匹配而整体未应用；随后拆成字段/UI、候选准备、消息提交三个小补丁逐项验证，没有重复失败的大补丁。
+- 2026-07-15：前两次完整 app 性能脚本分别在 240 秒和 600 秒外层上限超时，并遗留仅属于该基准的 Node/Chromium 子进程；核对启动时间、路径和 PID 后只清理这两组进程，改用同页交替 Layout Engine 初始化基线与单 app 重复目录基线。
+- 2026-07-15：首次目录对照给旧 v2 sectionReady 遗漏 `sourceRevision/localResources`，消息被协议守卫拒绝，得到无效空页耗时；补齐真实 v2 payload 并增加 page-progress 已加载断言后重跑，未采用无效数据。
+
+## 2026-07-15 阅读器统一排版与分页回归修复（当前）
+
+### Goal
+
+实施已批准的 `docs/superpowers/specs/2026-07-15-moyuplus-reader-canonical-layout-regression-design.md`：移除 EPUB 出版物表现层，建立 MoyuPlus 唯一正文排版，并让 measure/render/preflight 使用一致的横纵双轴适配规则。
+
+### Phases
+
+- [x] R0：确认获批设计、工作区状态与不可覆盖的既有修改
+- [x] R1：RED——sanitizer、sourceRevision 与语义保留测试
+- [x] R2：GREEN——实现 EPUB 统一清洗边界
+- [x] R3：RED——横向溢出矩阵、页数完整性与真实 reader-app harness
+- [x] R4：GREEN——统一正文 CSS 与双轴分页判断
+- [x] R5：回归——compile、unit、layout、package、diff check 与 VSIX 内容核对
+- [x] R6：记录需用户在 Extension Development Host 中执行的真实 EPUB 人工复验
+- **Status:** complete（2026-07-16 人工验收通过）
+
+### Execution constraints
+
+- 严格 RED → GREEN → REFACTOR；生产行为修改前必须观察对应测试因缺少目标行为而失败。
+- 保留当前所有未提交的资源、导航、预览与布局修改；不重置、不清理、不自动提交或发布。
+- 不扩大网络、CSP、ZIP、路径或资源安全边界；不改变 locator 文本模型。
+
+### Error log
+
+- 2026-07-15：首次更新计划误用了终端乱码后的文本作为补丁上下文，补丁校验失败；改为显式 UTF-8 读取并在稳定标题后插入，不重复该方式。
+- 2026-07-15：首次真实 app GREEN 复验中，夹具仍声明第二章，导致末页“下一页”保持跨章可用，测试循环重复采集末页；已把该用例明确建模为单章完整 EPUB，从而验证真正的书末状态，不改变产品既有跨章导航语义。
+- 2026-07-15：单章复验继续得到 `scrollHeight=340/clientHeight=318`，确认首次分页发生在 footer 挂载之前；已调整 Reader DOM 构建顺序，先稳定完整 grid 再测量。
+- 2026-07-15：首次全量 layout 21/22，通过项覆盖所有新回归；唯一失败的旧 resize 用例绕过了 TXT/EPUB 均有的 `.moyuplus-book-content` 契约。已让独立 harness 对未包裹输入补齐真实适配器 wrapper，不放宽锚点断言。
+- 2026-07-15：补齐 wrapper 后旧 progression 阈值仍受新页密度影响；改为直接断言重排前 UTF-16 页首位于重排后 `[startOffset,endOffset)`，与 Layout Engine 的明确契约一致且更严格。
+
 ## Reader v2 Phase 6 人工复测状态（2026-07-13）
 
 - [x] 修复缩放后“下一页”偶发无响应
@@ -319,3 +414,61 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 ### Error log
 
 - 2026-07-14：首次读取技能文件遗漏 `ok-skills` 目录层级；已改用技能目录清单中的完整路径，未重复失败调用。
+
+## 2026-07-15 阅读器资源、内部导航与分页边距实施（当前）
+
+### Goal
+
+执行 `docs/superpowers/plans/2026-07-15-moyuplus-reader-resources-navigation-layout-implementation-plan.md`，完成安全图片预览、内部 fragment 导航、会话撤回历史、工作区位置命令和四边一致且不裁切的分页布局。
+
+### Phases
+
+- [x] Phase 0：基线与测试夹具（基线通过；夹具按目标 RED 增量补充）
+- [x] Phase 1：协议、Locator 与纯导航模型
+- [x] Phase 2：EPUB 内部目标与安全图片声明
+- [x] Phase 3：只读图片预览服务
+- [x] Phase 4：Extension Host 资源校验与位置命令
+- [x] Phase 5：Webview Navigator 与撤回 UI
+- [x] Phase 6：分页边距与测量一致性
+- [x] Phase 7：完整回归、文档、VSIX 与真实 Extension Development Host / EPUB 人工验收
+- **Status:** complete（2026-07-16 人工验收通过）
+
+### Execution constraints
+
+- 严格 RED → GREEN → REFACTOR；每个新增行为先观察目标测试按预期失败。
+- 保留未跟踪 `.superpowers/` 可视化文件；不重置、不清理、不自动提交实现代码。
+- 不放宽零网络、CSP、ZIP、路径和过期响应安全规则。
+
+### Error log
+
+- 2026-07-15：首次结构读取错误假设 EPUB 文件位于 `src/adapters/epubAdapter.ts` 和 `src/epub/*`，命令因此失败；后续先用 `rg --files` 获取真实路径，再按返回路径读取，不重复该失败命令。
+- 2026-07-15：Phase 5 复核时误把 Playwright 文件假设在 `src/test/layout`，并用不存在的顶层 `test` 目录过滤；已通过仓库级 `rg --files` 确认真正路径为 `tests/layout` 与 `tests/fixtures/layout`。
+- 2026-07-15：Phase 5/6 首次全量单测暴露两个旧 integration fixture：命令清单缺少 undo，Enter 路由仍发送无关联旧 navigationState；已把 fixture 迁移到真实 v3 openBook/sectionReady/navigationState 流程。
+
+## 2026-07-15 阅读器横向裁切与页码失效回归修复（当前）
+
+### Goal
+
+修复真实 EPUB 人工验收发现的横向内容被裁切、右边距视觉失效及页数误算；确保分页器对不可断行、预格式文本、宽表格和出版物布局样式保持完整、可读且页码可信。
+
+### Phases
+
+- [x] Phase R0：停止交付并确认人工验收失败
+- [x] Phase R1：只读诊断并稳定复现横向溢出导致的页码误算
+- [x] Phase R2：确定修复策略并完成设计门禁
+- [x] Phase R3：RED——新增真实 Reader 横向溢出与页数回归测试
+- [x] Phase R4：GREEN——内容约束、双轴测量与分页修复
+- [x] Phase R5：全量自动回归与重新打包
+- [x] Phase R6：真实 Extension Development Host 人工复验
+- **Status:** complete（2026-07-16 人工验收通过）
+
+### Confirmed failure
+
+- 正常换行：`pageCount=9`，`scrollWidth/clientWidth=280/280`。
+- `white-space: nowrap`：错误得到 `pageCount=1`，`scrollWidth/clientWidth=34228/280`。
+- `<pre>`：错误得到 `pageCount=1`，`scrollWidth/clientWidth=24016/280`。
+- 当前 `fits()`、渲染后修正和跨章预检只验证纵向溢出；Reader 布局测试未断言横向边界。
+
+### Error log
+
+- 2026-07-15：首次用 `node -e` 直接传递带引号脚本时被 PowerShell 原生命令参数转义破坏；改为 here-string 通过 stdin 传给 `node -` 后完成复现，不重复失败方式。

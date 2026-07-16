@@ -15,14 +15,32 @@ describe('ReadingLocator', () => {
         sectionId: 'spine-1',
         progression: -0.2,
         cfi: 'epubcfi(/6/2)',
-        fragment: 'intro'
+        fragment: 'intro',
+        textOffset: 42.9,
+        sourceRevision: 'sha256:revision-1'
       })
     ).toEqual({
       kind: 'epub',
       sectionId: 'spine-1',
       progression: 0,
       cfi: 'epubcfi(/6/2)',
-      fragment: 'intro'
+      fragment: 'intro',
+      textOffset: 42,
+      sourceRevision: 'sha256:revision-1'
+    });
+  });
+
+  it('keeps EPUB text offsets only when they are valid persistent hints', () => {
+    expect(normalizeReadingLocator({
+      kind: 'epub', sectionId: 'spine-1', progression: 0.4,
+      textOffset: -1, sourceRevision: ''
+    })).toEqual({ kind: 'epub', sectionId: 'spine-1', progression: 0.4 });
+    expect(normalizeReadingLocator({
+      kind: 'epub', sectionId: 'spine-1', progression: 0.4,
+      textOffset: 0, sourceRevision: 'revision-2', history: [{ sectionId: 'secret' }]
+    })).toEqual({
+      kind: 'epub', sectionId: 'spine-1', progression: 0.4,
+      textOffset: 0, sourceRevision: 'revision-2'
     });
   });
 

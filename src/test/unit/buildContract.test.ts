@@ -21,11 +21,11 @@ describe('dual-target build contract', () => {
       package: 'npm run compile && npm test && vsce package'
     });
     expect(packageJson.dependencies).toMatchObject({
-      'css-tree': expect.any(String),
       'fast-xml-parser': expect.any(String),
       parse5: expect.any(String),
       yauzl: expect.any(String)
     });
+    expect(packageJson.dependencies).not.toHaveProperty('css-tree');
     expect(packageJson.devDependencies).toMatchObject({
       '@playwright/test': expect.any(String),
       '@types/yauzl': expect.any(String),
@@ -34,6 +34,7 @@ describe('dual-target build contract', () => {
       esbuild: expect.any(String),
       yazl: expect.any(String)
     });
+    expect(packageJson.devDependencies).not.toHaveProperty('@types/css-tree');
   });
 
   it('ships only runtime artifacts and excludes development and user-content paths', async () => {

@@ -4,7 +4,7 @@ import { isReaderToExtensionV2Message, READER_VIEW_ID, type ReaderToExtensionV2M
 import { getReaderWebviewHtml } from './webviewHtml';
 import {
   CLOSE_READER_COMMAND_ID, FOCUS_READER_COMMAND_ID, NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID, UNDO_READER_LOCATION_COMMAND_ID
 } from '../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -23,7 +23,7 @@ import { createGitLogQuerySnapshot } from '../git/gitLogQuery';
 import type { GitLogPreferencesStore } from '../storage/gitLogPreferencesStore';
 import type { GitLogModeStore, GitLogResumeTarget } from '../storage/gitLogModeStore';
 
-export type ReaderExternalCommand = 'nextPage' | 'previousPage' | 'nextChapter' | 'previousChapter' | 'openLibrary' | 'openToc' | 'openSettings';
+export type ReaderExternalCommand = 'nextPage' | 'previousPage' | 'undoLocation' | 'nextChapter' | 'previousChapter' | 'openLibrary' | 'openToc' | 'openSettings';
 
 export { READER_VIEW_ID };
 
@@ -32,6 +32,7 @@ export interface ReaderViewController {
   requestSection(sectionId: string): void | Promise<void>;
   requestNextSection(sectionId: string): void | Promise<void>;
   requestPreviousSection(sectionId: string): void | Promise<void>;
+  openImage?(request: Omit<Extract<ReaderToExtensionV2Message, { type: 'openImage' }>, 'version' | 'type'>): void | Promise<void>;
   reportLayout(locator: ReadingLocator, bookProgression: number): void;
   capturePosition?(): ReadingPosition | undefined;
   flush(): void | Promise<void>;
@@ -60,6 +61,9 @@ export interface ReaderLibraryBridge {
 export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoordinatorView, vscode.Disposable {
   private view?: vscode.WebviewView;
   private canNextPage = false;
+  private canPreviousPage = false;
+  private canUndoLocation = false;
+  private readerRequest?: { requestId: string; bookId: string };
   private coordinator?: GitLogModeCoordinator;
   private readonly gitRefresh?: GitLogRefreshController;
   private gitCache?: { queryKey: string; result: GitLogResult };
@@ -169,6 +173,7 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   async showLibrary(message?: string): Promise<void> {
     this.gitUiSession = undefined;
     this.readerPageActive = false;
+    this.resetReaderNavigation();
     await this.postMessage({ type: 'modeLibrary', modeGeneration: this.nextModeGeneration(), ...(message ? { message } : {}) });
     await this.refreshLibrary();
   }
@@ -182,13 +187,20 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   }
 
   async requestNextPage(): Promise<boolean> {
-    if (!this.canNextPage) return false;
+    if (!this.readerPageActive || !this.canNextPage) return false;
     return this.requestReaderCommand('nextPage');
   }
-  async requestPreviousPage(): Promise<void> { await this.requestReaderCommand('previousPage'); }
+  async requestPreviousPage(): Promise<boolean> {
+    if (!this.readerPageActive || !this.canPreviousPage) return false;
+    return this.requestReaderCommand('previousPage');
+  }
+  async requestUndoLocation(): Promise<boolean> {
+    if (!this.readerPageActive || !this.canUndoLocation) return false;
+    return this.requestReaderCommand('undoLocation');
+  }
 
   async requestReaderCommand(command: ReaderExternalCommand): Promise<boolean> {
-    return this.view ? this.view.webview.postMessage({ type: 'command', command }) : false;
+    return this.readerPageActive && this.view ? this.view.webview.postMessage({ type: 'command', command }) : false;
   }
 
   async postMessage(message: unknown): Promise<boolean> {
@@ -197,10 +209,6 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
 
   private async handleMessage(value: unknown): Promise<void> {
     if (this.disposed) return;
-    if (isNavigationState(value)) {
-      this.canNextPage = value.canNextPage;
-      return;
-    }
     if (isRecord(value) && (value.type === 'libraryReady' || value.type === 'appReady')) {
       if (this.coordinator) {
         if (!this.bootstrapped) {
@@ -231,19 +239,45 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     switch (message.type) {
       case 'openBook': {
         const opened = await this.controller.openBook(message.bookId, message.requestId);
-        if (opened !== false) this.readerPageActive = true;
+        if (opened !== false) {
+          this.readerPageActive = true;
+          this.readerRequest = { requestId: message.requestId, bookId: message.bookId };
+        }
         return;
       }
       case 'requestSection': await this.controller.requestSection(message.sectionId); return;
+      case 'requestSectionTarget': await this.controller.requestSection(message.sectionId); return;
       case 'requestNextSection': await this.controller.requestNextSection(message.sectionId); return;
       case 'requestPreviousSection': await this.controller.requestPreviousSection(message.sectionId); return;
+      case 'openImage': await this.controller.openImage?.({
+        requestId: message.requestId,
+        bookId: message.bookId,
+        sectionId: message.sectionId,
+        sectionGeneration: message.sectionGeneration,
+        resourceId: message.resourceId
+      }); return;
+      case 'navigationState':
+        if (this.readerPageActive && this.readerRequest?.requestId === message.requestId && this.readerRequest.bookId === message.bookId) {
+          this.canPreviousPage = message.canPreviousPage;
+          this.canNextPage = message.canNextPage;
+          this.canUndoLocation = message.canUndoLocation;
+        }
+        return;
       case 'layoutStable': this.controller.reportLayout(message.locator, message.bookProgression); return;
       case 'closeBook':
         this.readerPageActive = false;
+        this.resetReaderNavigation();
         this.controller.reportLayout(message.locator, message.bookProgression);
         await this.controller.flush();
         return;
     }
+  }
+
+  private resetReaderNavigation(): void {
+    this.canPreviousPage = false;
+    this.canNextPage = false;
+    this.canUndoLocation = false;
+    this.readerRequest = undefined;
   }
 
   private async refreshLibrary(): Promise<void> {
@@ -385,6 +419,7 @@ export function registerReaderView(
     vscode.window.registerWebviewViewProvider(READER_VIEW_ID, provider),
     vscode.commands.registerCommand(NEXT_READER_PAGE_COMMAND_ID, () => provider.requestNextPage()),
     vscode.commands.registerCommand(PREVIOUS_READER_PAGE_COMMAND_ID, () => provider.requestPreviousPage()),
+    vscode.commands.registerCommand(UNDO_READER_LOCATION_COMMAND_ID, () => provider.requestUndoLocation()),
     vscode.commands.registerCommand(FOCUS_READER_COMMAND_ID, () => vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`)),
     vscode.commands.registerCommand(CLOSE_READER_COMMAND_ID, () => vscode.commands.executeCommand('workbench.action.closeSidebar')),
     vscode.commands.registerCommand(OPEN_READER_LIBRARY_COMMAND_ID, () => provider.requestReaderCommand('openLibrary')),
@@ -395,12 +430,6 @@ export function registerReaderView(
     ...(coordinator ? [vscode.commands.registerCommand(TOGGLE_GIT_LOG_COMMAND_ID, () => coordinator.toggle())] : [])
   );
   return provider;
-}
-
-function isNavigationState(value: unknown): value is { type: 'navigationState'; canNextPage: boolean } {
-  return typeof value === 'object' && value !== null
-    && (value as { type?: unknown }).type === 'navigationState'
-    && typeof (value as { canNextPage?: unknown }).canNextPage === 'boolean';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

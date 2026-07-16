@@ -8,7 +8,7 @@ describe('ResourceManager', () => {
     const manager = new ResourceManager({ createObjectURL, revokeObjectURL });
 
     manager.beginSection([
-      { id: 'cover', path: 'images/cover.png', mimeType: 'image/png' }
+      { id: 'cover', mimeType: 'image/png', label: 'Cover' }
     ]);
     const url = manager.create({ id: 'cover', mimeType: 'image/png', bytes: new Uint8Array([1, 2, 3]) });
 
@@ -21,8 +21,8 @@ describe('ResourceManager', () => {
   it('rejects a MIME mismatch and active-content MIME types', () => {
     const manager = new ResourceManager({ createObjectURL: vi.fn(() => 'blob:safe'), revokeObjectURL: vi.fn() });
     manager.beginSection([
-      { id: 'cover', path: 'cover.png', mimeType: 'image/png' },
-      { id: 'script', path: 'script.js', mimeType: 'application/javascript' }
+      { id: 'cover', mimeType: 'image/png', label: 'Cover' },
+      { id: 'script', mimeType: 'application/javascript', label: 'Script' }
     ]);
 
     expect(manager.create({ id: 'cover', mimeType: 'image/jpeg', bytes: new Uint8Array() })).toBeUndefined();
@@ -33,7 +33,7 @@ describe('ResourceManager', () => {
     const createObjectURL = vi.fn(() => 'blob:cover');
     const revokeObjectURL = vi.fn();
     const manager = new ResourceManager({ createObjectURL, revokeObjectURL });
-    manager.beginSection([{ id: 'cover', path: 'cover.webp', mimeType: 'image/webp' }]);
+    manager.beginSection([{ id: 'cover', mimeType: 'image/webp', label: 'Cover' }]);
     const payload = { id: 'cover', mimeType: 'image/webp', bytes: new Uint8Array([1]) };
 
     expect(manager.create(payload)).toBe(manager.create(payload));

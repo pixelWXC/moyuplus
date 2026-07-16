@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:; img-src blob: data:">
+  <link rel="stylesheet" href="../../../media/readerApp.css">
+  <style>:root{--vscode-font-family:sans-serif;--vscode-editor-background:#fff;--vscode-editor-foreground:#222;--vscode-sideBar-background:#f6f6f6;--vscode-foreground:#222;--vscode-descriptionForeground:#666;--vscode-panel-border:#ccc;--vscode-widget-border:#bbb;--vscode-focusBorder:#06c;--vscode-textLink-foreground:#006ab1;--vscode-textLink-activeForeground:#004578}</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const messages = [];
+    window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
+  </script>
+  <script src="../../../media/readerApp.js"></script>
+  <script>
+    const book = {
+      schemaVersion: 2, id: 'book-1', uri: 'file:///book.epub', source: 'external', format: 'epub',
+      title: 'Navigation Book', authors: [], capabilities: { readable: true, typing: false, toc: true },
+      formatData: {}, createdAt: 1, updatedAt: 1
+    };
+    const send = data => window.dispatchEvent(new MessageEvent('message', { data }));
+    send({ type: 'libraryState', books: [book], availability: { 'book-1': true }, progress: { 'book-1': 0 } });
+    document.querySelector('.book-open').click();
+    const open = messages.find(message => message.type === 'openBook');
+    send({
+      version: 3, type: 'bookReady', requestId: open.requestId, bookId: 'book-1',
+      toc: [{ title: 'Note', sectionId: 'chapter-1', fragment: 'note' }],
+      sections: [{ id: 'chapter-1', order: 0, progressionWeight: 1 }, { id: 'chapter-2', order: 1, progressionWeight: 1 }],
+      initialSectionId: 'chapter-1', initialLocator: { kind: 'epub', sectionId: 'chapter-1', progression: 0 }
+    });
+    const chapterOneHtml = `<div class="moyuplus-book-content"><a data-moyuplus-section-id="chapter-2" data-moyuplus-fragment="note-2">跨章脚注</a><button class="moyuplus-image-link" data-moyuplus-resource-id="image_001">查看图片：Cover</button><p>${'first page content '.repeat(90)}</p><a id="note"></a><p>${'note content '.repeat(90)}</p></div>`;
+    const canonicalHtml = `<div class="moyuplus-book-content"><h1>完整 EPUB 章节</h1><p>${'normal text 正文 '.repeat(80)}</p><pre><code>${'unbroken_preformatted_value_'.repeat(60)}</code></pre><table><tbody><tr><th>列标题</th><td>${'wide_table_cell_'.repeat(60)}</td></tr></tbody></table><ol><li>一级列表<ul><li>${'nested_list_value_'.repeat(50)}</li></ul></li></ol><blockquote>${'quoted content '.repeat(80)}</blockquote></div>`;
+    send({
+      version: 3, type: 'sectionReady', requestId: open.requestId, bookId: 'book-1', sectionId: 'chapter-1', sectionGeneration: 1,
+      section: {
+        sectionId: 'chapter-1', sourceRevision: 'revision-1', localResources: [{ id: 'image_001', mimeType: 'image/png', label: 'Cover' }],
+        sanitizedHtml: chapterOneHtml
+      }
+    });
+    window.readerAppHarness = { messages, send, requestId: open.requestId, chapterOneHtml, canonicalHtml };
+  </script>
+</body>
+</html>

@@ -20,7 +20,8 @@ import {
   CLOSE_READER_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  UNDO_READER_LOCATION_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -29,6 +30,7 @@ import {
 import { commands, languages, resetVSCodeShim, type Disposable, window } from '../shims/vscode';
 import { BOOK_LIBRARY_KEY, READER_V2_MIGRATION_KEY, TXT_LIBRARY_KEY } from '../../storage/storageKeys';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
+import { IMAGE_PREVIEW_VIEW_TYPE } from '../../reader/imagePreviewService';
 
 class MemoryMemento {
   private readonly values = new Map<string, unknown>();
@@ -67,6 +69,7 @@ describe('extension activation', () => {
       RELOCATE_BOOK_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
+      UNDO_READER_LOCATION_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
       OPEN_READER_LIBRARY_COMMAND_ID,
@@ -87,8 +90,9 @@ describe('extension activation', () => {
       ROUTE_TAB_COMMAND_ID
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
+    expect(window.registeredCustomEditorProviderIds()).toEqual([IMAGE_PREVIEW_VIEW_TYPE]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(28);
+    expect(context.subscriptions).toHaveLength(31);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 

@@ -54,11 +54,68 @@ h1 { margin-bottom: 0; font-size: 18px; font-weight: 600; line-height: 1.2; }
 button:disabled { opacity: .42; cursor: default; }
 .chapter-bar { min-height: 30px; justify-content: space-between; border-bottom: 1px solid var(--hairline); }
 .chapter-title { flex: 1; padding: 0 4px; color: var(--vscode-descriptionForeground); font-size: 11px; text-align: center; }
+.reader-viewport { min-width: 0; min-height: 0; overflow: hidden; background: var(--vscode-editor-background); }
 .reader-content { min-width: 0; min-height: 0; overflow: hidden; color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); word-break: break-word; }
+.reader-page { width: 100%; height: 100%; }
 .reader-content[data-theme='light'] { color: #1f2328; background: #fff; }
 .reader-content[data-theme='sepia'] { color: #4a3b2a; background: #f3ead7; }
 .reader-content[data-theme='dark'] { color: #d6d4d1; background: #1e1e1e; }
-.reader-content p { margin: 0 0 var(--paragraph-spacing, .75em); }
+.reader-content > .moyuplus-book-content,
+.reader-content > .moyuplus-book-content * {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.reader-content > .moyuplus-book-content {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.reader-content > .moyuplus-book-content :where(h1, h2, h3, h4, h5, h6, p, blockquote, pre, table, ul, ol, dl, figure) {
+  margin: 0 0 var(--paragraph-spacing, .75em);
+}
+.reader-content > .moyuplus-book-content :where(h1, h2, h3, h4, h5, h6) { line-height: 1.3; }
+.reader-content > .moyuplus-book-content h1 { font-size: 1.5em; }
+.reader-content > .moyuplus-book-content h2 { font-size: 1.35em; }
+.reader-content > .moyuplus-book-content h3 { font-size: 1.2em; }
+.reader-content > .moyuplus-book-content :where(h4, h5, h6) { font-size: 1em; }
+.reader-content > .moyuplus-book-content :where(ul, ol) { padding-inline-start: 1.5em; }
+.reader-content > .moyuplus-book-content blockquote { padding-inline-start: .75em; border-inline-start: 2px solid var(--hairline); }
+.reader-content > .moyuplus-book-content :where(pre, code, kbd, samp) { font-family: var(--vscode-editor-font-family, monospace); }
+.reader-content > .moyuplus-book-content pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.reader-content > .moyuplus-book-content code { white-space: inherit; overflow-wrap: anywhere; word-break: break-word; }
+.reader-content > .moyuplus-book-content table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.reader-content > .moyuplus-book-content :where(th, td) { padding: .2em .3em; overflow-wrap: anywhere; word-break: break-word; vertical-align: top; }
+.reader-content > .moyuplus-book-content :where(nobr, .moyuplus-image-link) { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.reader-content > .moyuplus-book-content .moyuplus-image-link {
+  appearance: none;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--vscode-textLink-foreground);
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.reader-content > .moyuplus-book-content .moyuplus-image-link:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground)); }
+.reader-content > .moyuplus-book-content :where(img, svg, video, canvas) { height: auto; }
 .reader-footer { min-height: 34px; justify-content: space-between; padding: 3px 7px; border-top: 1px solid var(--hairline); }
 .page-action, .subtle-button { min-height: 26px; padding: 2px 7px; border: 0; color: var(--vscode-foreground); background: transparent; cursor: pointer; }
 .page-progress { color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; font-size: 11px; }

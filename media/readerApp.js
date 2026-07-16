@@ -1,6 +1,55 @@
 "use strict";
 (() => {
+  // src/webview/internalTargetResolver.ts
+  var InternalTargetResolver = class {
+    nodes = [];
+    ranges = /* @__PURE__ */ new Map();
+    segments = [];
+    constructor(root) {
+      this.index(root);
+    }
+    get totalLength() {
+      return this.segments.at(-1)?.end ?? 0;
+    }
+    resolveFragment(fragment) {
+      const target = this.nodes.find((node2) => node2.id === fragment);
+      if (!target) return void 0;
+      const range = this.ranges.get(target);
+      if (!range) return void 0;
+      const contained = this.segments[range.startSegment];
+      if (contained && range.startSegment < range.endSegment) return contained.start;
+      const following = this.segments.find((segment) => segment.order > range.order);
+      if (following) return following.start;
+      for (let index = this.segments.length - 1; index >= 0; index -= 1) {
+        if (this.segments[index].order < range.order) return this.segments[index].end;
+      }
+      return void 0;
+    }
+    pointForOffset(offset) {
+      if (this.segments.length === 0) return void 0;
+      const clamped = Math.max(0, Math.min(this.totalLength, Number.isFinite(offset) ? Math.trunc(offset) : 0));
+      const segment = this.segments.find((candidate) => clamped === candidate.start || clamped < candidate.end);
+      if (segment) return { node: segment.node, offset: clamped - segment.start };
+      const final = this.segments.at(-1);
+      return { node: final.node, offset: final.end - final.start };
+    }
+    index(node2) {
+      const order = this.nodes.length;
+      this.nodes.push(node2);
+      const startSegment = this.segments.length;
+      if (node2.nodeType === 3 && typeof node2.data === "string" && node2.data.length > 0) {
+        const start = this.totalLength;
+        this.segments.push({ node: node2, start, end: start + node2.data.length, order });
+      }
+      for (const child of Array.from(node2.childNodes)) this.index(child);
+      this.ranges.set(node2, { startSegment, endSegment: this.segments.length, order });
+    }
+  };
+
   // src/webview/layoutEngine.ts
+  function fitsWithinSurface(surface) {
+    return surface.scrollHeight <= surface.clientHeight + 1 && surface.scrollWidth <= surface.clientWidth + 1;
+  }
   var LayoutEngine = class {
     constructor(viewport, onReflow) {
       this.viewport = viewport;
@@ -21,15 +70,38 @@
     pages = [{ start: 0, end: 0 }];
     spans = [];
     totalLength = 0;
+    sourceText = "";
     pageIndex = 0;
     scheduledFrame;
     reflowPasses = 0;
     scheduleFromEnvironment = () => this.requestReflow();
     setContent(sectionId, sanitizedHtml, progression = 0) {
+      this.loadSource(sectionId, sanitizedHtml);
+      this.paginate(Math.max(0, Math.min(1, progression)) * this.totalLength);
+    }
+    setContentAtOffset(sectionId, sanitizedHtml, textOffset) {
+      this.loadSource(sectionId, sanitizedHtml);
+      this.paginate(Math.max(0, Math.min(this.totalLength, Number.isFinite(textOffset) ? Math.trunc(textOffset) : 0)));
+    }
+    getTextLength() {
+      return this.totalLength;
+    }
+    attachTo(viewport, onReflow) {
+      const staging = this.viewport;
+      if (staging === viewport) {
+        this.onReflow = onReflow;
+        return;
+      }
+      viewport.replaceChildren(...Array.from(staging.childNodes));
+      this.viewport = viewport;
+      this.onReflow = onReflow;
+      this.syncMeasureStyle();
+      staging.remove();
+    }
+    loadSource(sectionId, sanitizedHtml) {
       this.sectionId = sectionId;
       this.source.innerHTML = sanitizedHtml;
       this.indexText();
-      this.paginate(Math.max(0, Math.min(1, progression)) * this.totalLength);
     }
     reflow() {
       const anchor = this.pages[this.pageIndex]?.start ?? 0;
@@ -57,6 +129,22 @@
       this.pageIndex -= 1;
       this.render();
       return true;
+    }
+    goToOffset(offset) {
+      const clamped = Math.max(0, Math.min(this.totalLength, Number.isFinite(offset) ? Math.trunc(offset) : 0));
+      let target = this.pages.findIndex((page) => clamped >= page.start && clamped < page.end);
+      if (target < 0) target = this.pages.length - 1;
+      if (target === this.pageIndex) return false;
+      this.pageIndex = target;
+      this.render();
+      return true;
+    }
+    resolveFragmentOffset(fragment) {
+      return new InternalTargetResolver(this.source).resolveFragment(fragment);
+    }
+    goToFragment(fragment) {
+      const offset = this.resolveFragmentOffset(fragment);
+      return offset === void 0 ? false : this.goToOffset(offset);
     }
     getState() {
       const page = this.pages[this.pageIndex] ?? { start: 0, end: 0 };
@@ -92,6 +180,7 @@
         this.spans.push({ node: text, start, end: this.totalLength });
         node2 = walker.nextNode();
       }
+      this.sourceText = this.source.textContent ?? "";
     }
     paginate(anchor) {
       this.reflowPasses += 1;
@@ -132,41 +221,94 @@
       this.render();
     }
     syncMeasureStyle() {
-      const style = getComputedStyle(this.viewport);
-      for (const name of ["box-sizing", "width", "height", "padding", "font", "font-size", "font-family", "font-weight", "line-height", "letter-spacing", "word-break", "white-space"]) {
-        this.measure.style.setProperty(name, style.getPropertyValue(name));
-      }
-      this.measure.style.width = `${this.viewport.clientWidth}px`;
-      this.measure.style.height = `${this.viewport.clientHeight}px`;
+      this.syncSurfaceIdentity(this.source);
+      this.syncSurfaceIdentity(this.measure);
     }
     fits(start, end) {
       this.measure.replaceChildren(this.fragment(start, end));
-      return this.measure.scrollHeight <= this.measure.clientHeight + 1;
+      return fitsWithinSurface(this.measure);
     }
     render() {
       const page = this.pages[this.pageIndex];
       this.viewport.replaceChildren(this.fragment(page.start, page.end));
+      if (!fitsWithinSurface(this.viewport) && page.end > page.start + 1) {
+        const originalEnd = page.end;
+        let low = page.start + 1;
+        let high = page.end - 1;
+        let best = page.start + 1;
+        while (low <= high) {
+          const middle = Math.floor((low + high) / 2);
+          this.viewport.replaceChildren(this.fragment(page.start, middle));
+          if (fitsWithinSurface(this.viewport)) {
+            best = middle;
+            low = middle + 1;
+          } else high = middle - 1;
+        }
+        page.end = Math.max(page.start + 1, this.snapBoundary(page.start, best));
+        const next = this.pages[this.pageIndex + 1];
+        if (next) next.start = page.end;
+        else if (page.end < originalEnd) this.pages.push({ start: page.end, end: originalEnd });
+        this.viewport.replaceChildren(this.fragment(page.start, page.end));
+      }
     }
     fragment(start, end) {
-      const range = document.createRange();
       const startPoint = this.point(start, false);
       const endPoint = this.point(end, true);
+      const range = document.createRange();
       range.setStart(startPoint.node, startPoint.offset);
       range.setEnd(endPoint.node, endPoint.offset);
-      return range.cloneContents();
+      let content = range.cloneContents();
+      let ancestor = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+      while (ancestor && ancestor !== this.source) {
+        const wrapper = ancestor.cloneNode(false);
+        wrapper.append(content);
+        content = wrapper;
+        if (ancestor.classList.contains("moyuplus-book-content")) break;
+        ancestor = ancestor.parentElement;
+      }
+      return content;
     }
     point(offset, atEnd) {
-      const span = this.spans.find((item) => offset < item.end || atEnd && offset === item.end) ?? this.spans[this.spans.length - 1];
+      let low = 0;
+      let high = this.spans.length - 1;
+      let match = high;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const span2 = this.spans[middle];
+        if (offset < span2.end || atEnd && offset === span2.end) {
+          match = middle;
+          high = middle - 1;
+        } else low = middle + 1;
+      }
+      const span = this.spans[match];
       return { node: span.node, offset: Math.max(0, Math.min(span.node.length, offset - span.start)) };
     }
     snapBoundary(start, candidate) {
       if (candidate >= this.totalLength) return this.totalLength;
-      const text = this.source.textContent ?? "";
       const floor = Math.max(start + 1, candidate - 80);
       for (let index = candidate; index >= floor; index -= 1) {
-        if (/\s|[，。！？；、,.!?;]/u.test(text[index - 1] ?? "")) return index;
+        if (/\s|[，。！？；、,.!?;]/u.test(this.sourceText[index - 1] ?? "")) return index;
       }
       return candidate;
+    }
+    syncSurfaceIdentity(surface) {
+      surface.className = this.viewport.className;
+      for (const key of Object.keys(surface.dataset)) delete surface.dataset[key];
+      for (const [key, value] of Object.entries(this.viewport.dataset)) surface.dataset[key] = value;
+      surface.style.cssText = this.viewport.style.cssText;
+      const computed = getComputedStyle(this.viewport);
+      for (const name of Array.from(computed)) {
+        if (name.startsWith("--")) surface.style.setProperty(name, computed.getPropertyValue(name));
+      }
+      Object.assign(surface.style, {
+        position: "fixed",
+        left: "-100000px",
+        top: "0",
+        visibility: "hidden",
+        overflow: "hidden",
+        width: `${this.viewport.clientWidth}px`,
+        height: `${this.viewport.clientHeight}px`
+      });
     }
   };
 
@@ -194,6 +336,12 @@
       if (isNonEmptyString(value.fragment)) {
         locator.fragment = value.fragment;
       }
+      if (isNonNegativeFiniteNumber(value.textOffset)) {
+        locator.textOffset = Math.trunc(value.textOffset);
+      }
+      if (isNonEmptyString(value.sourceRevision)) {
+        locator.sourceRevision = value.sourceRevision;
+      }
       return locator;
     }
     return void 0;
@@ -215,7 +363,7 @@
   }
 
   // src/reader/readerMessages.ts
-  var READER_PROTOCOL_VERSION = 2;
+  var READER_PROTOCOL_VERSION = 3;
   function isExtensionToReaderV2Message(value) {
     if (!hasEnvelope(value)) return false;
     if (value.type === "readerError") return isNonEmptyString2(value.code) && isNonEmptyString2(value.message);
@@ -224,7 +372,10 @@
     }
     if (!hasSectionEnvelope(value)) return false;
     if (value.type === "bookStart" || value.type === "bookEnd") return true;
-    return value.type === "sectionReady" && isSafeSection(value.section, value.sectionId);
+    if (value.type === "targetUnavailable" || value.type === "imageOpenFailed") {
+      return isSectionGeneration(value.sectionGeneration) && isNonEmptyString2(value.message);
+    }
+    return value.type === "sectionReady" && isSectionGeneration(value.sectionGeneration) && isSafeSection(value.section, value.sectionId);
   }
   function hasEnvelope(value) {
     return isRecord2(value) && value.version === READER_PROTOCOL_VERSION && isNonEmptyString2(value.requestId) && isNonEmptyString2(value.bookId);
@@ -234,7 +385,7 @@
   }
   function isSafeSection(value, sectionId) {
     if (!isRecord2(value) || value.sectionId !== sectionId || typeof value.sanitizedHtml !== "string" || !isNonEmptyString2(value.sourceRevision) || !Array.isArray(value.localResources)) return false;
-    return value.localResources.every((resource) => isRecord2(resource) && isNonEmptyString2(resource.id) && isNonEmptyString2(resource.path) && isNonEmptyString2(resource.mimeType));
+    return value.localResources.every((resource) => isRecord2(resource) && hasOnlyKeys(resource, ["id", "mimeType", "label"]) && isOpaqueResourceId(resource.id) && isNonEmptyString2(resource.mimeType) && isNonEmptyString2(resource.label));
   }
   function isTocNode(value) {
     if (!isRecord2(value) || !isNonEmptyString2(value.title) || !isNonEmptyString2(value.sectionId)) return false;
@@ -249,6 +400,16 @@
   }
   function isNonEmptyString2(value) {
     return typeof value === "string" && value.trim().length > 0;
+  }
+  function isSectionGeneration(value) {
+    return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+  }
+  function isOpaqueResourceId(value) {
+    return typeof value === "string" && /^[A-Za-z0-9_-]{8,128}$/.test(value);
+  }
+  function hasOnlyKeys(value, keys) {
+    const allowed = new Set(keys);
+    return Object.keys(value).every((key) => allowed.has(key));
   }
 
   // src/git/gitLogModels.ts
@@ -297,36 +458,36 @@
   function isExtensionToGitLogMessage(value) {
     if (!isRecord4(value) || !isNonEmptyString4(value.type)) return false;
     if (value.type === "modeInvalidated") {
-      return hasOnlyKeys(value, ["type", "sessionId", "modeGeneration"]) && (value.sessionId === void 0 || isNonEmptyString4(value.sessionId)) && isModeGeneration(value.modeGeneration);
+      return hasOnlyKeys2(value, ["type", "sessionId", "modeGeneration"]) && (value.sessionId === void 0 || isNonEmptyString4(value.sessionId)) && isModeGeneration(value.modeGeneration);
     }
     if (!isNonEmptyString4(value.sessionId)) return false;
     if (value.type === "gitLogReady") {
-      return hasOnlyKeys(value, ["type", "sessionId", "repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
+      return hasOnlyKeys2(value, ["type", "sessionId", "repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
     }
     if (value.type === "gitLogError" || value.type === "gitLogRefreshFailed") {
-      return hasOnlyKeys(value, ["type", "sessionId", "code", "message"]) && isNonEmptyString4(value.code) && isNonEmptyString4(value.message);
+      return hasOnlyKeys2(value, ["type", "sessionId", "code", "message"]) && isNonEmptyString4(value.code) && isNonEmptyString4(value.message);
     }
     if (value.type === "gitLogInvalidated") {
-      return hasOnlyKeys(value, ["type", "sessionId"]);
+      return hasOnlyKeys2(value, ["type", "sessionId"]);
     }
-    return value.type === "modeGitLog" && hasOnlyKeys(value, ["type", "sessionId", "modeGeneration", "preferences", "readerPreferences", "cached"]) && isModeGeneration(value.modeGeneration) && isStrictPreferences(value.preferences) && isRecord4(value.readerPreferences) && (value.cached === void 0 || isStrictDisplayResult(value.cached));
+    return value.type === "modeGitLog" && hasOnlyKeys2(value, ["type", "sessionId", "modeGeneration", "preferences", "readerPreferences", "cached"]) && isModeGeneration(value.modeGeneration) && isStrictPreferences(value.preferences) && isRecord4(value.readerPreferences) && (value.cached === void 0 || isStrictDisplayResult(value.cached));
   }
   function isStrictDisplayResult(value) {
-    return isRecord4(value) && hasOnlyKeys(value, ["repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
+    return isRecord4(value) && hasOnlyKeys2(value, ["repositoryName", "branchName", "detached", "commits"]) && hasDisplayFields(value);
   }
   function hasDisplayFields(value) {
     return isNonEmptyString4(value.repositoryName) && isNonEmptyString4(value.branchName) && typeof value.detached === "boolean" && Array.isArray(value.commits) && value.commits.every(isStrictCommit);
   }
   function isStrictCommit(value) {
-    return isRecord4(value) && hasOnlyKeys(value, ["hash", "subject", "author", "authoredAt"]) && normalizeGitLogCommit(value) !== void 0;
+    return isRecord4(value) && hasOnlyKeys2(value, ["hash", "subject", "author", "authoredAt"]) && normalizeGitLogCommit(value) !== void 0;
   }
   function isStrictPreferences(value) {
-    return isRecord4(value) && hasOnlyKeys(value, ["showHash", "showAuthor", "showRelativeTime", "showAbsoluteDate", "layout", "maxCommits"]) && typeof value.showHash === "boolean" && typeof value.showAuthor === "boolean" && typeof value.showRelativeTime === "boolean" && typeof value.showAbsoluteDate === "boolean" && (value.layout === "lines" || value.layout === "inline") && typeof value.maxCommits === "number" && Number.isInteger(value.maxCommits) && value.maxCommits >= 20 && value.maxCommits <= 1e3;
+    return isRecord4(value) && hasOnlyKeys2(value, ["showHash", "showAuthor", "showRelativeTime", "showAbsoluteDate", "layout", "maxCommits"]) && typeof value.showHash === "boolean" && typeof value.showAuthor === "boolean" && typeof value.showRelativeTime === "boolean" && typeof value.showAbsoluteDate === "boolean" && (value.layout === "lines" || value.layout === "inline") && typeof value.maxCommits === "number" && Number.isInteger(value.maxCommits) && value.maxCommits >= 20 && value.maxCommits <= 1e3;
   }
   function isModeGeneration(value) {
     return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
   }
-  function hasOnlyKeys(value, allowed) {
+  function hasOnlyKeys2(value, allowed) {
     const allowedKeys = new Set(allowed);
     return Object.keys(value).every((key) => allowedKeys.has(key));
   }
@@ -700,6 +861,73 @@
     return messages[code] ?? fallback;
   }
 
+  // src/webview/readerNavigationHistory.ts
+  var ReaderNavigationHistory = class {
+    constructor(capacity = 50) {
+      this.capacity = capacity;
+    }
+    capacity;
+    entries = [];
+    get size() {
+      return this.entries.length;
+    }
+    get canUndo() {
+      return this.entries.length > 0;
+    }
+    push(location) {
+      const copy = { ...location };
+      const latest = this.entries.at(-1);
+      if (latest && sameLocation(latest, copy)) return;
+      this.entries.push(copy);
+      if (this.entries.length > this.capacity) {
+        this.entries.splice(0, this.entries.length - this.capacity);
+      }
+    }
+    pop() {
+      const location = this.entries.pop();
+      return location ? { ...location } : void 0;
+    }
+    clear() {
+      this.entries.length = 0;
+    }
+  };
+  function sameLocation(left, right) {
+    return left.sectionId === right.sectionId && left.textOffset === right.textOffset && left.progression === right.progression && left.fragment === right.fragment && left.sourceRevision === right.sourceRevision;
+  }
+
+  // src/webview/readerNavigator.ts
+  var ReaderNavigator = class {
+    history;
+    constructor(capacity = 50) {
+      this.history = new ReaderNavigationHistory(capacity);
+    }
+    get canUndo() {
+      return this.history.canUndo;
+    }
+    get historySize() {
+      return this.history.size;
+    }
+    commit(before, after) {
+      if (sameVisibleLocation(before, after)) return false;
+      this.history.push(before);
+      return true;
+    }
+    async undo(restore) {
+      let target = this.history.pop();
+      while (target) {
+        if (await restore(target)) return true;
+        target = this.history.pop();
+      }
+      return false;
+    }
+    clear() {
+      this.history.clear();
+    }
+  };
+  function sameVisibleLocation(left, right) {
+    return left.sectionId === right.sectionId && left.textOffset === right.textOffset && left.sourceRevision === right.sourceRevision;
+  }
+
   // src/domain/readerPreferences.ts
   var READER_PREFERENCE_LIMITS = {
     fontSize: { min: 12, max: 32 },
@@ -817,6 +1045,10 @@
         };
       case "showError":
         return { ...state2, status: "error", error: action.message };
+      case "showNotice":
+        return { ...state2, notice: action.message };
+      case "clearNotice":
+        return { ...state2, notice: void 0 };
       case "openReader":
         return { ...state2, view: "reader", status: "loading", activeBook: action.book, requestId: action.requestId, notice: void 0 };
       case "closeReader":
@@ -828,7 +1060,7 @@
         return { ...state2, activeSectionId: action.sectionId, status: "loading", drawer: void 0, notice: void 0, navigation: navigationFor(state2.sections ?? [], action.sectionId) };
       case "layoutChanged": {
         const chapter = navigationFor(state2.sections ?? [], action.sectionId);
-        return { ...state2, status: "ready", activeSectionId: action.sectionId, layout: action, notice: void 0, navigation: {
+        return { ...state2, status: "ready", activeSectionId: action.sectionId, layout: action, navigation: {
           ...chapter,
           canPreviousPage: action.canPreviousPage || chapter.canPreviousSection,
           canNextPage: action.canNextPage || chapter.canNextSection
@@ -880,15 +1112,25 @@
   var appMode = "boot";
   var gitLogView;
   var acceptedModeGeneration = 0;
+  var navigator = new ReaderNavigator();
+  var currentSectionGeneration = 0;
+  var currentSourceRevision = "";
+  var currentResourceIds = /* @__PURE__ */ new Set();
+  var pendingNavigation;
+  var initialEpubRestore;
   function dispatch(action) {
     state = readerAppReducer(state, action);
+    if (action.type === "openDrawer" || action.type === "closeDrawer") {
+      syncReaderDrawer();
+      return;
+    }
     render();
   }
   function post(message) {
     vscode?.postMessage(message);
   }
   function envelope(type, sectionId) {
-    return { version: 2, type, requestId: state.requestId, bookId: state.activeBook?.id, ...sectionId ? { sectionId } : {} };
+    return { version: READER_PROTOCOL_VERSION, type, requestId: state.requestId, bookId: state.activeBook?.id, ...sectionId ? { sectionId } : {} };
   }
   function render() {
     if (!app) return;
@@ -905,7 +1147,6 @@
     layout?.dispose();
     layout = void 0;
     renderLibrary(app);
-    post({ type: "navigationState", canNextPage: false });
   }
   function renderLibrary(root) {
     root.className = "library-view";
@@ -944,32 +1185,29 @@
     const toolbar = element("header", "reader-toolbar");
     toolbar.append(iconButton2("\u2190", "\u8FD4\u56DE\u4E66\u67B6", closeBook), element("strong", "reader-title", state.activeBook?.title ?? "\u9605\u8BFB"));
     const tools = element("div", "reader-tools");
-    tools.append(iconButton2("\u2630", "\u76EE\u5F55", () => dispatch({ type: "openDrawer", drawer: "toc" })), iconButton2("Aa", "\u9605\u8BFB\u8BBE\u7F6E", () => dispatch({ type: "openDrawer", drawer: "settings" })));
+    const undo = iconButton2("\u21B6", "\u64A4\u56DE\u9605\u8BFB\u4F4D\u7F6E", () => {
+      void undoLocation();
+    }, !navigator.canUndo);
+    undo.id = "undo-location";
+    tools.append(undo, iconButton2("\u2630", "\u76EE\u5F55", () => dispatch({ type: "openDrawer", drawer: "toc" })), iconButton2("Aa", "\u9605\u8BFB\u8BBE\u7F6E", () => dispatch({ type: "openDrawer", drawer: "settings" })));
     toolbar.append(tools);
     root.append(toolbar);
     const chapter = element("nav", "chapter-bar");
     chapter.setAttribute("aria-label", "\u7AE0\u8282\u5BFC\u822A");
-    chapter.append(
-      iconButton2("\u2039", "\u4E0A\u4E00\u7AE0", () => requestAdjacent("requestPreviousSection"), !state.navigation?.canPreviousSection),
-      element("span", "chapter-title", currentSectionTitle()),
-      iconButton2("\u203A", "\u4E0B\u4E00\u7AE0", () => requestAdjacent("requestNextSection"), !state.navigation?.canNextSection)
-    );
+    const previousChapter = iconButton2("\u2039", "\u4E0A\u4E00\u7AE0", () => requestAdjacent("requestPreviousSection"), !state.navigation?.canPreviousSection);
+    previousChapter.id = "previous-chapter";
+    const chapterTitle = element("span", "chapter-title", currentSectionTitle());
+    chapterTitle.id = "chapter-title";
+    const nextChapter = iconButton2("\u203A", "\u4E0B\u4E00\u7AE0", () => requestAdjacent("requestNextSection"), !state.navigation?.canNextSection);
+    nextChapter.id = "next-chapter";
+    chapter.append(previousChapter, chapterTitle, nextChapter);
     root.append(chapter);
-    const viewport = element("main", "reader-content");
-    viewport.id = "reader-content";
+    const viewport = element("main", "reader-viewport");
     viewport.setAttribute("tabindex", "0");
+    const page = element("div", "reader-content reader-page");
+    page.id = "reader-content";
+    viewport.append(page);
     root.append(viewport);
-    applyReaderPreferences(viewport, state.preferencesDraft);
-    const priorLayout = state.layout;
-    let priorProgression = 0;
-    if (priorLayout && priorLayout.sectionId === state.activeSectionId) priorProgression = priorLayout.progression;
-    layout?.dispose();
-    layout = new LayoutEngine(viewport, (current) => commitLayout(current));
-    if (currentSectionHtml && state.activeSectionId) {
-      layout.setContent(state.activeSectionId, currentSectionHtml, priorLayout ? priorProgression : state.initialProgression ?? 0);
-      state = readerAppReducer(state, { type: "layoutChanged", ...layout.getState() });
-    } else if (state.status === "loading") viewport.append(element("p", "notice", "\u6B63\u5728\u8F7D\u5165\u7AE0\u8282\u2026"));
-    if (state.status === "error") viewport.append(element("p", "notice notice-error", state.error ?? "\u7AE0\u8282\u8F7D\u5165\u5931\u8D25\u3002"));
     const footer = element("footer", "reader-footer");
     const previous = button2("\u4E0A\u4E00\u9875", "page-action", previousPage, !state.navigation?.canPreviousPage);
     previous.id = "previous-page";
@@ -979,14 +1217,49 @@
     next.id = "next-page";
     footer.append(previous, progress, next);
     root.append(footer);
-    if (state.notice) {
-      const notice = element("div", "reader-toast", state.notice);
-      notice.setAttribute("role", "status");
-      root.append(notice);
-    }
-    if (state.drawer === "toc") root.append(renderTocDrawer());
-    if (state.drawer === "settings") root.append(renderSettingsDrawer());
-    post({ type: "navigationState", canNextPage: Boolean(state.navigation?.canNextPage) });
+    applyReaderPreferences(page, state.preferencesDraft);
+    page.addEventListener("click", handleReaderContentClick);
+    const priorLayout = state.layout;
+    let priorProgression = 0;
+    if (priorLayout && priorLayout.sectionId === state.activeSectionId) priorProgression = priorLayout.progression;
+    layout?.dispose();
+    layout = new LayoutEngine(page, (current) => commitLayout(current));
+    if (currentSectionHtml && state.activeSectionId) {
+      layout.setContent(state.activeSectionId, currentSectionHtml, priorLayout ? priorProgression : state.initialProgression ?? 0);
+      state = readerAppReducer(state, { type: "layoutChanged", ...layout.getState() });
+    } else if (state.status === "loading") page.append(element("p", "notice", "\u6B63\u5728\u8F7D\u5165\u7AE0\u8282\u2026"));
+    if (state.status === "error") page.append(element("p", "notice notice-error", state.error ?? "\u7AE0\u8282\u8F7D\u5165\u5931\u8D25\u3002"));
+    syncReaderNotice();
+    syncReaderDrawer();
+    postNavigationState();
+  }
+  function syncReaderDrawer() {
+    if (!app || appMode !== "readerApp" || state.view !== "reader") return;
+    app.querySelector(":scope > .reader-drawer")?.remove();
+    if (state.drawer === "toc") app.append(renderTocDrawer());
+    if (state.drawer === "settings") app.append(renderSettingsDrawer());
+  }
+  function syncReaderSectionUi() {
+    const title = document.querySelector("#chapter-title");
+    if (title) title.textContent = currentSectionTitle();
+    const previousChapter = document.querySelector("#previous-chapter");
+    if (previousChapter) previousChapter.disabled = !state.navigation?.canPreviousSection;
+    const nextChapter = document.querySelector("#next-chapter");
+    if (nextChapter) nextChapter.disabled = !state.navigation?.canNextSection;
+    syncReaderNotice();
+    syncReaderDrawer();
+  }
+  function syncReaderNotice() {
+    if (!app || appMode !== "readerApp" || state.view !== "reader") return;
+    app.querySelector(":scope > .reader-toast")?.remove();
+    if (!state.notice) return;
+    const notice = element("div", "reader-toast", state.notice);
+    notice.setAttribute("role", "status");
+    app.append(notice);
+  }
+  function showReaderNotice(message) {
+    state = readerAppReducer(state, { type: "showNotice", message });
+    syncReaderNotice();
   }
   function renderTocDrawer() {
     const drawer = drawerShell("\u76EE\u5F55");
@@ -999,7 +1272,7 @@
   function appendTocNodes(parent, nodes, depth) {
     nodes.forEach((node2) => {
       const item = element("li", "toc-item");
-      const target = button2(node2.title, node2.sectionId === state.activeSectionId ? "toc-link is-current" : "toc-link", () => selectSection(node2.sectionId));
+      const target = button2(node2.title, node2.sectionId === state.activeSectionId ? "toc-link is-current" : "toc-link", () => navigateToTarget(node2.sectionId, node2.fragment));
       target.style.setProperty("--toc-depth", String(depth));
       item.append(target);
       if (node2.children?.length) {
@@ -1042,10 +1315,7 @@
     const drawer = element("aside", "reader-drawer");
     drawer.setAttribute("aria-label", title);
     const header = element("header", "drawer-header");
-    header.append(element("h2", void 0, title), iconButton2("\xD7", `\u5173\u95ED${title}`, () => {
-      dispatch({ type: "closeDrawer" });
-      layout?.requestReflow();
-    }));
+    header.append(element("h2", void 0, title), iconButton2("\xD7", `\u5173\u95ED${title}`, () => dispatch({ type: "closeDrawer" })));
     drawer.append(header);
     return drawer;
   }
@@ -1078,26 +1348,33 @@
     layout?.requestReflow();
   }
   function openBook(book) {
+    navigator.clear();
+    resetSectionContext();
     const requestId = `webview-${Date.now()}-${++requestSequence}`;
     dispatch({ type: "openReader", book, requestId });
-    post({ version: 2, type: "openBook", requestId, bookId: book.id });
-  }
-  function selectSection(sectionId) {
-    dispatch({ type: "selectSection", sectionId });
-    post(envelope("requestSection", sectionId));
+    post({ version: READER_PROTOCOL_VERSION, type: "openBook", requestId, bookId: book.id });
   }
   function requestAdjacent(type) {
     const id = state.activeSectionId;
-    if (id) post(envelope(type, id));
+    const before = currentLocation();
+    if (!id || !before || pendingNavigation) return;
+    pendingNavigation = { kind: "move", before, edge: type === "requestPreviousSection" ? "end" : "start" };
+    post(envelope(type, id));
   }
   function nextPage() {
-    if (layout?.nextPage()) updateLayout();
-    else if (state.navigation?.canNextSection) requestAdjacent("requestNextSection");
+    const before = currentLocation();
+    if (before && layout?.nextPage()) {
+      updateLayout();
+      commitMovement(before);
+    } else if (state.navigation?.canNextSection) requestAdjacent("requestNextSection");
     else dispatch({ type: "bookBoundary", edge: "end" });
   }
   function previousPage() {
-    if (layout?.previousPage()) updateLayout();
-    else if (state.navigation?.canPreviousSection) requestAdjacent("requestPreviousSection");
+    const before = currentLocation();
+    if (before && layout?.previousPage()) {
+      updateLayout();
+      commitMovement(before);
+    } else if (state.navigation?.canPreviousSection) requestAdjacent("requestPreviousSection");
     else dispatch({ type: "bookBoundary", edge: "start" });
   }
   function updateLayout() {
@@ -1111,7 +1388,8 @@
     if (next) next.disabled = !state.navigation?.canNextPage;
     const progress = document.querySelector("#page-progress");
     if (progress) progress.textContent = formatReadingProgress();
-    post({ type: "navigationState", canNextPage: Boolean(state.navigation?.canNextPage) });
+    syncUndoButton();
+    postNavigationState();
     post({ ...envelope("layoutStable", current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
   }
   function closeBook() {
@@ -1119,10 +1397,12 @@
       const current = layout.getState();
       post({ ...envelope("closeBook", current.sectionId), locator: locatorFor(current), bookProgression: wholeBookProgress(current) });
     }
+    navigator.clear();
+    resetSectionContext();
     dispatch({ type: "closeReader" });
   }
   function locatorFor(current) {
-    return state.activeBook?.format === "txt" ? { kind: "txt", sectionId: current.sectionId, progression: current.progression, offset: current.startOffset } : { kind: "epub", sectionId: current.sectionId, progression: current.progression };
+    return state.activeBook?.format === "txt" ? { kind: "txt", sectionId: current.sectionId, progression: current.progression, offset: current.startOffset } : { kind: "epub", sectionId: current.sectionId, progression: current.progression, textOffset: current.startOffset, sourceRevision: currentSourceRevision };
   }
   function wholeBookProgress(current) {
     const sections = state.sections ?? [];
@@ -1131,6 +1411,129 @@
     if (total <= 0 || index < 0) return 0;
     const before = sections.slice(0, index).reduce((sum, section) => sum + Math.max(1, section.progressionWeight), 0);
     return (before + current.progression * Math.max(1, sections[index].progressionWeight)) / total;
+  }
+  function currentLocation() {
+    const current = layout?.getState();
+    if (!current || !currentSourceRevision) return void 0;
+    return { sectionId: current.sectionId, textOffset: current.startOffset, progression: current.progression, sourceRevision: currentSourceRevision };
+  }
+  function commitMovement(before) {
+    const after = currentLocation();
+    if (after) navigator.commit(before, after);
+    state = readerAppReducer(state, { type: "clearNotice" });
+    document.querySelector(".reader-toast")?.remove();
+    syncUndoButton();
+    postNavigationState();
+  }
+  function navigateToTarget(sectionId, fragment) {
+    const before = currentLocation();
+    if (!before || pendingNavigation) return;
+    if (sectionId === before.sectionId) {
+      const offset = fragment ? layout?.resolveFragmentOffset(fragment) : 0;
+      if (offset === void 0) {
+        dispatch({ type: "showNotice", message: "\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528" });
+        return;
+      }
+      if (layout?.goToOffset(offset)) {
+        updateLayout();
+        commitMovement(before);
+      }
+      return;
+    }
+    pendingNavigation = { kind: "move", before, expectedSectionId: sectionId, fragment, edge: "start" };
+    post({ ...envelope("requestSectionTarget", sectionId), ...fragment ? { fragment } : {} });
+  }
+  async function undoLocation() {
+    if (pendingNavigation) return false;
+    const restored = await navigator.undo((target) => restoreHistoryLocation(target));
+    if (!restored) dispatch({ type: "showNotice", message: "\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528" });
+    syncUndoButton();
+    postNavigationState();
+    return restored;
+  }
+  function restoreHistoryLocation(target) {
+    if (!layout) return false;
+    if (target.sectionId === state.activeSectionId) {
+      const offset = target.sourceRevision === currentSourceRevision ? target.textOffset : target.progression * layout.getTextLength();
+      if (!layout.goToOffset(offset)) return true;
+      state = readerAppReducer(state, { type: "clearNotice" });
+      document.querySelector(".reader-toast")?.remove();
+      updateLayout();
+      return true;
+    }
+    return new Promise((resolve) => {
+      pendingNavigation = { kind: "undo", target, expectedSectionId: target.sectionId, resolve };
+      post(envelope("requestSectionTarget", target.sectionId));
+    });
+  }
+  function handleReaderContentClick(event) {
+    const target = event.target instanceof Element ? event.target.closest("[data-moyuplus-resource-id],[data-moyuplus-section-id]") : null;
+    if (!target) return;
+    event.preventDefault();
+    const resourceId = target.dataset.moyuplusResourceId;
+    if (resourceId) {
+      if (!currentResourceIds.has(resourceId) || currentSectionGeneration <= 0 || !state.activeSectionId) return;
+      post({ ...envelope("openImage", state.activeSectionId), sectionGeneration: currentSectionGeneration, resourceId });
+      return;
+    }
+    const sectionId = target.dataset.moyuplusSectionId;
+    if (sectionId) navigateToTarget(sectionId, target.dataset.moyuplusFragment);
+  }
+  function resolveTargetOffset(html, fragment) {
+    const source = document.createElement("div");
+    source.innerHTML = html;
+    const resolver = new InternalTargetResolver(source);
+    return { totalLength: resolver.totalLength, offset: fragment ? resolver.resolveFragment(fragment) : 0 };
+  }
+  function prepareSectionLayout(sectionId, html, textOffset) {
+    const visible = document.querySelector("#reader-content");
+    if (!visible || !app || visible.clientWidth <= 0 || visible.clientHeight <= 0) return void 0;
+    const staging = document.createElement("div");
+    staging.className = visible.className;
+    for (const [key, value] of Object.entries(visible.dataset)) staging.dataset[key] = value;
+    staging.style.cssText = visible.style.cssText;
+    Object.assign(staging.style, {
+      position: "fixed",
+      left: "-100000px",
+      top: "0",
+      visibility: "hidden",
+      width: `${visible.clientWidth}px`,
+      height: `${visible.clientHeight}px`
+    });
+    app.append(staging);
+    const candidate = new LayoutEngine(staging);
+    try {
+      candidate.setContentAtOffset(sectionId, html, textOffset);
+      if (!fitsWithinSurface(staging)) throw new Error("Candidate layout overflowed its staging surface.");
+      return candidate;
+    } catch {
+      candidate.dispose();
+      staging.remove();
+      return void 0;
+    }
+  }
+  function postNavigationState() {
+    if (!state.requestId || !state.activeBook || !state.activeSectionId || currentSectionGeneration <= 0) return;
+    post({
+      ...envelope("navigationState", state.activeSectionId),
+      sectionGeneration: currentSectionGeneration,
+      canPreviousPage: Boolean(state.navigation?.canPreviousPage),
+      canNextPage: Boolean(state.navigation?.canNextPage),
+      canUndoLocation: navigator.canUndo
+    });
+  }
+  function syncUndoButton() {
+    const undo = document.querySelector("#undo-location");
+    if (undo) undo.disabled = !navigator.canUndo;
+  }
+  function resetSectionContext() {
+    pendingNavigation?.resolve?.(false);
+    pendingNavigation = void 0;
+    initialEpubRestore = void 0;
+    currentSectionHtml = "";
+    currentSectionGeneration = 0;
+    currentSourceRevision = "";
+    currentResourceIds = /* @__PURE__ */ new Set();
   }
   function currentSectionTitle() {
     return state.sections?.find((section) => section.id === state.activeSectionId)?.title ?? "\u6B63\u6587";
@@ -1192,19 +1595,22 @@
   window.addEventListener("message", (event) => {
     if (isModeGitLog(event.data) && app) {
       if (!acceptModeGeneration(event.data.modeGeneration)) return;
+      navigator.clear();
+      resetSectionContext();
       layout?.dispose();
       layout = void 0;
       gitLogView?.dispose();
       appMode = "gitLog";
       gitLogView = new GitLogView(app, post);
       gitLogView.begin(event.data.sessionId, event.data.preferences, event.data.readerPreferences, event.data.cached);
-      post({ type: "navigationState", canNextPage: false });
       return;
     }
     if (isModeLibrary(event.data)) {
       if (!acceptModeGeneration(event.data.modeGeneration)) return;
       gitLogView?.dispose();
       gitLogView = void 0;
+      navigator.clear();
+      resetSectionContext();
       appMode = "readerApp";
       if (event.data.message) dispatch({ type: "showError", message: event.data.message });
       else render();
@@ -1214,6 +1620,8 @@
       if (!acceptModeGeneration(event.data.modeGeneration)) return;
       gitLogView?.dispose();
       gitLogView = void 0;
+      navigator.clear();
+      resetSectionContext();
       appMode = "readerApp";
       state = readerAppReducer(state, {
         type: "libraryLoaded",
@@ -1229,6 +1637,8 @@
       if (!acceptModeGeneration(event.data.modeGeneration)) return;
       layout?.dispose();
       layout = void 0;
+      navigator.clear();
+      resetSectionContext();
       gitLogView?.dispose();
       gitLogView = void 0;
       appMode = "boot";
@@ -1244,6 +1654,7 @@
       const command = event.data.command;
       if (command === "nextPage") nextPage();
       else if (command === "previousPage") previousPage();
+      else if (command === "undoLocation") void undoLocation();
       else if (command === "nextChapter") requestAdjacent("requestNextSection");
       else if (command === "previousChapter") requestAdjacent("requestPreviousSection");
       else if (command === "openLibrary") closeBook();
@@ -1266,25 +1677,91 @@
     const message = event.data;
     if (!state.requestId || message.requestId !== state.requestId || message.bookId !== state.activeBook?.id) return;
     if (message.type === "bookReady") {
+      initialEpubRestore = message.initialLocator.kind === "epub" && message.initialLocator.textOffset !== void 0 && message.initialLocator.sourceRevision ? { textOffset: message.initialLocator.textOffset, sourceRevision: message.initialLocator.sourceRevision } : void 0;
       dispatch({ type: "bookReady", requestId: message.requestId, toc: message.toc, sections: message.sections, initialSectionId: message.initialSectionId, initialProgression: message.initialLocator.progression });
       post(envelope("requestSection", message.initialSectionId));
       return;
     }
     if (message.type === "sectionReady") {
+      if (message.sectionGeneration <= currentSectionGeneration) return;
+      const pending = pendingNavigation;
+      if (pending?.expectedSectionId && pending.expectedSectionId !== message.sectionId) return;
+      const target = resolveTargetOffset(message.section.sanitizedHtml, pending?.fragment);
+      if (pending?.fragment && target.offset === void 0) {
+        pendingNavigation = void 0;
+        pending?.resolve?.(false);
+        showReaderNotice("\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528");
+        return;
+      }
+      let targetOffset;
+      if (pending?.kind === "undo" && pending.target) {
+        targetOffset = pending.target.sourceRevision === message.section.sourceRevision ? pending.target.textOffset : pending.target.progression * target.totalLength;
+      } else if (pending?.edge === "end") targetOffset = target.totalLength;
+      else if (pending) targetOffset = target.offset ?? 0;
+      else if (initialEpubRestore?.sourceRevision === message.section.sourceRevision) targetOffset = initialEpubRestore.textOffset;
+      else targetOffset = (state.initialProgression ?? 0) * target.totalLength;
+      const candidate = prepareSectionLayout(message.sectionId, message.section.sanitizedHtml, targetOffset ?? 0);
+      if (!candidate) {
+        pendingNavigation = void 0;
+        pending?.resolve?.(false);
+        if (pending) showReaderNotice("\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528");
+        else dispatch({ type: "showError", message: "\u7AE0\u8282\u8F7D\u5165\u5931\u8D25\u3002" });
+        return;
+      }
+      const visible = document.querySelector("#reader-content");
+      if (!visible) {
+        candidate.dispose();
+        pendingNavigation = void 0;
+        pending?.resolve?.(false);
+        if (pending) showReaderNotice("\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528");
+        else dispatch({ type: "showError", message: "\u7AE0\u8282\u8F7D\u5165\u5931\u8D25\u3002" });
+        return;
+      }
+      const previousLayout = layout;
+      initialEpubRestore = void 0;
       currentSectionHtml = message.section.sanitizedHtml;
-      dispatch({ type: "selectSection", sectionId: message.sectionId });
-      updateLayout();
+      currentSectionGeneration = message.sectionGeneration;
+      currentSourceRevision = message.section.sourceRevision;
+      currentResourceIds = new Set(message.section.localResources.map((resource) => resource.id));
+      pendingNavigation = void 0;
+      state = readerAppReducer(state, { type: "selectSection", sectionId: message.sectionId });
+      candidate.attachTo(visible, (current) => commitLayout(current));
+      layout = candidate;
+      previousLayout?.dispose();
+      syncReaderSectionUi();
+      commitLayout(candidate.getState());
+      if (pending?.kind === "move" && pending.before) commitMovement(pending.before);
+      pending?.resolve?.(true);
       return;
     }
     if (message.type === "bookStart" || message.type === "bookEnd") {
+      const pending = pendingNavigation;
+      pendingNavigation = void 0;
+      pending?.resolve?.(false);
       dispatch({ type: "bookBoundary", edge: message.type === "bookStart" ? "start" : "end" });
       return;
     }
-    if (message.type === "readerError") dispatch({ type: "showError", message: message.message });
+    if (message.type === "targetUnavailable") {
+      const pending = pendingNavigation;
+      pendingNavigation = void 0;
+      pending?.resolve?.(false);
+      showReaderNotice("\u76EE\u6807\u4F4D\u7F6E\u4E0D\u53EF\u7528");
+      return;
+    }
+    if (message.type === "imageOpenFailed") {
+      if (message.sectionGeneration === currentSectionGeneration) dispatch({ type: "showNotice", message: message.message });
+      return;
+    }
+    if (message.type === "readerError") {
+      const pending = pendingNavigation;
+      pendingNavigation = void 0;
+      pending?.resolve?.(false);
+      dispatch({ type: "showError", message: message.message });
+    }
   });
   function isReaderCommand(value) {
     if (typeof value !== "object" || value === null || value.type !== "command") return false;
-    return ["nextPage", "previousPage", "nextChapter", "previousChapter", "openLibrary", "openToc", "openSettings"].includes(String(value.command));
+    return ["nextPage", "previousPage", "undoLocation", "nextChapter", "previousChapter", "openLibrary", "openToc", "openSettings"].includes(String(value.command));
   }
   function isLibraryLoadError(value) {
     return typeof value === "object" && value !== null && value.type === "libraryLoadError" && typeof value.message === "string";

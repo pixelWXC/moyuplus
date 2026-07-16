@@ -9,17 +9,89 @@ import { ReadingProgressStore } from '../../storage/readingProgressStore';
 class MemoryMemento { private values = new Map<string, unknown>(); get<T>(k: string): T | undefined { return this.values.get(k) as T; } async update(k: string, v: unknown) { this.values.set(k, v); } }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 function book(id: string): BookRecord { return { schemaVersion: 2, id, uri: `file:///books/${id}.txt`, source: 'external', title: id, authors: [], capabilities: createBookCapabilities('txt'), createdAt: 1, updatedAt: 1, format: 'txt', formatData: { encoding: 'utf8' } }; }
-function handle(id: string, section?: Promise<SafeSectionDocument>): BookHandle { return { getToc: async () => [{ title: id, sectionId: `${id}-s` }], getSections: async () => [{ id: `${id}-s`, order: 0, progressionWeight: 1 }], getSection: async () => section ?? { sectionId: `${id}-s`, sanitizedHtml: `<p>${id}</p>`, localResources: [], sourceRevision: 'r' }, normalizeLocator: async locator => locator, dispose: vi.fn() }; }
+function handle(id: string, section?: Promise<SafeSectionDocument>): BookHandle { return { getToc: async () => [{ title: id, sectionId: `${id}-s` }], getSections: async () => [{ id: `${id}-s`, order: 0, progressionWeight: 1 }], getSection: async () => section ?? { sectionId: `${id}-s`, sanitizedHtml: `<p>${id}</p>`, localResources: [], sourceRevision: 'r' }, readResource: vi.fn().mockRejectedValue(new Error('No resource')), normalizeLocator: async locator => locator, dispose: vi.fn() }; }
 
-async function setup(open: BookAdapter['open']) {
+async function setup(open: BookAdapter['open'], options: { openImagePreview?: (payload: unknown) => Promise<boolean> } = {}) {
   const books = new BookLibraryStore(new MemoryMemento()); const progress = new ReadingProgressStore(new MemoryMemento());
   await books.upsert(book('a')); await books.upsert(book('b'));
   const messages: unknown[] = [];
-  const controller = new ReaderController(books, progress, new AdapterRegistry([{ format: 'txt', inspect: vi.fn(), open }]), message => { messages.push(message); }, { createRequestId: (() => { let n = 0; return () => `r${++n}`; })(), debounceMs: 5, now: () => 50 });
+  const controller = new ReaderController(books, progress, new AdapterRegistry([{ format: 'txt', inspect: vi.fn(), open }]), message => { messages.push(message); }, { createRequestId: (() => { let n = 0; return () => `r${++n}`; })(), debounceMs: 5, now: () => 50, ...options });
   return { controller, progress, messages };
 }
 
 describe('ReaderController', () => {
+  it('opens only a resource declared by the current correlated section', async () => {
+    const readResource = vi.fn().mockResolvedValue({ bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png', label: 'Cover' });
+    const current = {
+      ...handle('a'),
+      getSection: async () => ({
+        sectionId: 'a-s', sanitizedHtml: '<button>Cover</button>', sourceRevision: 'r',
+        localResources: [{ id: 'image-id', mimeType: 'image/png', label: 'Cover' }]
+      }),
+      readResource
+    };
+    const openImagePreview = vi.fn().mockResolvedValue(true);
+    const { controller, messages } = await setup(vi.fn(async () => current), { openImagePreview });
+    await controller.openBook('a', 'request-a');
+    await controller.requestSection('a-s');
+    const ready = (messages as any[]).find(message => message.type === 'sectionReady');
+
+    await controller.openImage({
+      requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: ready.sectionGeneration, resourceId: 'image-id'
+    });
+    await controller.openImage({
+      requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: ready.sectionGeneration + 1, resourceId: 'image-id'
+    });
+    await controller.openImage({
+      requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: ready.sectionGeneration, resourceId: 'unknown-id'
+    });
+
+    expect(readResource).toHaveBeenCalledOnce();
+    expect(readResource).toHaveBeenCalledWith('a-s', 'image-id');
+    expect(openImagePreview).toHaveBeenCalledOnce();
+    expect(openImagePreview).toHaveBeenCalledWith({ bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png', label: 'Cover' });
+  });
+
+  it('drops a resource response made stale by a newer section and reports a current preview failure', async () => {
+    const pendingImage = deferred<{ bytes: Uint8Array; mimeType: string; label: string }>();
+    const readResource = vi.fn(() => pendingImage.promise);
+    const current = {
+      ...handle('a'),
+      getSection: async () => ({
+        sectionId: 'a-s', sanitizedHtml: '<button>Cover</button>', sourceRevision: 'r',
+        localResources: [{ id: 'image-id', mimeType: 'image/png', label: 'Cover' }]
+      }),
+      readResource
+    };
+    const openImagePreview = vi.fn().mockResolvedValue(false);
+    const { controller, messages } = await setup(vi.fn(async () => current), { openImagePreview });
+    await controller.openBook('a', 'request-a');
+    await controller.requestSection('a-s');
+    const firstReady = (messages as any[]).find(message => message.type === 'sectionReady');
+    const stale = controller.openImage({
+      requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: firstReady.sectionGeneration, resourceId: 'image-id'
+    });
+    await controller.requestSection('a-s');
+    pendingImage.resolve({ bytes: new Uint8Array([1]), mimeType: 'image/png', label: 'Cover' });
+    await stale;
+    expect(openImagePreview).not.toHaveBeenCalled();
+
+    const latestReady = (messages as any[]).filter(message => message.type === 'sectionReady').at(-1);
+    readResource.mockResolvedValueOnce({ bytes: new Uint8Array([2]), mimeType: 'image/png', label: 'Cover' });
+    await controller.openImage({
+      requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: latestReady.sectionGeneration, resourceId: 'image-id'
+    });
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'imageOpenFailed', requestId: 'request-a', bookId: 'a', sectionId: 'a-s',
+      sectionGeneration: latestReady.sectionGeneration, message: '图片无法打开'
+    }));
+  });
+
   it('reports whether a resume target was actually opened', async () => {
     const { controller } = await setup(vi.fn(async () => handle('a')));
     await expect(controller.openBook('a')).resolves.toBe(true);

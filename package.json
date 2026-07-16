@@ -26,6 +26,7 @@
     "onCommand:moyuplus.routeTab",
     "onCommand:moyuplus.reader.nextPage",
     "onCommand:moyuplus.reader.previousPage",
+    "onCommand:moyuplus.reader.undoLocation",
     "onCommand:moyuplus.reader.previousChapter",
     "onCommand:moyuplus.reader.nextChapter",
     "onCommand:moyuplus.reader.openLibrary",
@@ -35,7 +36,8 @@
     "onCommand:moyuplus.reader.close",
     "onCommand:moyuplus.gitLog.toggle",
     "onCommand:moyuplus.toggleTypingPractice",
-    "onView:moyuplus.readerView"
+    "onView:moyuplus.readerView",
+    "onCustomEditor:moyuplus.imagePreview"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -95,6 +97,10 @@
       {
         "command": "moyuplus.reader.previousPage",
         "title": "MoyuPlus: Reader Previous Page"
+      },
+      {
+        "command": "moyuplus.reader.undoLocation",
+        "title": "MoyuPlus: Undo Reader Location"
       },
       {
         "command": "moyuplus.reader.previousChapter",
@@ -200,6 +206,18 @@
         }
       }
     },
+    "customEditors": [
+      {
+        "viewType": "moyuplus.imagePreview",
+        "displayName": "MoyuPlus Image Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.moyuplus-image"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "views": {
       "explorer": [
         {
@@ -221,7 +239,6 @@
     "package": "npm run compile && npm test && vsce package"
   },
   "dependencies": {
-    "css-tree": "^3.2.1",
     "fast-xml-parser": "^5.9.3",
     "iconv-lite": "^0.6.3",
     "parse5": "^8.0.1",
@@ -229,7 +246,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "@types/css-tree": "^2.3.11",
     "@types/node": "^22.10.2",
     "@types/vscode": "^1.92.0",
     "@types/yauzl": "^3.4.0",

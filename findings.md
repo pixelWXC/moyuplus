@@ -1,5 +1,51 @@
 # 发现与决策
 
+## 2026-07-15 长书性能回归与图片入口
+
+- 性能回归主因不是 eager pagination 本身，而是当前 `fragment()` 在每个 fits 二分候选中 `cloneNode(true)` 整章后遍历/裁剪；同一约 37k 夹具一次分页触发 1039 次整树深克隆。
+- 恢复 `Range.cloneContents()` 后必须重建到 `.moyuplus-book-content` 的必要浅祖先，才能同时保留段落、`pre/code`、表格、列表语义和统一正文 CSS；直接退回 0.0.6 的裸 Range 结果会丢失 canonical wrapper。
+- Range 修复后剩余开销来自 text span 线性查找和每页重新读取整章 `textContent`；二分定位与一次缓存使交替中位数从 0.0.6 的 1.53 倍降至 0.446 倍。
+- `openDrawer`/`closeDrawer` 是纯 overlay 状态，走全量 `renderReader()` 会无谓 dispose/recreate Layout Engine；增量同步后目录成本仅与目录节点数有关，不再与正文长度有关。
+- 跨章原子性不能靠“轻量预检成功”保证：候选必须在 staging 完整分页一次，成功后直接提升同一实例，失败时连 toast 也必须增量更新，否则提示本身会替换旧正文节点。
+- `attachTo()` 通过移动 staging 的当前 fragment、重新绑定 viewport/onReflow 并移除 staging 完成提升；不得 dispose 已提升候选的 source/measure，也不得再调用 `dispatch(selectSection) -> renderReader()`。
+- 用户实测统一排版版本在多章节长书初始化、打开目录以及第一章链接跳转到末尾附录注解时出现明显卡顿；旧版本没有该问题。
+- 图片安全预览行为保留，但正文入口应改为普通超链接文字外观，不使用白色按钮视觉。
+- 当前阶段只读诊断，设计批准前不修改生产实现。
+- `render()` 在任何 Reader 状态变化时都会调用 `renderReader()`；打开目录只是一次 drawer state 变化，却会销毁现有 `LayoutEngine`、重建整页 DOM，并重新对当前整章分页。这解释了“打开目录很慢”，目录本身不是唯一成本。
+- `LayoutEngine.paginate()` 从 offset 0 循环到章节全文结尾，初次打开只显示第一页也会预先计算所有页；章节越长，首屏等待越久。
+- 跨章注解收到 `sectionReady` 后，会先用 `resolveTargetOffset()` 解析整章 DOM，再用 staging `LayoutEngine.setContentAtOffset()` 对目标整章完整分页作 preflight，随后 `dispatch(selectSection)` 再创建正式 Layout Engine 并完整分页一次。远距离附录因此至少执行两次全章分页和多次完整 DOM 克隆/二分测量。
+- Controller 初次打开只读取 package/TOC/section 元数据，然后按需读取初始 section；多章节本身不会主动读取所有正文，主要瓶颈位于 Webview 的同步全章分页与无差别重渲染。
+- 图片入口仍由 sanitizer 生成语义正确的 `<button type="button">`，但 CSS 只设置了换行，没有重置浏览器按钮外观，所以在浅色主题中显示为白色按钮。可保留键盘/辅助技术语义，仅用 CSS 呈现为 VS Code 文本链接。
+- Layout Engine 的 source/measure 克隆都在 document 中，性能诊断和正式点击处理必须限定可见 `#reader-content`；这是测试选择器问题，不是重复正文渲染到用户页面。
+- 当前 Chromium 基线（280×420、约 39k HTML、约 152–160 页）：首次 sectionReady 同步阻塞约 509ms；打开目录因重建并重分页同章约 363ms；跨章跳到章尾注解约 894ms。该规模已接近 1 秒，真实数十万字符章节会线性/更差放大为明显冻结。
+- 跨章耗时约为首次分页的 1.75 倍，与“staging preflight 全章分页 + 正式全章分页”重复工作吻合；目录耗时与同章重新分页吻合。
+- 用户决定本轮暂缓性能修复，只交付图片入口文本链接样式与真实 VSIX 测试包。
+- 图片链接样式规格复核通过；采纳建议明确普通/hover 主题变量及独立产物名 `moyuplus-0.0.7-image-link.vsix`。
+- 最终测试包内容核对通过，未包含源码、测试、计划、source map、lockfile 或书籍文件；性能热路径保持原样，按用户决定延期。
+
+## 2026-07-15 统一排版与分页回归修复实施发现
+
+- 用户已明确批准 `docs/superpowers/specs/2026-07-15-moyuplus-reader-canonical-layout-regression-design.md`，brainstorming 设计门禁已满足。
+- 当前工作区包含上一轮资源、内部导航、图片预览与布局边距实现的大量未提交修改；本轮必须在其上增量工作，不清理、不重置、不覆盖。
+- 实施边界：EPUB sanitizer 移除出版物 CSS/表现属性；Reader CSS 提供唯一正文排版；Layout Engine 的 measure/render/preflight 统一验证 `scrollHeight` 与 `scrollWidth`。
+- 设计要求严格 TDD：先新增 sanitizer、sourceRevision、横向溢出矩阵和真实 reader-app harness 回归测试并观察预期失败，再修改生产代码。
+- 当前 sanitizer 仍保留并重写 `<style>`，保留 inline `style` 与任意 `class`，且依赖 `css-tree` 白名单；这与获批的“保留语义、移除表现”边界直接冲突。
+- 当前 EPUB `sourceRevision` 仍使用 `sanitizer-v2`。
+- `LayoutEngine.fits()`、真实渲染修正和二分修正均只检查纵向 `scrollHeight/clientHeight`；三处都需通过一个共享双轴谓词收敛。
+- 当前布局测试只断言纵向几何；既有 harness 已暴露 page/hidden surfaces，适合小幅扩展 `scrollWidth/clientWidth`、完整页文本和真实 app 几何观测。
+- `reader-harness.html` 目前使用自包含布局 CSS，并故意让 `.publication` 产生大字号；可将它调整为加载真实 `media/readerApp.css`、使用 `.reader-content > .moyuplus-book-content` 结构，同时保留专用 shell/footer 几何。
+- `reader-app-harness.html` 已走真实 Reader v3 消息与完整应用渲染，适合加入一个带 `style/class/width/nowrap/pre/table` 的完整 EPUB section 场景，以防只在独立 Layout Engine fixture 通过。
+- `preflightSection()` 也仅检查纵向边界；因此双轴共享判断需要从 `layoutEngine.ts` 导出或放入可复用函数，让 app preflight 复用而不是复制逻辑。
+- Reader 页面偏好由 `applyReaderPreferences()` 写入 page 本身；分页隐藏 surface 会复制 page 的 class、dataset、inline style 与 CSS 变量，现有结构可继续保留。
+- Sanitizer GREEN 采用源属性明确允许列表；源 `class/style/data-*` 与表现属性全部丢弃，内部链接在过滤后再由 MoyuPlus 生成安全 `data-moyuplus-*`，图片按钮仍由 sanitizer 自己生成专用 class/data。
+- `sourceRevision` 已提升到 `sanitizer-v3`；目标 sanitizer/adapter 测试 6/6 通过。
+- 双轴谓词与统一 CSS 实施后，3×3×3 独立布局矩阵已通过；真实 app 首次复验暴露的是夹具仍有下一章而非排版失败，诊断显示正文总长 5957，前 25 页边界连续且最后一页起点 5949。
+- 将真实 app 场景修正为单章后，测试进一步发现首屏 `scrollHeight=340`、`clientHeight=318`：`renderReader()` 在 footer 挂载前创建 Layout Engine，初次分页使用了多 34px 的过时高度。修复策略是先挂载完整 grid（含 footer），再测量分页。
+- `css-tree` 已不再有运行时代码引用；以 build contract RED/GREEN 删除其 runtime/type 依赖，避免继续携带已废弃的出版物 CSS 解析路径。
+- TXT Adapter 与 EPUB sanitizer 都保证顶层 `.moyuplus-book-content`；全量布局中唯一失败的旧 resize fixture 直接传 `<p>`，因此没有命中新的统一样式。修正 harness 自动补齐 wrapper 后即可用原严格阈值验证真实契约。
+- Resize 复验确认旧“progression 不后退超过 8%”断言受页密度影响：统一样式下重排页更短，页起点比例可后退约 10%，但原 UTF-16 页首锚点仍完整落在新页 `[startOffset,endOffset)` 内。测试已改为直接验证该精确不变量。
+- 最终 VSIX 内容核对通过：只有 8 个运行时/说明文件，未带入任何开发或用户内容；新产物使用独立文件名 `moyuplus-0.0.7-canonical-layout.vsix`，不会覆盖失败的 `moyuplus-0.0.7-reader-navigation.vsix`。
+
 ## 2026-07-13 缩放翻页与进度恢复根因
 
 - 旧实现每次翻页都经过完整 reducer render，导致正文 DOM 和 Layout Engine 被销毁重建；它与 resize 的异步 animation-frame 重排存在竞态。
@@ -323,6 +369,29 @@
 ## 2026-07-14 Git Log 内存缓存实施发现
 
 - 正式设计与实施计划已经分别由提交 `e3cc372`、`7c0e60f` 固化；本轮用户明确要求执行计划，可直接进入测试先行实现。
+
+## 2026-07-15 阅读器资源、内部导航与分页边距
+
+- 最新已确认规格是 `docs/superpowers/specs/2026-07-15-moyuplus-reader-resources-navigation-layout-design.md`，提交为 `4652ba1`；7 月 14 日 Git Log 缓存计划已经发布完成，不是本轮实施目标。
+- 用户已确认最新方案并要求开始实施，因此已生成对应文件级、测试先行实施计划，无需重复设计审批。
+- 工作树开始时只有未跟踪 `.superpowers/` 可视化伴侣产物；这些属于既有用户文件，必须保留。
+- 当前分支 `master` 比 `origin/master` 超前 1 个设计提交；本轮不自动提交、推送或发布。
+- 首次结构读取证明 EPUB 实现路径不能凭模块名推断；后续以 `rg --files` 的实际结果为准。
+- Reader 协议当前是 v2；Host 已有私有 `sectionGeneration` 但 `sectionReady` 和 Webview envelope 尚未携带 generation。`navigationState` 目前只上报 `canNextPage`。
+- `SafeSectionDocument.localResources` 当前仍包含 archive `path`，与新规格“不向 Webview 暴露路径”冲突；EpubBookHandle 也会给图片回退 `application/octet-stream`，本轮必须移除。
+- Webview 当前直接由几个函数管理翻页/切章，`LayoutEngine` 已暴露 UTF-16 start/end offset，可在其上建立位置历史，不必重写分页算法入口。
+- previous/next Host 命令和快捷键设置项已经存在且无默认 keybinding；新增 undo 可沿同一 Provider 命令路由接入。
+- package 当前没有 customEditors contribution，VS Code shim 也没有 CustomReadonlyEditorProvider/Uri.parse/openWith 生命周期能力，图片预览 Phase 必须先补可控 shim 测试。
+- EPUB sanitizer 当前把合法图片改写为 `moyuplus-resource:<archive path>` 并输出 path/kind；内部链接一律降为当前页 `#fragment`，因此跨章目标信息丢失。
+- `parseEpubPackage` 已保留 manifest `mediaType`、可读 spine section 和 TOC fragment；Phase 2 可在 Adapter 层构造 path→section 与 path→图片声明索引，不需要重写 OPF/NCX 解析主流程。
+- `EpubArchive.read()` 已执行单 entry、总大小和压缩比限制并返回 Buffer；资源读取应复用它，不能新开绕过策略的 ZIP 读取路径。
+- fixture builder 已支持 Buffer 条目，足以生成最小 raster/SVG EPUB 样本，无需新增二进制 fixture 文件。
+- 项目锁定的 `@types/vscode` 1.92 已包含 `CustomReadonlyEditorProvider`, `CustomDocumentOpenContext`, `WebviewPanel` 和 `window.registerCustomEditorProvider`，无需新增运行时依赖。
+- 现有 Reader HTML 已采用随机 nonce 与离线 CSP；Image Preview 应独立生成更窄 CSP，只保留 `img-src blob: data:`，不需要扩展 media localResourceRoots。
+- Vitest 通过 alias 将 `vscode` 指向本地 shim；预览服务测试需要扩充 shim 的 custom editor 注册、panel 和 `Uri.parse`，不应 mock 生产类内部实现。
+- ReaderController 已有单调 `sectionGeneration`，但成功 section 只向 Webview 发 sectionId；把 generation 加入 `sectionReady` 后可直接作为图片请求和位置命令的关联令牌。
+- ReaderViewProvider 当前用未关联的 `{type:'navigationState', canNextPage}` 维护单一布尔值，并允许 previousPage 在任意 View 状态发送；Phase 4 需要改为关联的三能力状态并以 `readerPageActive` 作为最后防线。
+- 三个位置命令都应由 `registerReaderView` 注册；现有 previous/next 已在该边界，undo 可复用同一命令通道且不进入 shortcut router。
 - 当前工作树在实施开始时干净，基线版本为 0.0.6。
 - 计划要求新增 `gitLogQuery.ts` 与 `gitLogRefreshController.ts`，Provider 只保留单条缓存、单个 UI session、单调 mode generation 与幂等 dispose。
 - 当前仓库已有 37 个单元测试文件和独立 Git Log Chromium 布局测试，适合按目标测试→全量单测→布局→compile 的顺序回归。
@@ -333,3 +402,18 @@
 - 最终实现使用一个 `gitCache`、一个 `gitUiSession`、一个 `active` job 和一个 `pending` snapshot；代码结构本身不包含多仓库 Map、session 历史或订阅者数组。
 - Webview 顶层模式统一使用 Provider 单调递增 generation；`modeInvalidated` 先进入 boot 并释放 GitLogView，迟到或重复 generation 被拒绝。
 - 最终全量自动验证为 39 个 Vitest 文件 180 个测试、13 个 Chromium 布局/隐私测试全部通过，TypeScript、生产构建和 `git diff --check` 通过。
+- 2026-07-15 Phase 5 结构复核确认 `readerApp.ts` 仍在每次 reducer render 时销毁并重建 `LayoutEngine`，TOC 只按 `sectionId` 选章，正文没有事件委托；导航接入必须显式保存 generation、sourceRevision、资源声明和待提交位置，避免把加载中间态误写入历史。
+- `LayoutEngine` 当前只同步少量 computed-style 白名单，隐藏 measure surface 没有复制真实 page 的 class、dataset、完整内联偏好或 CSS 变量；这正是 Phase 6 测量面与渲染面不一致的实现根因。
+- `LayoutEngine` 已能按 UTF-16 `startOffset` 分页并以 offset 作为 reflow anchor，但缺少显式 `goToOffset`/指定 offset 初始布局入口；Phase 5 可在不改变分页数据模型的前提下补齐精确定位 API。
+- 2026-07-15 最终门禁为 Vitest 44 文件 208/208、Playwright 20/20、compile/build 与 `git diff --check` 全通过；跨章无效 fragment 保持可见章节不变、成功跳转后可跨章撤回已有真实 Webview harness 覆盖。
+- VSIX `moyuplus-0.0.7-reader-navigation.vsix` 共 8 个发布文件、约 467 KB，仅包含 manifest、README/CHANGELOG、两项 media bundle 和 `out/extension.js`；vsce 仅报告仓库字段与 LICENSE 缺失的既有非阻断警告。
+
+## 2026-07-15 阅读器横向裁切与页码失效回归
+
+- 人工验收推翻了“padding 矩阵已证明真实书籍完整”的结论：现有 Reader 测试没有检查 `scrollWidth/clientWidth`，自然换行段落无法代表真实 EPUB。
+- 分页器对 `nowrap` 和 `<pre>` 可稳定复现错误：横向内容超过 24K–34K px 时仍被判为单页，因为适配条件只检查纵向高度。
+- `.reader-content { overflow: hidden }` 将算法遗漏转化为无提示数据不可见；视觉上的“右边距消失”实质是内容框外横向裁切。
+- sanitizer 当前允许 `white-space`、margin、padding、display 等出版物 CSS，且保留 style/class/表现属性；这些输入使分页宽度无法由 Reader 单独控制。
+- 用户确认完整可读与正确分页优先于原版排版，并批准方案 2：保留语义 HTML，删除出版物 CSS，由 MoyuPlus 提供统一阅读排版。
+- 统一排版仍保留标题、段落、列表、引用、表格、代码、粗斜体、锚点和内部导航；损失为出版物字体、颜色、缩进、复杂表格和装饰布局的原版视觉。
+- 修复不能只在 `fits()` 增加 `scrollWidth` 判断；若不先规范 `nowrap/pre/table`，二分文本无法把不可换行的横向内容变为可读页面。必须同时做 sanitizer 边界、统一 CSS 与双轴不变量。

@@ -2,21 +2,52 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline'; img-src blob: data:">
-  <style>html,body{margin:0}#reader{box-sizing:border-box;height:380px;overflow:hidden;padding:16px;font:16px/1.6 sans-serif}#reader p{margin:0 0 1em}</style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:; img-src blob: data:">
+  <link rel="stylesheet" href="../../../media/readerApp.css">
+  <style>
+    html,body{margin:0}
+    .shell{display:grid;grid-template-rows:minmax(0,1fr) 34px;height:420px}
+    .reader-viewport{min-height:0;overflow:hidden}
+    .reader-page{box-sizing:border-box;width:100%;height:100%;overflow:hidden;padding:16px;font:16px/1.6 sans-serif}
+    .reader-page[data-publication='book'] .publication{font-size:48px;line-height:2}
+    .reader-page[data-publication='book'] .publication p{margin:0 0 var(--publication-gap,1em)}
+    .reader-footer{border-top:1px solid #999}
+  </style>
 </head>
 <body>
-  <main id="reader"></main>
+  <div class="shell"><main class="reader-viewport"><div id="reader" class="reader-content reader-page" data-publication="book"></div></main><footer class="reader-footer">Footer</footer></div>
   <script src="../../../media/readerApp.js"></script>
   <script>
     const reader = document.querySelector('#reader');
     let reflowNotifications = 0;
+    let sourceText = '';
+    let wholeSourceCloneCount = 0;
+    const originalCloneNode = Node.prototype.cloneNode;
+    Node.prototype.cloneNode = function(deep) {
+      if (deep === true && this instanceof HTMLElement
+        && this.classList.contains('reader-page') && this.style.left === '-100000px') {
+        wholeSourceCloneCount += 1;
+      }
+      return originalCloneNode.call(this, deep);
+    };
     const engine = new window.MoyuplusReader.LayoutEngine(reader, () => { reflowNotifications += 1; });
+    const pageGeometry = () => ({
+      clientWidth: reader.clientWidth, scrollWidth: reader.scrollWidth,
+      clientHeight: reader.clientHeight, scrollHeight: reader.scrollHeight
+    });
     window.readerHarness = {
-      load: html => engine.setContent('section-1', html),
+      load: html => {
+        wholeSourceCloneCount = 0;
+        const canonical = /class=["'][^"']*\bmoyuplus-book-content\b/.test(html)
+          ? html : `<div class="moyuplus-book-content">${html}</div>`;
+        const source = document.createElement('div'); source.innerHTML = canonical; sourceText = source.textContent || '';
+        engine.setContent('section-1', canonical);
+      },
       next: () => engine.nextPage(),
       previous: () => engine.previousPage(),
       resize: fontSize => { reader.style.fontSize = `${fontSize}px`; engine.reflow(); },
+      padding: value => { reader.style.padding = `${value}px`; engine.reflow(); },
+      goToFragment: fragment => engine.goToFragment(fragment),
       scheduleReflows: async count => {
         reflowNotifications = 0;
         const before = engine.getReflowPasses();
@@ -25,7 +56,43 @@
         return engine.getReflowPasses() - before;
       },
       reflowNotifications: () => reflowNotifications,
-      state: () => ({ ...engine.getState(), visibleText: reader.textContent || '' })
+      wholeSourceCloneCount: () => wholeSourceCloneCount,
+      sourceText: () => sourceText,
+      pages: () => {
+        while (engine.previousPage()) { /* rewind */ }
+        const pages = [];
+        do { pages.push({ text: reader.textContent || '', geometry: pageGeometry() }); } while (engine.nextPage());
+        return pages;
+      },
+      state: () => ({ ...engine.getState(), visibleText: reader.textContent || '' }),
+      geometry: () => {
+        const page = reader.getBoundingClientRect();
+        const footer = document.querySelector('.reader-footer').getBoundingClientRect();
+        const ranges = [];
+        const walker = document.createTreeWalker(reader, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node) {
+          if (node.data.trim()) { const range = document.createRange(); range.selectNodeContents(node); ranges.push(...range.getClientRects()); }
+          node = walker.nextNode();
+        }
+        return { page: { top: page.top, right: page.right, bottom: page.bottom, left: page.left }, footerTop: footer.top,
+          first: ranges[0] ? { top: ranges[0].top, left: ranges[0].left } : undefined,
+          last: ranges.at(-1) ? { right: ranges.at(-1).right, bottom: ranges.at(-1).bottom } : undefined,
+          ...pageGeometry() };
+      },
+      surfaces: () => ({
+        visibleHasPublicationScope: Boolean(reader.querySelector('.publication')),
+        hidden: [...document.body.children].filter(node => node.style.left === '-100000px').map(node => ({
+          className: node.className, publication: node.dataset.publication, padding: getComputedStyle(node).padding
+        }))
+      }),
+      visibleStructure: () => ({
+        wrapper: Boolean(reader.querySelector(':scope > .moyuplus-book-content')),
+        paragraph: Boolean(reader.querySelector('.moyuplus-book-content p')),
+        preCode: Boolean(reader.querySelector('.moyuplus-book-content pre code')),
+        table: Boolean(reader.querySelector('.moyuplus-book-content table')),
+        list: Boolean(reader.querySelector('.moyuplus-book-content ol, .moyuplus-book-content ul'))
+      })
     };
   </script>
 </body>

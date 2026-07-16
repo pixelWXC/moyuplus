@@ -4,6 +4,7 @@ import { TOGGLE_GIT_LOG_COMMAND_ID } from '../git/gitLogModeCoordinator';
 
 export const NEXT_READER_PAGE_COMMAND_ID = 'moyuplus.reader.nextPage';
 export const PREVIOUS_READER_PAGE_COMMAND_ID = 'moyuplus.reader.previousPage';
+export const UNDO_READER_LOCATION_COMMAND_ID = 'moyuplus.reader.undoLocation';
 export const FOCUS_READER_COMMAND_ID = 'moyuplus.reader.focus';
 export const CLOSE_READER_COMMAND_ID = 'moyuplus.reader.close';
 export const OPEN_READER_LIBRARY_COMMAND_ID = 'moyuplus.reader.openLibrary';
@@ -35,6 +36,7 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
   return [
     action(NEXT_READER_PAGE_COMMAND_ID, '阅读器：下一页', '将阅读器翻到下一页。'),
     action(PREVIOUS_READER_PAGE_COMMAND_ID, '阅读器：上一页', '返回阅读器历史中的上一页。'),
+    action(UNDO_READER_LOCATION_COMMAND_ID, '阅读器：撤回阅读位置', '返回最近一次成功导航前的位置。'),
     action(PREVIOUS_READER_CHAPTER_COMMAND_ID, '阅读器：上一章', '跳转到上一章节。'),
     action(NEXT_READER_CHAPTER_COMMAND_ID, '阅读器：下一章', '跳转到下一章节。'),
     action(OPEN_READER_LIBRARY_COMMAND_ID, '阅读器：书架', '返回 MoyuPlus 书架。'),

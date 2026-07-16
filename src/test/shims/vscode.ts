@@ -16,6 +16,10 @@ type InlineCompletionProvider = {
 type WebviewViewProvider = {
   resolveWebviewView(webviewView: WebviewView): unknown;
 };
+type CustomReadonlyEditorProvider = {
+  openCustomDocument(uri: Uri, openContext: unknown, token: unknown): unknown;
+  resolveCustomEditor(document: unknown, webviewPanel: { webview: Webview }, token: unknown): unknown;
+};
 
 export interface Webview {
   html: string;
@@ -92,6 +96,10 @@ export class Uri {
     return new Uri(`file://${encodeURI(prefixedPath)}`);
   }
 
+  static parse(value: string): Uri {
+    return new Uri(value);
+  }
+
   static joinPath(base: Uri, ...segments: string[]): Uri {
     return new Uri(`${base.toString().replace(/\/$/, '')}/${segments.map(encodeURIComponent).join('/')}`);
   }
@@ -103,8 +111,10 @@ export class Uri {
 
 const registeredCommands = new Map<string, CommandCallback>();
 const registeredWebviewViewProviders = new Map<string, WebviewViewProvider>();
+const registeredCustomEditorProviders = new Map<string, CustomReadonlyEditorProvider>();
 const registeredInlineCompletionProviders: Array<{ selector: unknown; provider: InlineCompletionProvider }> = [];
 const executedBuiltinCommandCalls: Array<{ commandId: string; args: unknown[] }> = [];
+const failedBuiltinCommands = new Map<string, Error[]>();
 const contextValues = new Map<string, unknown>();
 
 export const commands = {
@@ -130,6 +140,10 @@ export const commands = {
     }
 
     executedBuiltinCommandCalls.push({ commandId, args });
+    const failures = failedBuiltinCommands.get(commandId);
+    const failure = failures?.shift();
+    if (failures?.length === 0) failedBuiltinCommands.delete(commandId);
+    if (failure) throw failure;
     return undefined;
   },
 
@@ -148,6 +162,12 @@ export const commands = {
 
   executedBuiltinCommands(): Array<{ commandId: string; args: unknown[] }> {
     return [...executedBuiltinCommandCalls];
+  },
+
+  failNextBuiltinCommand(commandId: string, error: Error): void {
+    const failures = failedBuiltinCommands.get(commandId) ?? [];
+    failures.push(error);
+    failedBuiltinCommands.set(commandId, failures);
   },
 
   contextValue(key: string): unknown {
@@ -214,6 +234,19 @@ export const window = {
 
   registeredWebviewViewProvider(viewId: string): WebviewViewProvider | undefined {
     return registeredWebviewViewProviders.get(viewId);
+  },
+
+  registerCustomEditorProvider(viewType: string, provider: CustomReadonlyEditorProvider): Disposable {
+    registeredCustomEditorProviders.set(viewType, provider);
+    return { dispose: () => { registeredCustomEditorProviders.delete(viewType); } };
+  },
+
+  registeredCustomEditorProviderIds(): string[] {
+    return [...registeredCustomEditorProviders.keys()];
+  },
+
+  registeredCustomEditorProvider(viewType: string): CustomReadonlyEditorProvider | undefined {
+    return registeredCustomEditorProviders.get(viewType);
   }
 };
 
@@ -285,8 +318,10 @@ export const StatusBarAlignment = {
 export function resetVSCodeShim(): void {
   registeredCommands.clear();
   registeredWebviewViewProviders.clear();
+  registeredCustomEditorProviders.clear();
   registeredInlineCompletionProviders.length = 0;
   executedBuiltinCommandCalls.length = 0;
+  failedBuiltinCommands.clear();
   contextValues.clear();
   window.informationMessages.length = 0;
   window.warningMessages.length = 0;

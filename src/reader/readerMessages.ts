@@ -2,7 +2,7 @@ import { normalizeReadingLocator, type ReadingLocator } from '../domain/locators
 import type { SafeSectionDocument, SectionRef, TocNode } from '../adapters/bookAdapter';
 
 export const READER_VIEW_ID = 'moyuplus.readerView';
-export const READER_PROTOCOL_VERSION = 2 as const;
+export const READER_PROTOCOL_VERSION = 3 as const;
 
 interface V2Envelope {
   version: typeof READER_PROTOCOL_VERSION;
@@ -15,12 +15,22 @@ interface V2SectionEnvelope extends V2Envelope { sectionId: string }
 export type ReaderToExtensionV2Message =
   | (V2Envelope & { type: 'openBook' })
   | (V2SectionEnvelope & { type: 'requestSection' | 'requestNextSection' | 'requestPreviousSection' })
+  | (V2SectionEnvelope & { type: 'requestSectionTarget'; fragment?: string })
+  | (V2SectionEnvelope & { type: 'openImage'; sectionGeneration: number; resourceId: string })
+  | (V2SectionEnvelope & {
+      type: 'navigationState';
+      sectionGeneration: number;
+      canPreviousPage: boolean;
+      canNextPage: boolean;
+      canUndoLocation: boolean;
+    })
   | (V2SectionEnvelope & { type: 'layoutStable' | 'closeBook'; locator: ReadingLocator; bookProgression: number });
 
 export type ExtensionToReaderV2Message =
   | (V2Envelope & { type: 'bookReady'; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string; initialLocator: ReadingLocator })
-  | (V2SectionEnvelope & { type: 'sectionReady'; section: SafeSectionDocument })
+  | (V2SectionEnvelope & { type: 'sectionReady'; sectionGeneration: number; section: SafeSectionDocument })
   | (V2SectionEnvelope & { type: 'bookStart' | 'bookEnd' })
+  | (V2SectionEnvelope & { type: 'targetUnavailable' | 'imageOpenFailed'; sectionGeneration: number; message: string })
   | (V2Envelope & { type: 'readerError'; code: string; message: string });
 
 export function isReaderToExtensionV2Message(value: unknown): value is ReaderToExtensionV2Message {
@@ -28,6 +38,18 @@ export function isReaderToExtensionV2Message(value: unknown): value is ReaderToE
   if (value.type === 'openBook') return true;
   if (!hasSectionEnvelope(value)) return false;
   if (value.type === 'requestSection' || value.type === 'requestNextSection' || value.type === 'requestPreviousSection') return true;
+  if (value.type === 'requestSectionTarget') {
+    return value.fragment === undefined || isNonEmptyString(value.fragment);
+  }
+  if (value.type === 'openImage') {
+    return isSectionGeneration(value.sectionGeneration) && isOpaqueResourceId(value.resourceId);
+  }
+  if (value.type === 'navigationState') {
+    return isSectionGeneration(value.sectionGeneration)
+      && typeof value.canPreviousPage === 'boolean'
+      && typeof value.canNextPage === 'boolean'
+      && typeof value.canUndoLocation === 'boolean';
+  }
   if ((value.type !== 'layoutStable' && value.type !== 'closeBook') || !isProgression(value.bookProgression)) return false;
   const locator = normalizeReadingLocator(value.locator);
   return locator !== undefined && locator.sectionId === value.sectionId;
@@ -45,7 +67,10 @@ export function isExtensionToReaderV2Message(value: unknown): value is Extension
   }
   if (!hasSectionEnvelope(value)) return false;
   if (value.type === 'bookStart' || value.type === 'bookEnd') return true;
-  return value.type === 'sectionReady' && isSafeSection(value.section, value.sectionId);
+  if (value.type === 'targetUnavailable' || value.type === 'imageOpenFailed') {
+    return isSectionGeneration(value.sectionGeneration) && isNonEmptyString(value.message);
+  }
+  return value.type === 'sectionReady' && isSectionGeneration(value.sectionGeneration) && isSafeSection(value.section, value.sectionId);
 }
 
 function hasEnvelope(value: unknown): value is Record<string, unknown> & V2Envelope {
@@ -63,7 +88,8 @@ function isSafeSection(value: unknown, sectionId: string): value is SafeSectionD
   if (!isRecord(value) || value.sectionId !== sectionId || typeof value.sanitizedHtml !== 'string'
     || !isNonEmptyString(value.sourceRevision) || !Array.isArray(value.localResources)) return false;
   return value.localResources.every(resource => isRecord(resource)
-    && isNonEmptyString(resource.id) && isNonEmptyString(resource.path) && isNonEmptyString(resource.mimeType));
+    && hasOnlyKeys(resource, ['id', 'mimeType', 'label'])
+    && isOpaqueResourceId(resource.id) && isNonEmptyString(resource.mimeType) && isNonEmptyString(resource.label));
 }
 
 function isTocNode(value: unknown): value is TocNode {
@@ -89,4 +115,17 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isProgression(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isSectionGeneration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function isOpaqueResourceId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
+  const allowed = new Set(keys);
+  return Object.keys(value).every(key => allowed.has(key));
 }

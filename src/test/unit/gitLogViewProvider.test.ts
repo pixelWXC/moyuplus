@@ -3,6 +3,7 @@ import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 import { GitLogModeStore } from '../../storage/gitLogModeStore';
 import { GitLogPreferencesStore } from '../../storage/gitLogPreferencesStore';
 import { registerReaderView, type ReaderViewController } from '../../reader/ReaderViewProvider';
+import { READER_PROTOCOL_VERSION } from '../../reader/readerMessages';
 import { commands, createWebviewView, resetVSCodeShim, Uri, type Disposable, window } from '../shims/vscode';
 import type { GitLogLoadRequest, GitLogResult } from '../../git/gitLogService';
 import { GitLogError } from '../../git/gitLogService';
@@ -137,9 +138,9 @@ describe('Git Log Reader View integration', () => {
     await window.registeredWebviewViewProvider('moyuplus.readerView')?.resolveWebviewView(view);
     await vi.waitFor(() => expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({ type: 'modeLibrary' })));
 
-    await view.webview.receiveMessage({ version: 2, type: 'openBook', requestId: 'reader-1', bookId: 'book-1' });
+    await view.webview.receiveMessage({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId: 'reader-1', bookId: 'book-1' });
     await view.webview.receiveMessage({
-      version: 2, type: 'closeBook', requestId: 'reader-1', bookId: 'book-1', sectionId: 'section-1',
+      version: READER_PROTOCOL_VERSION, type: 'closeBook', requestId: 'reader-1', bookId: 'book-1', sectionId: 'section-1',
       locator: { kind: 'txt', sectionId: 'section-1', progression: 0.4, offset: 40 }, bookProgression: 0.4
     });
     await commands.executeRegisteredCommand(TOGGLE_GIT_LOG_COMMAND_ID);

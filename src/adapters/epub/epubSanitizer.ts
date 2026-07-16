@@ -1,24 +1,126 @@
 import path from 'node:path';
 import * as parse5 from 'parse5';
-import csstree = require('css-tree');
+import type { LocalResourceRef } from '../bookAdapter';
 import { normalizeArchivePath } from './epubArchive';
-export interface SanitizedResource { path: string; kind: 'image' | 'font' }
+
+export interface SanitizerImageResource { id: string; mimeType: string }
+export interface EpubSanitizerOptions {
+  basePath: string;
+  readableSections: ReadonlyMap<string, string>;
+  imageResources: ReadonlyMap<string, SanitizerImageResource>;
+  allowedResources?: ReadonlySet<string>;
+}
+
 const BLOCKED = new Set(['script', 'iframe', 'object', 'embed', 'form']);
-const CSS_ALLOWED = new Set(['color', 'font-family', 'font-size', 'font-style', 'font-weight', 'line-height', 'letter-spacing', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'text-align', 'text-decoration', 'text-indent', 'white-space', 'list-style-type', 'border', 'border-color', 'border-style', 'border-width', 'display', 'vertical-align']);
-export function sanitizeEpubSection(source: string, options: { basePath: string; allowedResources: Set<string> }): { html: string; resources: SanitizedResource[] } {
-  const document: any = parse5.parse(source); const resources: SanitizedResource[] = []; sanitizeChildren(document, options, resources);
-  const body = find(document, 'body'); const content = body ? (body.childNodes ?? []).map((x: any) => parse5.serializeOuter(x)).join('') : '';
+const SAFE_ATTRIBUTES = new Set([
+  'id', 'name', 'lang', 'xml:lang', 'dir', 'title', 'role',
+  'colspan', 'rowspan', 'scope', 'headers',
+  'start', 'value', 'reversed'
+]);
+
+export function sanitizeEpubSection(source: string, options: EpubSanitizerOptions): { html: string; resources: LocalResourceRef[] } {
+  const document: any = parse5.parse(source);
+  const resources: LocalResourceRef[] = [];
+  sanitizeChildren(document, options, resources);
+  const body = find(document, 'body');
+  const content = body ? (body.childNodes ?? []).map((node: any) => parse5.serializeOuter(node)).join('') : '';
   return { html: `<div class="moyuplus-book-content">${content}</div>`, resources: uniqueResources(resources) };
 }
-function sanitizeChildren(parent: any, options: { basePath: string; allowedResources: Set<string> }, resources: SanitizedResource[]) {
-  parent.childNodes = (parent.childNodes ?? []).filter((node: any) => !BLOCKED.has(node.tagName)).filter((node: any) => !(node.tagName === 'meta' && (attr(node, 'http-equiv') ?? '').toLowerCase() === 'refresh'));
-  for (const node of parent.childNodes) { if (node.attrs) node.attrs = node.attrs.filter((x: any) => !/^on/i.test(x.name)); if (node.tagName === 'style') { const value = nodeText(node); const safe = sanitizeStyleSheet(value); node.childNodes = safe ? [{ nodeName: '#text', value: safe, parentNode: node }] : []; }
-    if (node.attrs) for (const item of [...node.attrs]) { if (item.name === 'style') item.value = sanitizeDeclarations(item.value); if (item.name === 'href') { const safe = safeInternal(item.value, options.basePath); if (!safe) removeAttr(node, 'href'); else item.value = `#${item.value.split('#')[1] ?? ''}`; } if (item.name === 'src') { const safe = safeInternal(item.value, options.basePath); if (!safe || !options.allowedResources.has(safe)) removeAttr(node, 'src'); else { item.value = `moyuplus-resource:${safe}`; resources.push({ path: safe, kind: node.tagName === 'img' ? 'image' : 'font' }); } } }
+
+function sanitizeChildren(parent: any, options: EpubSanitizerOptions, resources: LocalResourceRef[]): void {
+  const safeChildren: any[] = [];
+  for (const node of parent.childNodes ?? []) {
+    if (BLOCKED.has(node.tagName) || node.tagName === 'style') continue;
+    if (node.tagName === 'link' && (attr(node, 'rel') ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) continue;
+    if (node.tagName === 'meta' && (attr(node, 'http-equiv') ?? '').toLowerCase() === 'refresh') continue;
+    if (node.tagName === 'img' || node.tagName === 'image') {
+      safeChildren.push(imageReplacement(node, parent, options, resources));
+      continue;
+    }
+    if (node.attrs) {
+      node.attrs = node.attrs.filter((item: any) => isSafeSourceAttribute(node.tagName, item.name));
+      if (node.tagName === 'a') sanitizeAnchor(node, options);
+    }
     sanitizeChildren(node, options, resources);
+    node.parentNode = parent;
+    safeChildren.push(node);
   }
+  parent.childNodes = safeChildren;
 }
-function sanitizeDeclarations(value: string): string { try { const ast: any = csstree.parse(value, { context: 'declarationList' }); ast.children.forEach((node: any, item: any, list: any) => { const generated = csstree.generate(node.value); if (node.type !== 'Declaration' || !CSS_ALLOWED.has(node.property.toLowerCase()) || /url\s*\(|expression|behavior/i.test(generated)) list.remove(item); }); return csstree.generate(ast); } catch { return ''; } }
-function sanitizeStyleSheet(value: string): string { try { const ast: any = csstree.parse(value); ast.children.forEach((node: any, item: any, list: any) => { if (node.type !== 'Rule') { list.remove(item); return; } node.block.children.forEach((decl: any, di: any, dl: any) => { if (decl.type !== 'Declaration' || !CSS_ALLOWED.has(decl.property.toLowerCase()) || /url\s*\(|expression|behavior/i.test(csstree.generate(decl.value))) dl.remove(di); }); if (!node.block.children.size) list.remove(item); else node.prelude = csstree.parse(`.moyuplus-book-content ${csstree.generate(node.prelude)}`, { context: 'selectorList' }); }); return csstree.generate(ast); } catch { return ''; } }
-function safeInternal(value: string, basePath: string): string | undefined { if (!value || /^\s*(?:javascript|data|file|https?):/i.test(value)) return undefined; const file = value.split('#')[0]; if (!file) return basePath; try { return normalizeArchivePath(path.posix.normalize(path.posix.join(path.posix.dirname(basePath), decodeURIComponent(file)))); } catch { return undefined; } }
+
+function imageReplacement(node: any, parent: any, options: EpubSanitizerOptions, resources: LocalResourceRef[]): any {
+  const source = attr(node, 'src') ?? attr(node, 'href') ?? attr(node, 'xlink:href');
+  const archivePath = source ? resolveArchiveTarget(source, options.basePath)?.path : undefined;
+  const declaration = archivePath ? options.imageResources.get(archivePath) : undefined;
+  if (!declaration) return textNode('图片不可用', parent);
+  const label = imageLabel(node);
+  resources.push({ id: declaration.id, mimeType: declaration.mimeType, label });
+  const visibleLabel = label === '查看图片' ? label : `查看图片：${label}`;
+  return elementNode('button', [
+    ['type', 'button'],
+    ['class', 'moyuplus-image-link'],
+    ['data-moyuplus-resource-id', declaration.id],
+    ['data-moyuplus-mime-type', declaration.mimeType],
+    ['aria-label', visibleLabel]
+  ], visibleLabel, parent);
+}
+
+function sanitizeAnchor(node: any, options: EpubSanitizerOptions): void {
+  const href = attr(node, 'href');
+  clearTargetAttributes(node);
+  if (!href) return;
+  const target = resolveArchiveTarget(href, options.basePath);
+  const sectionId = target && options.readableSections.get(target.path);
+  if (!target || !sectionId) { removeAttr(node, 'href'); return; }
+  setAttr(node, 'href', '#');
+  setAttr(node, 'data-moyuplus-section-id', sectionId);
+  if (target.fragment) setAttr(node, 'data-moyuplus-fragment', target.fragment);
+}
+
+function resolveArchiveTarget(value: string, basePath: string): { path: string; fragment?: string } | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmed)) return undefined;
+  const hashIndex = trimmed.indexOf('#');
+  const file = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+  const encodedFragment = hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : '';
+  try {
+    const decodedFile = decodeURIComponent(file);
+    const resolved = decodedFile
+      ? normalizeArchivePath(path.posix.normalize(path.posix.join(path.posix.dirname(basePath), decodedFile)))
+      : basePath;
+    const fragment = encodedFragment ? decodeURIComponent(encodedFragment) : undefined;
+    return { path: resolved, ...(fragment ? { fragment } : {}) };
+  } catch { return undefined; }
+}
+
+function imageLabel(node: any): string {
+  const alt = attr(node, 'alt')?.trim();
+  if (alt) return alt;
+  let parent = node.parentNode;
+  while (parent) {
+    if (parent.tagName === 'figure') {
+      const caption = find(parent, 'figcaption');
+      const value = caption ? nodeText(caption).trim() : '';
+      if (value) return value;
+      break;
+    }
+    parent = parent.parentNode;
+  }
+  return '查看图片';
+}
+
+function isSafeSourceAttribute(tagName: string | undefined, name: string): boolean {
+  const normalized = name.toLowerCase();
+  return SAFE_ATTRIBUTES.has(normalized)
+    || normalized.startsWith('aria-')
+    || (tagName === 'a' && normalized === 'href');
+}
 function find(node: any, tag: string): any { if (node.tagName === tag) return node; for (const child of node.childNodes ?? []) { const result = find(child, tag); if (result) return result; } }
-function attr(node: any, name: string) { return node.attrs?.find((x: any) => x.name === name)?.value; } function removeAttr(node: any, name: string) { node.attrs = node.attrs.filter((x: any) => x.name !== name); } function nodeText(node: any): string { return node.nodeName === '#text' ? node.value : (node.childNodes ?? []).map(nodeText).join(''); } function uniqueResources(values: SanitizedResource[]) { return [...new Map(values.map((x) => [x.path, x])).values()]; }
+function attr(node: any, name: string): string | undefined { return node.attrs?.find((item: any) => item.name === name)?.value; }
+function setAttr(node: any, name: string, value: string): void { removeAttr(node, name); node.attrs ??= []; node.attrs.push({ name, value }); }
+function removeAttr(node: any, name: string): void { if (node.attrs) node.attrs = node.attrs.filter((item: any) => item.name !== name); }
+function clearTargetAttributes(node: any): void { for (const name of ['data-moyuplus-section-id', 'data-moyuplus-fragment']) removeAttr(node, name); }
+function nodeText(node: any): string { return node.nodeName === '#text' ? node.value : (node.childNodes ?? []).map(nodeText).join(''); }
+function textNode(value: string, parentNode: any): any { return { nodeName: '#text', value, parentNode }; }
+function elementNode(tagName: string, attrs: Array<[string, string]>, text: string, parentNode: any): any { const node: any = { nodeName: tagName, tagName, attrs: attrs.map(([name, value]) => ({ name, value })), namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], parentNode }; node.childNodes.push(textNode(text, node)); return node; }
+function uniqueResources(values: LocalResourceRef[]): LocalResourceRef[] { return [...new Map(values.map(value => [value.id, value])).values()]; }

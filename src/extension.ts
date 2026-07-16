@@ -37,6 +37,7 @@ import {
   REMOVE_BOOK_COMMAND_ID,
   registerLibraryCommands
 } from './commands/libraryCommands';
+import { registerMoyuplusImagePreviewService } from './reader/imagePreviewService';
 
 export const SMOKE_COMMAND_ID = 'moyuplus.smokeTest';
 export const SMOKE_MESSAGE = 'MoyuPlus extension is active.';
@@ -83,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const adapters = new AdapterRegistry([txtAdapter, new EpubAdapter()]);
   const typingSources = new TypingSourceCatalog(books, txtAdapter);
   const typingPracticeController = new TypingPracticeController(typingSources, sessionStore);
+  const imagePreview = registerMoyuplusImagePreviewService(context);
   const library = new LibraryService(books, progress, adapters, {
     reportInspectError: (format, error) => output?.appendLine(
       `[library.inspect] adapter=${format} error=${safeError(error)}`
@@ -95,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let readerViewProvider: ReturnType<typeof registerReaderView> | undefined;
   const readerController = new ReaderController(books, progress, adapters, async (message) => {
     await readerViewProvider?.postMessage(message);
-  });
+  }, { openImagePreview: payload => imagePreview.open(payload) });
 
   registerSmokeCommand(context);
   registerLibraryCommands(context, library);

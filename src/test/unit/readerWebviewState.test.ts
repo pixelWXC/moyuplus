@@ -140,4 +140,17 @@ describe('reader Webview reading state', () => {
     expect(readerAppReducer(state, { type: 'resetPreferences' }).preferencesDraft).toEqual(createDefaultReaderPreferences());
     expect(readerAppReducer(state, { type: 'closeDrawer' }).drawer).toBeUndefined();
   });
+
+  it('shows a non-blocking navigation notice without turning the reader into an error state', () => {
+    const initial = readerAppReducer(createInitialReaderAppState(), { type: 'openReader', book: book('epub-1', 'epub'), requestId: 'r1' });
+    const noticed = readerAppReducer(initial, { type: 'showNotice', message: '目标位置不可用' });
+    expect(noticed.status).toBe('loading');
+    expect(noticed.notice).toBe('目标位置不可用');
+    expect(noticed.error).toBeUndefined();
+    const laidOut = readerAppReducer(noticed, {
+      type: 'layoutChanged', sectionId: 'one', pageIndex: 0, pageCount: 1, progression: 0,
+      startOffset: 0, endOffset: 5, canPreviousPage: false, canNextPage: false, isSectionStart: true, isSectionEnd: true
+    });
+    expect(laidOut.notice).toBe('目标位置不可用');
+  });
 });

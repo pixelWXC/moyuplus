@@ -1,5 +1,40 @@
 # 进度日志
 
+## 2026-07-15 长书性能回归与图片入口
+
+- 2026-07-16 用户使用真实 `moyuplus-0.0.7-performance-fix.vsix` 完成人工验收，确认长章节加载、目录开关、跨章注解、统一排版、图片链接与安全预览均通过；本轮状态改为 complete。
+- 用户批准性能修复设计；三轮规格复核最终 Approved，并补齐目录量化基线、staging 清理和绕过完整 render 的候选提升契约。
+- RED 证据：约 37k 长章产生 1039 次隐藏 source 整树深克隆；目录开关替换正文与两个隐藏 surface 并额外 reflow 1 次；有效跨章目标完整分页 2 次。
+- GREEN：Range 局部分片保留 `.moyuplus-book-content` 和语义祖先，整树深克隆降为 0；text span 改为二分定位，边界吸附复用一次缓存的正文文本。
+- GREEN：目录/设置抽屉增量增删 overlay，正文节点、隐藏 surface、页码和正文 HTML 保持同一，reflow 为 0。
+- GREEN：跨章候选在同尺寸 staging 完整分页一次并通过 `attachTo()` 提升；异常候选保持旧布局对象不变，空章节作为单空页成功切换。
+- 同 bundle 交替基线（固定 Chromium、280×318 阅读面、约 37k HTML、2 次预热 + 5 次测量）：0.0.6 初始化中位数 1217.0ms，当前 542.7ms，倍率 0.446（当前约快 2.24 倍）。
+- 真实 app 目录基线（280×420、约 34.5k HTML、120 项目录、2+5）：0.0.6 中位数 396.6ms，当前 1.1ms；确定性门禁同时确认 0 reflow 与布局对象身份稳定。
+- 全量回归通过：44 个单测文件 210/210，Chromium layout/privacy 28/28，`npm run compile` 通过。
+- 正式 package 门禁再次通过 compile、210/210 unit 和 28/28 Chromium；生成 `moyuplus-0.0.7-performance-fix.vsix`（373,677 bytes，8 个运行时/说明文件，包内版本 0.0.7）。SHA-256：`40F9E90F7A4CDBDEAC6725ACA1FEC0AA7529073C83A171B4A0B05000C4272EDB`。
+- 已启动设计阶段，记录用户实测的初始化、目录和远距离跨章跳转性能回归；下一步检查调用链与同步 DOM/分页工作量。
+- 已定位三条主要同步热路径：初次打开全章 eager pagination、打开 drawer 导致 Layout Engine 销毁重建、跨章目标 preflight 与正式渲染重复全章 pagination。
+- 已建立可重复浏览器性能基线：39k HTML 初载约 509ms、开目录约 363ms、跨章章尾注解约 894ms，确认用户反馈是结构性同步工作放大而非偶发 I/O。
+- 用户要求暂缓性能问题；当前转入图片入口样式的最小 TDD 修改和独立 VSIX 打包。
+- 图片链接样式设计规格复核 Approved；开始真实 Reader computed-style RED。
+- RED 已观察：入口仍为 BUTTON，但旧 computed style 是浅灰背景、2px 边框、1×6px padding、默认光标且无下划线；失败原因准确。
+- GREEN 已通过：真实 Reader harness 确认入口仍为 BUTTON，且为透明背景、零边框、零 padding、VS Code 链接色、下划线和 pointer cursor；安全 openImage 消息断言继续通过。
+- 完整 package 门禁通过：44 个单测文件 210/210，Chromium layout/privacy 22/22，生成 `moyuplus-0.0.7-image-link.vsix`。
+- VSIX 共 8 个文件，仅包含 manifest、README、CHANGELOG、Extension/Webview 运行时 JS/CSS；`git diff --check` 通过。SHA-256：`A8FAA23AA33397F6B59D16A1037896D52FDFE5F1383B37057511E888EA6CD753`。
+
+## 2026-07-15 统一排版与分页回归修复
+
+- 已读取并确认获批设计规格、当前 Git 状态和现有测试脚本。
+- 已将主计划切换为 `implementation_in_progress`，下一步进入 RED：检查 sanitizer/layout 当前实现和测试夹具，新增最小失败测试。
+- 已完成实现盘点：sanitizer 表现层、`sanitizer-v2` 和三处单轴分页判断均与设计中的目标行为存在明确差距。
+- 已确定测试落点：`epubSanitizer.test.ts`、`epubAdapter.test.ts`、`reader-layout.spec.ts`，以及两个既有 Chromium harness；先做 sanitizer/sourceRevision RED。
+- Sanitizer/sourceRevision RED 观察到 3 个预期失败；实现 allowlist 与 `sanitizer-v3` 后目标测试 6/6 通过。开始分页/真实 Reader RED。
+- 分页 RED 先复现 `pageCount=1` 与完整 app 文本/边界失败；实现共享双轴谓词、统一正文 CSS，并修正 footer 挂载顺序后，canonical Chromium 测试 2/2 通过（含 27 组独立矩阵）。
+- Build contract 先因仍声明 `css-tree` 按预期失败；移除 `css-tree` 与 `@types/css-tree` 后目标测试 5/5 通过。README、CHANGELOG 与指导文档已更新统一排版取舍和双轴分页契约。
+- 最终门禁：`npm run compile` 通过；44 个单测文件 210/210；Chromium layout/privacy 22/22；`npm run package -- --out moyuplus-0.0.7-canonical-layout.vsix` 通过；`git diff --check` 通过。
+- VSIX 共 8 个文件，仅含 manifest、README、CHANGELOG、`out/extension.js`、`media/readerApp.js` 和 `media/readerApp.css`；不含源码、测试、计划、source map、lockfile 或书籍文件。SHA-256：`B610041FC1F71F6CE3BF7DDE6979DBF464D37C37EA44D5F05663CD34969BA8EA`。
+- 2026-07-16 用户使用真实 VSIX 与原故障 EPUB 完成人工复验，右边距、`pre`/长文本/表格、末页状态、resize/reflow、内部链接与图片预览全部通过。
+
 ## 2026-07-13 Reader v2 Phase 6 人工复测修复（0.0.5）
 
 - 修复窗口缩放后分页状态与按钮状态不同步，Layout Engine 在合并重排完成后主动回报最新页面状态。
@@ -668,3 +703,75 @@
 - `vsce` 非阻断警告：缺少 repository 字段与 LICENSE；未在没有用户许可选择和远端 URL 依据时擅自补充。
 - 0.0.7 源码、测试、生成 bundle、版本和发布文档已提交；VSIX 按 `.gitignore` 保留为本地交付产物。
 - **Status:** complete。
+
+### 2026-07-15 阅读器资源、内部导航与分页边距实施
+
+- **Status:** in_progress
+- 已确认最新目标来自提交 `4652ba1` 的已批准规格，而非已完成的 7 月 14 日 Git Log 缓存计划。
+- 已读取 brainstorming、TDD、planning-with-files 与 frontend-design 技能；`.impeccable.md` 将作为 Webview 视觉上下文。
+- 已创建 `docs/superpowers/plans/2026-07-15-moyuplus-reader-resources-navigation-layout-implementation-plan.md`，分为 Phase 0–7。
+- 当前工作树仅有既有未跟踪 `.superpowers/`；不清理、不覆盖。
+- 错误：首次结构读取假设不存在的 `src/adapters/epubAdapter.ts`、`src/epub/xhtmlSanitizer.ts`、`src/epub/packageParser.ts`，命令失败。后续改为先读取 `rg --files` 清单，不重复同一命令。
+- 下一步：按真实路径检查实现边界并运行 Phase 0 基线。
+- Phase 0 基线通过：Vitest 39 个文件 182/182；Chromium 布局/隐私 15/15；`npm run compile` 通过并重新生成双目标 bundle。
+- `.impeccable.md` 已确认用户、用途和视觉方向完整：VS Code 原生、克制、可靠；无需运行 teach-impeccable。
+- Phase 0 fixture 将随各 RED 测试按需增量补充，避免先造未被行为测试使用的大型样本。
+- 下一步：Phase 1 先检查消息、Locator、LayoutEngine 和现有测试接口，再增加最小 RED。
+- Phase 1 结构检查完成：协议 v2、Host sectionGeneration 未出现在消息中、navigationState 仅 canNextPage、Webview 翻页函数直接调用 LayoutEngine。
+- 发现现有 `localResources` 暴露 archive path 且图片 MIME 有 octet-stream 回退；已记录为 Phase 2 安全边界，不在 Phase 1 提前修改。
+- 下一步：为协议 v3、EpubLocator textOffset/sourceRevision 和 ReaderNavigationHistory 写最小 RED。
+- Phase 1 RED：协议测试按预期看到版本仍为 2、新消息被拒；Locator 测试缺少 textOffset/sourceRevision；历史测试首次因模块不存在无法收集。
+- 按 TDD 修复历史测试收集错误时只增加空骨架，随后 2 个行为断言按预期失败（size 为 0、pop 为 undefined）。
+- Phase 1 首轮 GREEN：协议/Locator/历史 3 文件 15/15 通过；`npx tsc -p ./ --noEmit` 通过。
+- 历史实现容量 50、连续位置去重、defensive copy、LIFO 和 clear；尚未接入 Webview 生命周期。
+- 下一步：InternalTargetResolver 的 UTF-16 offset/fragment RED。
+- InternalTargetResolver RED：首次因模块不存在无法收集；补空骨架后 2 个断言按预期失败（totalLength 为 0、point 为 undefined）。
+- InternalTargetResolver GREEN：UTF-16 文本索引、普通/空 anchor 前后回退、缺失 fragment、offset clamp 与边界映射完成。
+- Phase 1 目标回归：4 文件 17/17 通过；下一步运行全量单测确认协议 v3 对既有 fixture 的影响。
+- 全量单测首次回归 3 项失败，均由硬编码 `version: 2` fixture/Webview envelope 被 v3 守卫拒绝导致；已统一改用 `READER_PROTOCOL_VERSION`。
+- v3 迁移目标回归：Reader Provider、Git Log Provider、消息 3 文件 29/29 通过。
+- Phase 2 结构检查完成：现有 sanitizer 暴露 archive path、丢失跨章链接；Archive 安全读取能力可直接复用。
+- Phase 2 sanitizer/声明 RED：图片仍为 archive-path src、跨章目标只剩 fragment、octet-stream 资源被错误声明；3 个行为断言按预期失败。
+- GREEN：图片改为不透明资源按钮，alt→figcaption→默认 label；内部链接输出 section/fragment；外链与未知目标惰化；SafeSectionDocument 不再暴露 path。
+- 图片安全 RED：新模块首次缺失；补直通骨架后 MIME 混淆和危险 SVG 两项行为断言失败。BookHandle 读取也按预期以 not implemented 失败。
+- 图片安全 GREEN：PNG/JPEG/GIF/WebP/AVIF magic 校验、严格声明 MIME 匹配和 SVG 元素/属性/URL 清洗完成；原始 SVG 字节被重新序列化替换。
+- Adapter 只为 manifest 支持 MIME 且扩展名一致的图片生成 16 位不透明 ID；按 section 声明读取并复用 EpubArchive 安全上限。
+- Phase 2 目标回归：security/sanitizer/adapter 3 文件 11/11 通过；TypeScript 检查通过。
+- TypeScript 首次检查发现 ES2022 不支持 `Array.findLast`；改为显式逆序循环后通过，未提升目标 lib。
+- Phase 2 全量单元回归：42 文件 198/198 通过。
+- Phase 3 API 核对：VS Code 1.92 类型已原生支持只读 Custom Editor；预览服务可直接实现，无需第三方依赖或联网查询。
+- Phase 3 RED：服务模块首次不存在；补 shim/custom-editor 空骨架后 open、document 与 HTML 行为断言失败。
+- Phase 3 GREEN：内存 URI、字节 defensive copy、独立 nonce/CSP、Blob URL revoke、openWith preview、失败/关闭/dispose 清理完成。
+- Custom Editor contribution 与 extension 注册 RED/GREEN 完成；目标 3 文件 11/11 和 TypeScript 检查通过。
+- Phase 4 结构检查完成：Host 已有 generation 基础，但 Provider 仍使用未关联 navigationState；位置命令需要统一正文状态防线。
+- Phase 4 Controller RED：`openImage` 不存在；合法、伪造、过期和预览失败场景均按预期失败。
+- Controller GREEN：成功 section 记录 request/book/section/generation/资源 ID；图片读取前后双重校验，过期响应静默，当前真实失败发送关联 `imageOpenFailed`。
+- Provider/命令 RED：previous 非正文返回 undefined、undo 缺失、openImage 未路由、package/shortcut/activation 缺 undo。
+- Provider/命令 GREEN：三项位置命令均要求活动正文和对应 capability；navigationState 改为 v3 关联消息；undo 无默认绑定；opaque image envelope 被收窄后交给 Controller。
+- Extension 已把经过 Adapter 校验的 payload 接到内存 Preview Service；目标 5 文件 31/31 与 TypeScript 检查通过。
+- 下一步：Phase 5 Webview history/navigator、DOM 事件委托和撤回工具栏。
+- 2026-07-15 Phase 5 开始前已复核 `readerApp.ts`、`readerState.ts`、`layoutEngine.ts`、样式与现有 Playwright harness；确认导航仍由直接函数调用管理，且 render 会重建 LayoutEngine。
+- Phase 6 根因已定位：measure surface 仅手工复制有限 computed style，未与真实 page 共享完整容器身份和偏好属性；后续先以布局测试锁定再替换该同步方式。
+- 错误：Phase 5 复核首次按不存在的 `src/test/layout` 和顶层 `test` 路径读取布局测试；已改为仓库级文件清单定位 `tests/layout`、`tests/fixtures/layout`，不重复失败路径。
+- Phase 5 ReaderNavigator RED/GREEN：新增成功后提交、失败不入栈、LIFO 撤回跳过失效条目与会话 clear；3/3 单测通过。
+- Webview 已接入同章/跨章 target、TOC fragment、正文事件委托、图片 opaque ID、关联 navigationState、generation/sourceRevision 与最多 50 条撤回历史；Playwright 端到端验证翻页→撤回和图片消息不含路径。
+- Phase 6 布局 RED 证明旧 Range clone 会丢失出版物祖先结构且隐藏 surface 没有真实 page identity；GREEN 后 source/measure 复制 class、dataset、内联偏好与 CSS 变量，fragment 保留结构，并加入真实渲染溢出缩短防线。
+- 220/280/360px × 8/24/64px 页边距矩阵、正文/页脚不重叠、末行不裁切与 surface identity Playwright 测试通过；Reader layout 10/10 通过。
+- 首次 Phase 5/6 全量单测：44 文件中 43 通过、1 文件 2 项失败；失败均为旧 `typingPracticeIntegration` fixture 未纳入 undo 且仍使用无关联 navigationState，并非生产行为回归。
+- 旧 fixture 已迁移到 v3 openBook → requestSection → correlated navigationState，目标文件 8/8 通过。
+- Phase 7 文档已更新：README、指导文档、CHANGELOG 与实施计划说明安全图片预览、内部导航、撤回和无默认绑定位置命令。
+- 最终门禁通过：`npm run compile`；Vitest 44 文件 208/208；Playwright 20/20（含零网络、安全、Git Log 回归、跨章原子失败/成功/撤回和 padding 矩阵）；`git diff --check` 退出码 0。
+- 生成 `moyuplus-0.0.7-reader-navigation.vsix`，8 个发布文件、467.46 KB；内容审计无源码、测试、计划、source map、lockfile 或书籍文件。
+- **Status:** complete。2026-07-16 用户使用真实 VSIX 与综合长书完成人工验收；未改版本、未推送、未发布。
+
+### 2026-07-15 阅读器横向裁切与页码失效回归
+
+- 用户在真实人工验收中发现阻断故障：Reader 右侧内容被裁切，右边距视觉失效，无法显示完整书籍，页数计算错误。
+- 人工验收判定失败；`moyuplus-0.0.7-reader-navigation.vsix` 停止交付。
+- 只读根因确认：分页 `fits()`、真实渲染修正和跨章 preflight 只检查 `scrollHeight/clientHeight`，未检查 `scrollWidth/clientWidth`；`.reader-content` 的 `overflow: hidden` 将横向溢出直接裁掉。
+- 稳定复现：正常段落 9 页且无横向溢出；`nowrap` 与 `<pre>` 均被错误算作 1 页，实际内容宽度分别达到 34228px 与 24016px，而可视宽度仅 280px。
+- 自动测试盲区：Reader padding 矩阵只使用自然换行段落，未覆盖 `nowrap`、`pre`、宽表格、连续长字符和横向 `scrollWidth` 断言。
+- 当前进入设计门禁；生产代码尚未修改。
+- 用户确认“完整可读优先于原版排版”，并批准方案 2：保留 EPUB 语义结构、删除出版物 CSS、由 MoyuPlus 统一排版。
+- 已写入修复规格 `docs/superpowers/specs/2026-07-15-moyuplus-reader-canonical-layout-regression-design.md`；下一步按 brainstorming 门禁执行规格审查和用户复核，生产代码仍未修改。
+- 独立规格审查结果为 Approved，无阻断问题；已采纳两项建议，明确源属性使用允许列表、包内 stylesheet 不进入 Webview，并明确 3 个宽度 × 3 个 padding 为完整 9 组矩阵。

@@ -17,7 +17,8 @@ import {
   CLOSE_READER_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
-  PREVIOUS_READER_PAGE_COMMAND_ID
+  PREVIOUS_READER_PAGE_COMMAND_ID,
+  UNDO_READER_LOCATION_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -29,8 +30,21 @@ import {
   REMOVE_BOOK_COMMAND_ID
 } from '../../commands/libraryCommands';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
+import { IMAGE_PREVIEW_VIEW_TYPE } from '../../reader/imagePreviewService';
 
 describe('package contributions', () => {
+  it('contributes the in-memory readonly image preview editor', async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
+
+    expect(packageJson.activationEvents).toContain(`onCustomEditor:${IMAGE_PREVIEW_VIEW_TYPE}`);
+    expect(packageJson.contributes.customEditors).toContainEqual({
+      viewType: IMAGE_PREVIEW_VIEW_TYPE,
+      displayName: 'MoyuPlus Image Preview',
+      selector: [{ filenamePattern: '*.moyuplus-image' }],
+      priority: 'default'
+    });
+  });
+
   it('exposes only v2 library commands', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
     const commandIds = packageJson.contributes.commands.map((command: { command: string }) => command.command);
@@ -153,6 +167,7 @@ describe('package contributions', () => {
     const settingsCommands = [
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
+      UNDO_READER_LOCATION_COMMAND_ID,
       PREVIOUS_READER_CHAPTER_COMMAND_ID,
       NEXT_READER_CHAPTER_COMMAND_ID,
       OPEN_READER_LIBRARY_COMMAND_ID,
@@ -167,6 +182,9 @@ describe('package contributions', () => {
     expect(commandIds).toEqual(expect.arrayContaining(settingsCommands));
     expect(packageJson.activationEvents).toEqual(
       expect.arrayContaining(settingsCommands.map((commandId) => `onCommand:${commandId}`))
+    );
+    expect(packageJson.contributes.keybindings).not.toContainEqual(
+      expect.objectContaining({ command: UNDO_READER_LOCATION_COMMAND_ID })
     );
   });
 

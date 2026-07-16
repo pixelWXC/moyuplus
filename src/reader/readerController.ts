@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { BookHandle } from '../adapters/bookAdapter';
+import type { BookHandle, PreviewImagePayload } from '../adapters/bookAdapter';
 import type { AdapterRegistry } from '../adapters/adapterRegistry';
 import { mapLocatorToBookProgression, openBook as createReaderState, type ReaderEngineState } from '../domain/readerEngine';
 import type { ReadingLocator, ReadingPosition } from '../domain/locators';
@@ -11,6 +11,15 @@ export interface ReaderControllerOptions {
   createRequestId?: () => string;
   debounceMs?: number;
   now?: () => number;
+  openImagePreview?: (payload: PreviewImagePayload) => boolean | PromiseLike<boolean>;
+}
+
+export interface ReaderImageRequest {
+  requestId: string;
+  bookId: string;
+  sectionId: string;
+  sectionGeneration: number;
+  resourceId: string;
 }
 
 export const DEFAULT_PROGRESS_DEBOUNCE_MS = 400;
@@ -23,10 +32,12 @@ export class ReaderController {
   private abortController?: AbortController;
   private pendingPosition?: ReadingPosition;
   private sections: Array<{ id: string }> = [];
+  private activeSection?: { requestId: string; bookId: string; sectionId: string; generation: number; resourceIds: Set<string> };
   private saveTimer?: ReturnType<typeof setTimeout>;
   private readonly createRequestId: () => string;
   private readonly debounceMs: number;
   private readonly now: () => number;
+  private readonly openImagePreview?: (payload: PreviewImagePayload) => boolean | PromiseLike<boolean>;
 
   constructor(
     private readonly books: BookLibraryStore,
@@ -38,6 +49,7 @@ export class ReaderController {
     this.createRequestId = options.createRequestId ?? randomUUID;
     this.debounceMs = options.debounceMs ?? DEFAULT_PROGRESS_DEBOUNCE_MS;
     this.now = options.now ?? Date.now;
+    this.openImagePreview = options.openImagePreview;
   }
 
   async openBook(bookId: string, correlatedRequestId?: string): Promise<boolean> {
@@ -45,6 +57,7 @@ export class ReaderController {
     const requestId = correlatedRequestId ?? this.createRequestId();
     this.requestId = requestId;
     this.sectionGeneration += 1;
+    this.activeSection = undefined;
     this.abortController?.abort();
     this.abortController = new AbortController();
     const previous = this.handle;
@@ -85,7 +98,8 @@ export class ReaderController {
     try {
       const section = await handle.getSection(sectionId);
       if (generation !== this.sectionGeneration || requestId !== this.requestId) return;
-      await this.emit({ version: READER_PROTOCOL_VERSION, type: 'sectionReady', requestId, bookId: state.bookId, sectionId, section });
+      this.activeSection = { requestId, bookId: state.bookId, sectionId, generation, resourceIds: new Set(section.localResources.map(resource => resource.id)) };
+      await this.emit({ version: READER_PROTOCOL_VERSION, type: 'sectionReady', requestId, bookId: state.bookId, sectionId, sectionGeneration: generation, section });
     } catch {
       if (generation === this.sectionGeneration && requestId === this.requestId) await this.sendError(requestId, state.bookId, 'sectionFailed', 'Unable to load this section.');
     }
@@ -94,6 +108,22 @@ export class ReaderController {
   async requestNextSection(sectionId: string): Promise<void> { await this.requestAdjacentSection(sectionId, 1); }
 
   async requestPreviousSection(sectionId: string): Promise<void> { await this.requestAdjacentSection(sectionId, -1); }
+
+  async openImage(request: ReaderImageRequest): Promise<void> {
+    const handle = this.handle;
+    const active = this.activeSection;
+    if (!handle || !active || !this.isCurrentImageRequest(request, active) || !active.resourceIds.has(request.resourceId)) return;
+    try {
+      const payload = await handle.readResource(request.sectionId, request.resourceId);
+      if (!this.isCurrentImageRequest(request, active)) return;
+      const opened = await this.openImagePreview?.(payload);
+      if (opened !== true && this.isCurrentImageRequest(request, active)) {
+        await this.emitImageFailure(request);
+      }
+    } catch {
+      if (this.isCurrentImageRequest(request, active)) await this.emitImageFailure(request);
+    }
+  }
 
   reportLayout(locator: ReadingLocator, bookProgression: number): void {
     const state = this.state;
@@ -131,6 +161,7 @@ export class ReaderController {
     this.handle = undefined;
     this.state = undefined;
     this.sections = [];
+    this.activeSection = undefined;
   }
 
   private async requestAdjacentSection(sectionId: string, delta: -1 | 1): Promise<void> {
@@ -147,5 +178,30 @@ export class ReaderController {
 
   private async sendError(requestId: string, bookId: string, code: string, message: string): Promise<void> {
     await this.emit({ version: READER_PROTOCOL_VERSION, type: 'readerError', requestId, bookId, code, message });
+  }
+
+  private isCurrentImageRequest(
+    request: ReaderImageRequest,
+    active: { requestId: string; bookId: string; sectionId: string; generation: number }
+  ): boolean {
+    return request.requestId === this.requestId
+      && request.requestId === active.requestId
+      && request.bookId === this.state?.bookId
+      && request.bookId === active.bookId
+      && request.sectionId === active.sectionId
+      && request.sectionGeneration === this.sectionGeneration
+      && request.sectionGeneration === active.generation;
+  }
+
+  private async emitImageFailure(request: ReaderImageRequest): Promise<void> {
+    await this.emit({
+      version: READER_PROTOCOL_VERSION,
+      type: 'imageOpenFailed',
+      requestId: request.requestId,
+      bookId: request.bookId,
+      sectionId: request.sectionId,
+      sectionGeneration: request.sectionGeneration,
+      message: '图片无法打开'
+    });
   }
 }

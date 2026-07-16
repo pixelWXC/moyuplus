@@ -51,6 +51,8 @@ export type ReaderAppAction =
   | { type: 'cancelRemove' }
   | { type: 'bookRemoved'; bookId: string }
   | { type: 'showError'; message: string }
+  | { type: 'showNotice'; message: string }
+  | { type: 'clearNotice' }
   | { type: 'openReader'; book: BookRecord; requestId: string }
   | { type: 'closeReader' }
   | { type: 'bookReady'; requestId: string; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string; initialProgression?: number }
@@ -105,6 +107,10 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
       };
     case 'showError':
       return { ...state, status: 'error', error: action.message };
+    case 'showNotice':
+      return { ...state, notice: action.message };
+    case 'clearNotice':
+      return { ...state, notice: undefined };
     case 'openReader':
       return { ...state, view: 'reader', status: 'loading', activeBook: action.book, requestId: action.requestId, notice: undefined };
     case 'closeReader':
@@ -116,7 +122,7 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
       return { ...state, activeSectionId: action.sectionId, status: 'loading', drawer: undefined, notice: undefined, navigation: navigationFor(state.sections ?? [], action.sectionId) };
     case 'layoutChanged': {
       const chapter = navigationFor(state.sections ?? [], action.sectionId);
-      return { ...state, status: 'ready', activeSectionId: action.sectionId, layout: action, notice: undefined, navigation: {
+      return { ...state, status: 'ready', activeSectionId: action.sectionId, layout: action, navigation: {
         ...chapter,
         canPreviousPage: action.canPreviousPage || chapter.canPreviousSection,
         canNextPage: action.canNextPage || chapter.canNextSection

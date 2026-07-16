@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Uri, createWebviewView } from '../shims/vscode';
 import { ReaderViewProvider, type ReaderViewController } from '../../reader/ReaderViewProvider';
+import { READER_PROTOCOL_VERSION } from '../../reader/readerMessages';
 
 function controller(): ReaderViewController {
   return {
     openBook: vi.fn(), requestSection: vi.fn(), requestNextSection: vi.fn(), requestPreviousSection: vi.fn(),
-    reportLayout: vi.fn(), flush: vi.fn(), dispose: vi.fn()
+    openImage: vi.fn(), reportLayout: vi.fn(), flush: vi.fn(), dispose: vi.fn()
   };
 }
 
-describe('ReaderViewProvider v2', () => {
+describe('ReaderViewProvider v3', () => {
   it('answers the Webview libraryReady handshake so the shelf leaves loading state', async () => {
     const library = {
       snapshot: vi.fn().mockResolvedValue({
@@ -47,7 +48,7 @@ describe('ReaderViewProvider v2', () => {
     expect(library.snapshot).toHaveBeenCalledOnce();
   });
 
-  it('accepts only guarded v2 messages and routes them to the controller', async () => {
+  it('accepts only guarded v3 messages and routes them to the controller', async () => {
     const target = controller();
     const provider = new ReaderViewProvider(Uri.file('/extension'), target);
     const view = createWebviewView();
@@ -58,10 +59,10 @@ describe('ReaderViewProvider v2', () => {
       Uri.file('/extension/media').toString()
     ]);
 
-    await view.webview.receiveMessage({ version: 2, type: 'openBook', requestId: 'r1', bookId: 'book-1' });
+    await view.webview.receiveMessage({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId: 'r1', bookId: 'book-1' });
     await view.webview.receiveMessage({ version: 1, type: 'openBook', requestId: 'bad', bookId: 'book-2' });
     await view.webview.receiveMessage({
-      version: 2, type: 'layoutStable', requestId: 'r1', bookId: 'book-1', sectionId: 's1',
+      version: READER_PROTOCOL_VERSION, type: 'layoutStable', requestId: 'r1', bookId: 'book-1', sectionId: 's1',
       locator: { kind: 'txt', sectionId: 's1', progression: 0.5, offset: 12 }, bookProgression: 0.4
     });
 
@@ -92,7 +93,7 @@ describe('ReaderViewProvider v2', () => {
     provider.resolveWebviewView(view as never);
 
     await view.webview.receiveMessage({
-      version: 2, type: 'closeBook', requestId: 'r1', bookId: 'book-1', sectionId: 's1',
+      version: READER_PROTOCOL_VERSION, type: 'closeBook', requestId: 'r1', bookId: 'book-1', sectionId: 's1',
       locator: { kind: 'txt', sectionId: 's1', progression: 0.75, offset: 75 }, bookProgression: 0.75
     });
 
@@ -103,23 +104,55 @@ describe('ReaderViewProvider v2', () => {
   });
 
   it('routes external reader commands and refuses Enter-style next-page at the book end', async () => {
-    const provider = new ReaderViewProvider(Uri.file('/extension'), controller());
+    const target = controller();
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target);
     const view = createWebviewView();
     provider.resolveWebviewView(view as never);
 
-    await view.webview.receiveMessage({ type: 'navigationState', canNextPage: false });
+    await expect(provider.requestPreviousPage()).resolves.toBe(false);
+    await expect(provider.requestUndoLocation()).resolves.toBe(false);
+    await view.webview.receiveMessage({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId: 'r1', bookId: 'book-1' });
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'navigationState', requestId: 'r1', bookId: 'book-1',
+      sectionId: 's1', sectionGeneration: 1,
+      canPreviousPage: false, canNextPage: false, canUndoLocation: false
+    });
     await expect(provider.requestNextPage()).resolves.toBe(false);
     expect(view.webview.postedMessages).toEqual([]);
 
-    await view.webview.receiveMessage({ type: 'navigationState', canNextPage: true });
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'navigationState', requestId: 'r1', bookId: 'book-1',
+      sectionId: 's1', sectionGeneration: 1,
+      canPreviousPage: true, canNextPage: true, canUndoLocation: true
+    });
     await expect(provider.requestNextPage()).resolves.toBe(true);
-    await provider.requestPreviousPage();
+    await expect(provider.requestPreviousPage()).resolves.toBe(true);
+    await expect(provider.requestUndoLocation()).resolves.toBe(true);
     await provider.requestReaderCommand('nextChapter');
 
     expect(view.webview.postedMessages).toEqual([
       { type: 'command', command: 'nextPage' },
       { type: 'command', command: 'previousPage' },
+      { type: 'command', command: 'undoLocation' },
       { type: 'command', command: 'nextChapter' }
     ]);
+  });
+
+  it('routes an opaque image request to the controller without exposing a path', async () => {
+    const target = controller();
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await view.webview.receiveMessage({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId: 'r1', bookId: 'book-1' });
+
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'openImage', requestId: 'r1', bookId: 'book-1',
+      sectionId: 's1', sectionGeneration: 4, resourceId: 'image-opaque-id'
+    });
+
+    expect(target.openImage).toHaveBeenCalledWith({
+      requestId: 'r1', bookId: 'book-1', sectionId: 's1', sectionGeneration: 4, resourceId: 'image-opaque-id'
+    });
+    expect(JSON.stringify((target.openImage as any).mock.calls)).not.toMatch(/path|\.\.|OPS\//);
   });
 });

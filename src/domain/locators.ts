@@ -4,7 +4,13 @@ export interface LocatorBase {
 }
 
 export type TxtLocator = LocatorBase & { kind: 'txt'; offset?: number };
-export type EpubLocator = LocatorBase & { kind: 'epub'; cfi?: string; fragment?: string };
+export type EpubLocator = LocatorBase & {
+  kind: 'epub';
+  cfi?: string;
+  fragment?: string;
+  textOffset?: number;
+  sourceRevision?: string;
+};
 export type ReadingLocator = TxtLocator | EpubLocator;
 
 export interface ReadingPosition {
@@ -39,6 +45,12 @@ export function normalizeReadingLocator(value: unknown): ReadingLocator | undefi
     }
     if (isNonEmptyString(value.fragment)) {
       locator.fragment = value.fragment;
+    }
+    if (isNonNegativeFiniteNumber(value.textOffset)) {
+      locator.textOffset = Math.trunc(value.textOffset);
+    }
+    if (isNonEmptyString(value.sourceRevision)) {
+      locator.sourceRevision = value.sourceRevision;
     }
     return locator;
   }

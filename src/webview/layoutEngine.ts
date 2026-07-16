@@ -1,3 +1,5 @@
+import { InternalTargetResolver, type TextTreeNode } from './internalTargetResolver';
+
 export interface LayoutState {
   sectionId: string;
   pageIndex: number;
@@ -13,6 +15,17 @@ export interface LayoutState {
 
 interface PageBoundary { start: number; end: number }
 interface TextSpan { node: Text; start: number; end: number }
+interface LayoutSurface {
+  scrollHeight: number;
+  clientHeight: number;
+  scrollWidth: number;
+  clientWidth: number;
+}
+
+export function fitsWithinSurface(surface: LayoutSurface): boolean {
+  return surface.scrollHeight <= surface.clientHeight + 1
+    && surface.scrollWidth <= surface.clientWidth + 1;
+}
 
 export class LayoutEngine {
   private readonly source: HTMLDivElement;
@@ -21,14 +34,15 @@ export class LayoutEngine {
   private pages: PageBoundary[] = [{ start: 0, end: 0 }];
   private spans: TextSpan[] = [];
   private totalLength = 0;
+  private sourceText = '';
   private pageIndex = 0;
   private scheduledFrame?: number;
   private reflowPasses = 0;
   private readonly scheduleFromEnvironment = (): void => this.requestReflow();
 
   public constructor(
-    private readonly viewport: HTMLElement,
-    private readonly onReflow?: (state: LayoutState) => void
+    private viewport: HTMLElement,
+    private onReflow?: (state: LayoutState) => void
   ) {
     this.source = document.createElement('div');
     this.measure = document.createElement('div');
@@ -40,10 +54,34 @@ export class LayoutEngine {
   }
 
   public setContent(sectionId: string, sanitizedHtml: string, progression = 0): void {
+    this.loadSource(sectionId, sanitizedHtml);
+    this.paginate(Math.max(0, Math.min(1, progression)) * this.totalLength);
+  }
+
+  public setContentAtOffset(sectionId: string, sanitizedHtml: string, textOffset: number): void {
+    this.loadSource(sectionId, sanitizedHtml);
+    this.paginate(Math.max(0, Math.min(this.totalLength, Number.isFinite(textOffset) ? Math.trunc(textOffset) : 0)));
+  }
+
+  public getTextLength(): number { return this.totalLength; }
+
+  public attachTo(viewport: HTMLElement, onReflow?: (state: LayoutState) => void): void {
+    const staging = this.viewport;
+    if (staging === viewport) {
+      this.onReflow = onReflow;
+      return;
+    }
+    viewport.replaceChildren(...Array.from(staging.childNodes));
+    this.viewport = viewport;
+    this.onReflow = onReflow;
+    this.syncMeasureStyle();
+    staging.remove();
+  }
+
+  private loadSource(sectionId: string, sanitizedHtml: string): void {
     this.sectionId = sectionId;
     this.source.innerHTML = sanitizedHtml;
     this.indexText();
-    this.paginate(Math.max(0, Math.min(1, progression)) * this.totalLength);
   }
 
   public reflow(): void {
@@ -74,6 +112,25 @@ export class LayoutEngine {
     this.pageIndex -= 1;
     this.render();
     return true;
+  }
+
+  public goToOffset(offset: number): boolean {
+    const clamped = Math.max(0, Math.min(this.totalLength, Number.isFinite(offset) ? Math.trunc(offset) : 0));
+    let target = this.pages.findIndex(page => clamped >= page.start && clamped < page.end);
+    if (target < 0) target = this.pages.length - 1;
+    if (target === this.pageIndex) return false;
+    this.pageIndex = target;
+    this.render();
+    return true;
+  }
+
+  public resolveFragmentOffset(fragment: string): number | undefined {
+    return new InternalTargetResolver(this.source as unknown as TextTreeNode).resolveFragment(fragment);
+  }
+
+  public goToFragment(fragment: string): boolean {
+    const offset = this.resolveFragmentOffset(fragment);
+    return offset === undefined ? false : this.goToOffset(offset);
   }
 
   public getState(): LayoutState {
@@ -112,6 +169,7 @@ export class LayoutEngine {
       this.spans.push({ node: text, start, end: this.totalLength });
       node = walker.nextNode();
     }
+    this.sourceText = this.source.textContent ?? '';
   }
 
   private paginate(anchor: number): void {
@@ -152,45 +210,95 @@ export class LayoutEngine {
   }
 
   private syncMeasureStyle(): void {
-    const style = getComputedStyle(this.viewport);
-    for (const name of ['box-sizing', 'width', 'height', 'padding', 'font', 'font-size', 'font-family', 'font-weight', 'line-height', 'letter-spacing', 'word-break', 'white-space']) {
-      this.measure.style.setProperty(name, style.getPropertyValue(name));
-    }
-    this.measure.style.width = `${this.viewport.clientWidth}px`;
-    this.measure.style.height = `${this.viewport.clientHeight}px`;
+    this.syncSurfaceIdentity(this.source);
+    this.syncSurfaceIdentity(this.measure);
   }
 
   private fits(start: number, end: number): boolean {
     this.measure.replaceChildren(this.fragment(start, end));
-    return this.measure.scrollHeight <= this.measure.clientHeight + 1;
+    return fitsWithinSurface(this.measure);
   }
 
   private render(): void {
     const page = this.pages[this.pageIndex];
     this.viewport.replaceChildren(this.fragment(page.start, page.end));
+    if (!fitsWithinSurface(this.viewport) && page.end > page.start + 1) {
+      const originalEnd = page.end;
+      let low = page.start + 1;
+      let high = page.end - 1;
+      let best = page.start + 1;
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        this.viewport.replaceChildren(this.fragment(page.start, middle));
+        if (fitsWithinSurface(this.viewport)) { best = middle; low = middle + 1; }
+        else high = middle - 1;
+      }
+      page.end = Math.max(page.start + 1, this.snapBoundary(page.start, best));
+      const next = this.pages[this.pageIndex + 1];
+      if (next) next.start = page.end;
+      else if (page.end < originalEnd) this.pages.push({ start: page.end, end: originalEnd });
+      this.viewport.replaceChildren(this.fragment(page.start, page.end));
+    }
   }
 
-  private fragment(start: number, end: number): DocumentFragment {
-    const range = document.createRange();
+  private fragment(start: number, end: number): Node {
     const startPoint = this.point(start, false);
     const endPoint = this.point(end, true);
+    const range = document.createRange();
     range.setStart(startPoint.node, startPoint.offset);
     range.setEnd(endPoint.node, endPoint.offset);
-    return range.cloneContents();
+
+    let content: Node = range.cloneContents();
+    let ancestor = range.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+    while (ancestor && ancestor !== this.source) {
+      const wrapper = ancestor.cloneNode(false) as Element;
+      wrapper.append(content);
+      content = wrapper;
+      if (ancestor.classList.contains('moyuplus-book-content')) break;
+      ancestor = ancestor.parentElement;
+    }
+    return content;
   }
 
   private point(offset: number, atEnd: boolean): { node: Text; offset: number } {
-    const span = this.spans.find(item => offset < item.end || (atEnd && offset === item.end)) ?? this.spans[this.spans.length - 1];
+    let low = 0;
+    let high = this.spans.length - 1;
+    let match = high;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const span = this.spans[middle];
+      if (offset < span.end || (atEnd && offset === span.end)) {
+        match = middle;
+        high = middle - 1;
+      } else low = middle + 1;
+    }
+    const span = this.spans[match];
     return { node: span.node, offset: Math.max(0, Math.min(span.node.length, offset - span.start)) };
   }
 
   private snapBoundary(start: number, candidate: number): number {
     if (candidate >= this.totalLength) return this.totalLength;
-    const text = this.source.textContent ?? '';
     const floor = Math.max(start + 1, candidate - 80);
     for (let index = candidate; index >= floor; index -= 1) {
-      if (/\s|[，。！？；、,.!?;]/u.test(text[index - 1] ?? '')) return index;
+      if (/\s|[，。！？；、,.!?;]/u.test(this.sourceText[index - 1] ?? '')) return index;
     }
     return candidate;
+  }
+
+  private syncSurfaceIdentity(surface: HTMLDivElement): void {
+    surface.className = this.viewport.className;
+    for (const key of Object.keys(surface.dataset)) delete surface.dataset[key];
+    for (const [key, value] of Object.entries(this.viewport.dataset)) surface.dataset[key] = value;
+    surface.style.cssText = this.viewport.style.cssText;
+    const computed = getComputedStyle(this.viewport);
+    for (const name of Array.from(computed)) {
+      if (name.startsWith('--')) surface.style.setProperty(name, computed.getPropertyValue(name));
+    }
+    Object.assign(surface.style, {
+      position: 'fixed', left: '-100000px', top: '0', visibility: 'hidden', overflow: 'hidden',
+      width: `${this.viewport.clientWidth}px`, height: `${this.viewport.clientHeight}px`
+    });
   }
 }
