@@ -5,6 +5,7 @@ export const TOGGLE_GIT_LOG_COMMAND_ID = 'moyuplus.gitLog.toggle';
 
 export interface GitLogCoordinatorReader {
   capturePosition(): ReadingPosition | undefined;
+  presentationMode?(): 'webview' | 'immersive' | undefined;
   flush(): Promise<void>;
   restore(target: GitLogResumeTarget): Promise<boolean>;
 }
@@ -92,9 +93,11 @@ export class GitLogModeCoordinator {
   private async enter(): Promise<void> {
     const current = this.store.get();
     const position = this.reader.capturePosition();
-    const resumeTarget = position ? toResumeTarget(position) : current.resumeTarget;
+    const resumeTarget = position ? toResumeTarget(position, this.reader.presentationMode?.()) : current.resumeTarget;
     await this.store.save({ active: true, ...(resumeTarget ? { resumeTarget } : {}) });
     this.pendingFlush = this.reader.flush().catch(() => undefined);
+    await this.pendingFlush;
+    this.pendingFlush = undefined;
     if (!this.view.isVisible()) {
       try { await this.view.focus(); }
       catch {
@@ -159,10 +162,11 @@ export class GitLogModeCoordinator {
   }
 }
 
-function toResumeTarget(position: ReadingPosition): GitLogResumeTarget {
+function toResumeTarget(position: ReadingPosition, presentationMode?: 'webview' | 'immersive'): GitLogResumeTarget {
   return {
     bookId: position.bookId,
     locator: { ...position.locator },
-    bookProgression: position.bookProgression
+    bookProgression: position.bookProgression,
+    ...(presentationMode ? { presentationMode } : {})
   };
 }

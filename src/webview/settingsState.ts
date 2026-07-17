@@ -1,10 +1,12 @@
 import type { ReaderPreferences } from '../domain/readerPreferences';
 import { createDefaultReaderPreferences } from '../domain/readerPreferences';
+import type { ImmersiveReaderPreferences } from '../domain/immersiveReaderPreferences';
+import { createDefaultImmersiveReaderPreferences } from '../domain/immersiveReaderPreferences';
 import type { GitLogPreferences } from '../git/gitLogModels';
 import { createDefaultGitLogPreferences } from '../git/gitLogModels';
 import type { ConfigurationSettingSnapshot } from '../settings/settingsAuthority';
 
-export type SettingsSection = 'reader' | 'gitLog' | 'typing' | 'shortcuts';
+export type SettingsSection = 'reader' | 'immersive' | 'gitLog' | 'typing' | 'shortcuts';
 
 export interface SettingsSnapshot {
   type: 'settingsSnapshot';
@@ -13,6 +15,7 @@ export interface SettingsSnapshot {
   stateVersion: number;
   section: SettingsSection;
   reader: ReaderPreferences;
+  immersive: ImmersiveReaderPreferences;
   gitLog: GitLogPreferences;
   configuration: ConfigurationSettingSnapshot[];
 }
@@ -23,28 +26,29 @@ export interface SettingsState {
   stateVersion: number;
   section: SettingsSection;
   reader: ReaderPreferences;
+  immersive: ImmersiveReaderPreferences;
   gitLog: GitLogPreferences;
   configuration: ConfigurationSettingSnapshot[];
   saveStatus?: 'saving' | 'saved' | 'error';
   error?: string;
-  resettingSection?: 'reader' | 'gitLog';
+  resettingSection?: 'reader' | 'immersive' | 'gitLog';
   pending: Record<string, { requestId: string; clientRevision: number }>;
 }
 
 export type SettingsAction =
   | { type: 'snapshotReceived'; snapshot: SettingsSnapshot }
-  | { type: 'localChange'; domain: 'reader' | 'gitLog' | 'configuration'; key: string; value: unknown; requestId: string; clientRevision: number }
+  | { type: 'localChange'; domain: 'reader' | 'immersive' | 'gitLog' | 'configuration'; key: string; value: unknown; requestId: string; clientRevision: number }
   | { type: 'selectSection'; section: SettingsSection }
-  | { type: 'resetStarted'; section: 'reader' | 'gitLog' }
-  | { type: 'resetFailed'; section: 'reader' | 'gitLog'; message?: string }
-  | { type: 'sectionReset'; section: 'reader' | 'gitLog'; value: ReaderPreferences | GitLogPreferences; stateVersion: number }
-  | { type: 'changeSaved' | 'changeFailed'; instanceId: string; stateVersion: number; domain: 'reader' | 'gitLog' | 'configuration'; key: string; value: unknown; requestId: string; clientRevision: number; message?: string }
+  | { type: 'resetStarted'; section: 'reader' | 'immersive' | 'gitLog' }
+  | { type: 'resetFailed'; section: 'reader' | 'immersive' | 'gitLog'; message?: string }
+  | { type: 'sectionReset'; section: 'reader' | 'immersive' | 'gitLog'; value: ReaderPreferences | ImmersiveReaderPreferences | GitLogPreferences; stateVersion: number }
+  | { type: 'changeSaved' | 'changeFailed'; instanceId: string; stateVersion: number; domain: 'reader' | 'immersive' | 'gitLog' | 'configuration'; key: string; value: unknown; requestId: string; clientRevision: number; message?: string }
   | { type: 'protocolError'; message: string };
 
 export function createInitialSettingsState(instanceId: string): SettingsState {
   return {
     phase: 'loading', instanceId, stateVersion: 0, section: 'reader',
-    reader: createDefaultReaderPreferences(), gitLog: createDefaultGitLogPreferences(), configuration: [], pending: {}
+    reader: createDefaultReaderPreferences(), immersive: createDefaultImmersiveReaderPreferences(), gitLog: createDefaultGitLogPreferences(), configuration: [], pending: {}
   };
 }
 
@@ -71,7 +75,9 @@ export function settingsReducer(state: SettingsState, action: SettingsAction): S
       stateVersion: Math.max(state.stateVersion, action.stateVersion),
       ...(action.section === 'reader'
         ? { reader: action.value as ReaderPreferences }
-        : { gitLog: action.value as GitLogPreferences }),
+        : action.section === 'immersive'
+          ? { immersive: action.value as ImmersiveReaderPreferences }
+          : { gitLog: action.value as GitLogPreferences }),
       resettingSection: undefined, saveStatus: 'saved', error: undefined
     };
   }
@@ -84,6 +90,7 @@ export function settingsReducer(state: SettingsState, action: SettingsAction): S
       stateVersion: snapshot.stateVersion,
       section: snapshot.section,
       reader: snapshot.reader,
+      immersive: snapshot.immersive,
       gitLog: snapshot.gitLog,
       configuration: snapshot.configuration,
       error: undefined
@@ -117,11 +124,12 @@ export function settingsReducer(state: SettingsState, action: SettingsAction): S
 
 function setDomainValue(
   state: SettingsState,
-  domain: 'reader' | 'gitLog' | 'configuration',
+  domain: 'reader' | 'immersive' | 'gitLog' | 'configuration',
   key: string,
   value: unknown
 ): SettingsState {
   if (domain === 'reader') return { ...state, reader: { ...state.reader, [key]: value } as ReaderPreferences };
+  if (domain === 'immersive') return { ...state, immersive: { ...state.immersive, [key]: value } as ImmersiveReaderPreferences };
   if (domain === 'gitLog') return { ...state, gitLog: { ...state.gitLog, [key]: value } as GitLogPreferences };
   return {
     ...state,

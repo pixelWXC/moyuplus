@@ -293,6 +293,11 @@ export const workspace = {
   configurationValues: {} as Record<string, unknown>,
   configurationDefaults: {} as Record<string, unknown>,
   configurationCallbacks: [] as Array<(event: { affectsConfiguration(key: string): boolean }) => unknown>,
+  fs: {
+    async stat(_uri: Uri): Promise<{ type: number; ctime: number; mtime: number; size: number }> {
+      return { type: 1, ctime: 0, mtime: 0, size: 0 };
+    }
+  },
 
   getConfiguration(section?: string, _scope?: Uri): {
     get<T>(key: string, defaultValue?: T): T;

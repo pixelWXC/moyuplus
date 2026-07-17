@@ -47,6 +47,27 @@ describe('GitLogModeCoordinator', () => {
     expect(view.openGitSession).toHaveBeenCalledWith('git-1');
   });
 
+  it('records and restores the active presentation mode without creating a hot second session', async () => {
+    const target = setup();
+    target.reader.presentationMode = () => 'immersive';
+    await target.coordinator.toggle();
+    expect(target.store.get().resumeTarget?.presentationMode).toBe('immersive');
+    await target.coordinator.toggle();
+    expect(target.reader.restore).toHaveBeenCalledWith(expect.objectContaining({ presentationMode: 'immersive' }));
+  });
+
+  it('waits for the reader session to flush and stop before opening Git Log', async () => {
+    const target = setup();
+    let release!: () => void;
+    vi.mocked(target.reader.flush).mockReturnValueOnce(new Promise<void>(resolve => { release = resolve; }));
+    const entering = target.coordinator.toggle();
+    await vi.waitFor(() => expect(target.reader.flush).toHaveBeenCalledOnce());
+    expect(target.view.openGitSession).not.toHaveBeenCalled();
+    release();
+    await entering;
+    expect(target.view.openGitSession).toHaveBeenCalledWith('git-1');
+  });
+
   it('focuses an absent view on entry but leaves a hidden view closed on exit', async () => {
     const target = setup();
     target.setVisible(false);

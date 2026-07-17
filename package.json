@@ -35,6 +35,7 @@
     "onCommand:moyuplus.openSettings",
     "onCommand:moyuplus.reader.focus",
     "onCommand:moyuplus.reader.close",
+    "onCommand:moyuplus.immersive.stop",
     "onCommand:moyuplus.gitLog.toggle",
     "onCommand:moyuplus.toggleTypingPractice",
     "onView:moyuplus.readerView",
@@ -136,6 +137,10 @@
         "title": "MoyuPlus: Close Reader"
       },
       {
+        "command": "moyuplus.immersive.stop",
+        "title": "MoyuPlus: Stop Immersive Reading"
+      },
+      {
         "command": "moyuplus.gitLog.toggle",
         "title": "MoyuPlus: Toggle Git Log"
       },
@@ -145,6 +150,11 @@
       }
     ],
     "keybindings": [
+      {
+        "command": "moyuplus.immersive.stop",
+        "key": "alt+shift+q",
+        "when": "moyuplus.immersiveReadingActive"
+      },
       {
         "command": "moyuplus.gitLog.toggle",
         "key": "alt+q"
@@ -162,6 +172,11 @@
     ],
     "menus": {
       "editor/context": [
+        {
+          "command": "moyuplus.immersive.stop",
+          "when": "moyuplus.immersiveReadingActive",
+          "group": "navigation@99"
+        },
         {
           "command": "moyuplus.openSettings",
           "group": "navigation@100"

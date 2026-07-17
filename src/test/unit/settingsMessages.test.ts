@@ -25,6 +25,13 @@ describe('settings message protocol', () => {
     expect(isSettingsToHostMessage({
       ...envelope,
       type: 'changeSetting',
+      domain: 'immersive',
+      key: 'graphemesPerLine',
+      value: 64
+    })).toBe(true);
+    expect(isSettingsToHostMessage({
+      ...envelope,
+      type: 'changeSetting',
       domain: 'reader',
       key: 'fontSize',
       value: 20
@@ -47,6 +54,7 @@ describe('settings message protocol', () => {
 
   it('accepts reset, retry, section selection and native shortcut actions', () => {
     expect(isSettingsToHostMessage({ ...envelope, type: 'resetSection', section: 'reader' })).toBe(true);
+    expect(isSettingsToHostMessage({ ...envelope, type: 'resetSection', section: 'immersive' })).toBe(true);
     expect(isSettingsToHostMessage({
       type: 'retrySnapshot',
       protocolVersion: SETTINGS_PROTOCOL_VERSION,
@@ -57,6 +65,10 @@ describe('settings message protocol', () => {
       protocolVersion: SETTINGS_PROTOCOL_VERSION,
       instanceId: envelope.instanceId,
       section: 'shortcuts'
+    })).toBe(true);
+    expect(isSettingsToHostMessage({
+      type: 'selectSection', protocolVersion: SETTINGS_PROTOCOL_VERSION,
+      instanceId: envelope.instanceId, section: 'immersive'
     })).toBe(true);
     expect(isSettingsToHostMessage({
       ...envelope,
@@ -74,11 +86,15 @@ describe('settings message protocol', () => {
     expect(isSettingsToHostMessage({
       ...envelope, type: 'changeSetting', domain: 'reader', key: 'backgroundColor', value: '#abc'
     })).toBe(false);
+    expect(isSettingsToHostMessage({
+      ...envelope, type: 'changeSetting', domain: 'immersive', key: 'backgroundColor', value: 'transparent'
+    })).toBe(true);
   });
 
   it('rejects unknown, extra, prototype, malformed and out-of-range values', () => {
     const invalid = [
       { ...envelope, type: 'changeSetting', domain: 'reader', key: 'fontSize', value: 33 },
+      { ...envelope, type: 'changeSetting', domain: 'immersive', key: 'visualLines', value: 13 },
       { ...envelope, type: 'changeSetting', domain: 'reader', key: 'fontSize', value: Number.NaN },
       { ...envelope, type: 'changeSetting', domain: 'reader', key: 'theme', value: 'neon' },
       { ...envelope, type: 'changeSetting', domain: 'reader', key: '__proto__', value: 16 },

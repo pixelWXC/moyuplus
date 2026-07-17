@@ -8,7 +8,7 @@ import {
 } from '../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
-  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID
+  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID, STOP_IMMERSIVE_READING_COMMAND_ID
 } from '../shortcuts/shortcutSettings';
 import type { ReadingPosition } from '../domain/locators';
 import { isGitLogToExtensionMessage, toGitLogDisplayResult } from '../git/gitLogMessages';
@@ -29,6 +29,9 @@ export { READER_VIEW_ID };
 
 export interface ReaderViewController {
   openBook(bookId: string, requestId?: string): void | boolean | Promise<void | boolean>;
+  openImmersiveBook?(bookId: string): void | boolean | Promise<void | boolean>;
+  readonly presentationMode?: 'webview' | 'immersive';
+  snapshot?(): { bookId: string; mode: 'webview' | 'immersive'; state: 'opening' | 'active' | 'switching' | 'stopping' } | undefined;
   requestSection(sectionId: string): void | Promise<void>;
   requestNextSection(sectionId: string): void | Promise<void>;
   requestPreviousSection(sectionId: string): void | Promise<void>;
@@ -36,6 +39,15 @@ export interface ReaderViewController {
   reportLayout(locator: ReadingLocator, bookProgression: number): void;
   capturePosition?(): ReadingPosition | undefined;
   flush(): void | Promise<void>;
+  closeSession?(): void | Promise<void>;
+  stopImmersive?(): void | boolean | { stopped: boolean; progressPersisted: boolean }
+    | Promise<void | boolean | { stopped: boolean; progressPersisted: boolean }>;
+  suspendImmersive?(): void;
+  resumeImmersive?(): void;
+  requestNextPage?(): boolean | Promise<boolean>;
+  requestPreviousPage?(): boolean | Promise<boolean>;
+  requestNextChapter?(): boolean | Promise<boolean>;
+  requestPreviousChapter?(): boolean | Promise<boolean>;
   dispose(): void | Promise<void>;
 }
 
@@ -56,7 +68,7 @@ export interface ReaderLibraryBridge {
   relocateBook?(bookId: string): void | PromiseLike<unknown>;
   startTypingPractice?(bookId: string): void | PromiseLike<unknown>;
   savePreferences?(preferences: unknown): void | PromiseLike<unknown>;
-  openSettings?(section: 'reader' | 'gitLog'): void | PromiseLike<void>;
+  openSettings?(section: 'reader' | 'immersive' | 'gitLog'): void | PromiseLike<void>;
 }
 
 export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoordinatorView, vscode.Disposable {
@@ -72,6 +84,15 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   private modeGeneration = 0;
   private bootstrapped = false;
   private readerPageActive = false;
+  private libraryPageActive = true;
+  private libraryDirty = false;
+  private libraryRequestVersion = 0;
+  private libraryCompletedVersion = 0;
+  private libraryRevision = 0;
+  private libraryDrain?: Promise<void>;
+  private libraryDeliveredView?: vscode.WebviewView;
+  private immersiveStop?: Promise<boolean>;
+  private stoppingBookId?: string;
   private disposed = false;
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -93,17 +114,25 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     if (this.disposed) return;
     this.view = view;
     this.bootstrapped = false;
+    this.libraryPageActive = true;
+    this.libraryDirty = true;
+    this.libraryRequestVersion += 1;
+    this.libraryDeliveredView = undefined;
     const mediaRoot = vscode.Uri.joinPath(this.extensionUri, 'media');
     view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
     view.webview.onDidReceiveMessage((value: unknown) => this.handleMessage(value));
-    view.onDidChangeVisibility(() => {
-      if (!view.visible) void this.controller.flush();
-      return this.coordinator ? this.coordinator.visibilityChanged() : (view.visible ? this.refreshLibrary() : undefined);
-    });
+    view.onDidChangeVisibility(() => this.handleVisibilityChanged(view));
     view.onDidDispose(() => {
       this.coordinator?.dispose();
-      if (this.view === view) this.view = undefined;
-      return this.controller.dispose();
+      if (this.view === view) {
+        this.view = undefined;
+        this.libraryDeliveredView = undefined;
+        this.libraryDirty = true;
+        this.libraryRequestVersion += 1;
+      }
+      return this.controller.presentationMode === 'immersive'
+        ? undefined
+        : (this.controller.closeSession?.() ?? this.controller.dispose());
     });
     view.webview.html = getReaderWebviewHtml(
       view.webview,
@@ -119,6 +148,18 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
 
   isVisible(): boolean { return this.view?.visible === true; }
 
+  private async handleVisibilityChanged(view: vscode.WebviewView): Promise<void> {
+    if (view !== this.view || this.disposed) return;
+    if (!view.visible) {
+      this.libraryDirty = true;
+      this.libraryRequestVersion += 1;
+      await this.controller.flush();
+      return;
+    }
+    if (this.coordinator) await this.coordinator.visibilityChanged();
+    else await this.refreshLibrary();
+  }
+
   async focus(): Promise<void> {
     await vscode.commands.executeCommand(`${READER_VIEW_ID}.focus`);
   }
@@ -128,6 +169,8 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     const refresh = this.gitRefresh;
     const view = this.view;
     if (!git || !refresh || !view || !view.visible || this.disposed) return;
+    this.libraryPageActive = false;
+    this.libraryRequestVersion += 1;
 
     const preferences = git.preferencesStore.get();
     const snapshot = createGitLogQuerySnapshot({
@@ -174,13 +217,16 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   async showLibrary(message?: string): Promise<void> {
     this.gitUiSession = undefined;
     this.readerPageActive = false;
+    this.libraryPageActive = true;
     this.resetReaderNavigation();
     await this.postMessage({ type: 'modeLibrary', modeGeneration: this.nextModeGeneration(), ...(message ? { message } : {}) });
     await this.refreshLibrary();
   }
 
   captureVisibleReaderPosition(): ReadingPosition | undefined {
-    return this.readerPageActive ? this.controller.capturePosition?.() : undefined;
+    return this.readerPageActive || this.controller.presentationMode === 'immersive'
+      ? this.controller.capturePosition?.()
+      : undefined;
   }
 
   async showError(message: string): Promise<void> {
@@ -188,10 +234,12 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   }
 
   async requestNextPage(): Promise<boolean> {
+    if (this.controller.presentationMode === 'immersive') return await this.controller.requestNextPage?.() ?? false;
     if (!this.readerPageActive || !this.canNextPage) return false;
     return this.requestReaderCommand('nextPage');
   }
   async requestPreviousPage(): Promise<boolean> {
+    if (this.controller.presentationMode === 'immersive') return await this.controller.requestPreviousPage?.() ?? false;
     if (!this.readerPageActive || !this.canPreviousPage) return false;
     return this.requestReaderCommand('previousPage');
   }
@@ -201,6 +249,15 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   }
 
   async requestReaderCommand(command: ReaderExternalCommand): Promise<boolean> {
+    if (this.controller.presentationMode === 'immersive') {
+      if (command === 'nextPage') return await this.controller.requestNextPage?.() ?? false;
+      if (command === 'previousPage') return await this.controller.requestPreviousPage?.() ?? false;
+      if (command === 'nextChapter') return await this.controller.requestNextChapter?.() ?? false;
+      if (command === 'previousChapter') return await this.controller.requestPreviousChapter?.() ?? false;
+      if (command === 'openLibrary') { await this.controller.closeSession?.(); await this.showLibrary(); return true; }
+      if (command === 'openSettings') return this.openSettings('immersive');
+      return false;
+    }
     return this.readerPageActive && this.view ? this.view.webview.postMessage({ type: 'command', command }) : false;
   }
 
@@ -221,21 +278,62 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     }
   }
 
-  async openSettings(section: 'reader' | 'gitLog'): Promise<boolean> {
+  async openSettings(section: 'reader' | 'immersive' | 'gitLog'): Promise<boolean> {
     if (!this.library?.openSettings) return false;
     await this.library.openSettings(section);
     return true;
   }
 
+  async stopImmersive(expectedBookId?: string): Promise<boolean> {
+    if (this.immersiveStop) {
+      return expectedBookId === undefined || expectedBookId === this.stoppingBookId
+        ? this.immersiveStop
+        : false;
+    }
+    const session = this.controller.snapshot?.();
+    if (!session || session.mode !== 'immersive'
+      || (expectedBookId !== undefined && expectedBookId !== session.bookId)) return false;
+    if (!this.controller.stopImmersive) return false;
+
+    this.stoppingBookId = session.bookId;
+    const operation = (async () => {
+      try {
+        const result = await this.controller.stopImmersive!();
+        const stopped = isRecord(result) ? result.stopped === true : result === true;
+        if (stopped && isRecord(result) && result.progressPersisted === false) {
+          await vscode.window.showErrorMessage('阅读进度保存失败，已停止沉浸阅读。书架将显示上一次成功保存的位置。');
+        }
+        return stopped;
+      } finally {
+        await this.refreshLibrary();
+      }
+    })();
+    this.immersiveStop = operation;
+    try {
+      return await operation;
+    } finally {
+      if (this.immersiveStop === operation) {
+        this.immersiveStop = undefined;
+        this.stoppingBookId = undefined;
+      }
+    }
+  }
+
   private async handleMessage(value: unknown): Promise<void> {
     if (this.disposed) return;
+    if (isRecord(value) && value.type === 'readerWebviewBlurred') {
+      this.controller.resumeImmersive?.();
+      return;
+    }
+    if (this.controller.presentationMode === 'immersive') this.controller.suspendImmersive?.();
     if (isRecord(value) && (value.type === 'libraryReady' || value.type === 'appReady')) {
       if (this.coordinator) {
         if (!this.bootstrapped) {
           this.bootstrapped = true;
           await this.coordinator.bootstrap();
         }
-      } else await this.refreshLibrary();
+      } else if (this.libraryDrain) await this.libraryDrain;
+      else if (this.libraryDirty || this.libraryDeliveredView !== this.view) await this.refreshLibrary();
       return;
     }
     if (isRecord(value) && value.type === 'openUnifiedSettings'
@@ -266,10 +364,22 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
         const opened = await this.controller.openBook(message.bookId, message.requestId);
         if (opened !== false) {
           this.readerPageActive = true;
+          this.libraryPageActive = false;
           this.readerRequest = { requestId: message.requestId, bookId: message.bookId };
         }
         return;
       }
+      case 'startImmersive': {
+        const opened = await this.controller.openImmersiveBook?.(message.bookId);
+        if (opened !== false && opened !== undefined) {
+          this.readerPageActive = false;
+          this.libraryPageActive = true;
+          this.resetReaderNavigation();
+          await this.refreshLibrary();
+        }
+        return;
+      }
+      case 'stopImmersive': await this.stopImmersive(message.bookId); return;
       case 'requestSection': await this.controller.requestSection(message.sectionId); return;
       case 'requestSectionTarget': await this.controller.requestSection(message.sectionId); return;
       case 'requestNextSection': await this.controller.requestNextSection(message.sectionId); return;
@@ -291,9 +401,12 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
       case 'layoutStable': this.controller.reportLayout(message.locator, message.bookProgression); return;
       case 'closeBook':
         this.readerPageActive = false;
+        this.libraryPageActive = true;
         this.resetReaderNavigation();
         this.controller.reportLayout(message.locator, message.bookProgression);
         await this.controller.flush();
+        await this.controller.closeSession?.();
+        await this.refreshLibrary();
         return;
     }
   }
@@ -306,17 +419,67 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
   }
 
   private async refreshLibrary(): Promise<void> {
-    if (!this.library || !this.view) return;
-    try {
-      const snapshot = await this.library.snapshot();
-      await this.view.webview.postMessage({ type: 'libraryState', ...(isRecord(snapshot) ? snapshot : {}) });
-    } catch {
-      await this.view.webview.postMessage({ type: 'libraryLoadError', message: '书架载入失败，请重新打开 MoyuPlus Reader。' });
+    this.libraryDirty = true;
+    const requestVersion = ++this.libraryRequestVersion;
+    if (!this.canRefreshLibrary()) return;
+    while (this.canRefreshLibrary() && this.libraryCompletedVersion < requestVersion) {
+      await this.ensureLibraryDrain();
     }
+  }
+
+  private canRefreshLibrary(): boolean {
+    return Boolean(this.library && this.view?.visible && !this.disposed
+      && this.libraryPageActive && !this.readerPageActive && !this.gitUiSession
+      && !this.git?.modeStore.get().active);
+  }
+
+  private ensureLibraryDrain(): Promise<void> {
+    if (this.libraryDrain) return this.libraryDrain;
+    const operation = this.drainLibraryRefreshes();
+    const tracked = operation.finally(() => {
+      if (this.libraryDrain !== tracked) return;
+      this.libraryDrain = undefined;
+      if (this.libraryDirty && this.canRefreshLibrary()) void this.ensureLibraryDrain();
+    });
+    this.libraryDrain = tracked;
+    return tracked;
+  }
+
+  private async drainLibraryRefreshes(): Promise<void> {
+    while (this.libraryDirty && this.canRefreshLibrary()) {
+      this.libraryDirty = false;
+      const requestVersion = this.libraryRequestVersion;
+      const view = this.view!;
+      try {
+        const snapshot = await this.library!.snapshot();
+        if (!this.isCurrentLibraryBuild(view, requestVersion)) continue;
+        const session = this.controller.snapshot?.();
+        const delivered = await view.webview.postMessage({
+          type: 'libraryState',
+          ...(isRecord(snapshot) ? snapshot : {}),
+          immersiveBookId: session?.mode === 'immersive' ? session.bookId : undefined,
+          libraryRevision: ++this.libraryRevision
+        });
+        if (delivered && view === this.view) this.libraryDeliveredView = view;
+        this.libraryCompletedVersion = requestVersion;
+      } catch {
+        if (this.isCurrentLibraryBuild(view, requestVersion)) {
+          await view.webview.postMessage({ type: 'libraryLoadError', message: '书架载入失败，请重新打开 MoyuPlus Reader。' });
+          this.libraryCompletedVersion = requestVersion;
+        }
+      }
+    }
+  }
+
+  private isCurrentLibraryBuild(view: vscode.WebviewView, requestVersion: number): boolean {
+    return view === this.view && requestVersion === this.libraryRequestVersion && this.canRefreshLibrary();
   }
 
   async restoreReader(target: GitLogResumeTarget): Promise<boolean> {
     if (!this.library || !this.view) return false;
+    this.libraryPageActive = false;
+    this.libraryRequestVersion += 1;
+    this.libraryDeliveredView = undefined;
     const snapshot = await this.library.snapshot();
     const books = isRecord(snapshot) && Array.isArray(snapshot.books) ? snapshot.books : [];
     const book = books.find(item => isRecord(item) && item.id === target.bookId);
@@ -324,9 +487,17 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     const availability = isRecord(snapshot) && isRecord(snapshot.availability) ? snapshot.availability : {};
     const progress = isRecord(snapshot) && isRecord(snapshot.progress) ? snapshot.progress : {};
     const requestId = `git-log-restore-${Date.now()}`;
+    if (target.presentationMode === 'immersive' && this.controller.openImmersiveBook) {
+      this.libraryPageActive = true;
+      await this.view.webview.postMessage({ type: 'modeLibrary', modeGeneration: this.nextModeGeneration() });
+      const opened = await this.controller.openImmersiveBook(target.bookId);
+      this.readerPageActive = false;
+      if (opened !== false) await this.refreshLibrary();
+      return opened !== false;
+    }
     await this.view.webview.postMessage({
       type: 'modeReaderRestore', modeGeneration: this.nextModeGeneration(), book, requestId,
-      books, availability, progress,
+      books, availability, progress, libraryRevision: ++this.libraryRevision,
       ...(isRecord(snapshot) && isRecord(snapshot.preferences) ? { preferences: snapshot.preferences } : {})
     });
     const opened = await this.controller.openBook(target.bookId, requestId);
@@ -341,6 +512,8 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     this.gitUiSession = undefined;
     this.gitCache = undefined;
     this.readerPageActive = false;
+    this.libraryPageActive = false;
+    this.libraryRequestVersion += 1;
     this.gitRefresh?.dispose();
     this.view = undefined;
     void this.controller.dispose();
@@ -422,6 +595,7 @@ export function registerReaderView(
         capturedPosition = provider.captureVisibleReaderPosition();
         return capturedPosition;
       },
+      presentationMode: () => controller.presentationMode,
       flush: async () => {
         const position = capturedPosition;
         capturedPosition = undefined;
@@ -433,6 +607,7 @@ export function registerReaderView(
             bookProgression: position.bookProgression
           })) : Promise.resolve()
         ]);
+        await controller.closeSession?.();
       },
       restore: target => provider.restoreReader(target)
     },
@@ -451,7 +626,8 @@ export function registerReaderView(
     vscode.commands.registerCommand(PREVIOUS_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('previousChapter')),
     vscode.commands.registerCommand(NEXT_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('nextChapter')),
     vscode.commands.registerCommand(OPEN_READER_TOC_COMMAND_ID, () => provider.requestReaderCommand('openToc')),
-    vscode.commands.registerCommand(OPEN_READER_SETTINGS_COMMAND_ID, () => provider.openSettings('reader')),
+    vscode.commands.registerCommand(OPEN_READER_SETTINGS_COMMAND_ID, () => provider.openSettings(controller.presentationMode === 'immersive' ? 'immersive' : 'reader')),
+    vscode.commands.registerCommand(STOP_IMMERSIVE_READING_COMMAND_ID, () => provider.stopImmersive()),
     ...(coordinator ? [vscode.commands.registerCommand(TOGGLE_GIT_LOG_COMMAND_ID, () => coordinator.toggle())] : [])
   );
   return provider;

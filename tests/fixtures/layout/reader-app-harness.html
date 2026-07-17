@@ -20,7 +20,7 @@
       formatData: {}, createdAt: 1, updatedAt: 1
     };
     const send = data => window.dispatchEvent(new MessageEvent('message', { data }));
-    send({ type: 'libraryState', books: [book], availability: { 'book-1': true }, progress: { 'book-1': 0 } });
+    send({ type: 'libraryState', books: [book], availability: { 'book-1': true }, progress: { 'book-1': 0 }, libraryRevision: 1 });
     document.querySelector('.book-open').click();
     const open = messages.find(message => message.type === 'openBook');
     send({

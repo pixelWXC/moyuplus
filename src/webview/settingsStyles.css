@@ -51,6 +51,21 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 .settings-section > h3 { margin: 34px 0 10px; font-size: 14px; font-weight: 600; }
 .section-description { margin: 6px 0 26px; color: var(--muted); line-height: 1.5; }
 .settings-fields { border-top: 1px solid var(--border); }
+.immersive-preview {
+  margin: 0 0 24px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+  white-space: nowrap;
+  overflow: hidden;
+}
+.preview-code { flex: 0 0 auto; }
+.preview-after { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .setting-field, .configuration-setting {
   min-height: 54px; padding: 12px 0; border-bottom: 1px solid var(--border);
 }

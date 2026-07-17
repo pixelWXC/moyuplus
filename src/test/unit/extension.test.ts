@@ -25,7 +25,8 @@ import {
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
-  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID
+  OPEN_READER_TOC_COMMAND_ID, PREVIOUS_READER_CHAPTER_COMMAND_ID,
+  STOP_IMMERSIVE_READING_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import { commands, languages, resetVSCodeShim, type Disposable, window } from '../shims/vscode';
 import { BOOK_LIBRARY_KEY, READER_V2_MIGRATION_KEY, TXT_LIBRARY_KEY } from '../../storage/storageKeys';
@@ -79,6 +80,7 @@ describe('extension activation', () => {
       NEXT_READER_CHAPTER_COMMAND_ID,
       OPEN_READER_TOC_COMMAND_ID,
       OPEN_READER_SETTINGS_COMMAND_ID,
+      STOP_IMMERSIVE_READING_COMMAND_ID,
       TOGGLE_GIT_LOG_COMMAND_ID,
       START_TYPING_PRACTICE_COMMAND_ID,
       STOP_TYPING_PRACTICE_COMMAND_ID,
@@ -94,7 +96,7 @@ describe('extension activation', () => {
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
     expect(window.registeredCustomEditorProviderIds()).toEqual([IMAGE_PREVIEW_VIEW_TYPE]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(34);
+    expect(context.subscriptions).toHaveLength(35);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 

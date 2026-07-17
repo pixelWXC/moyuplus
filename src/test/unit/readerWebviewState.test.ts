@@ -31,7 +31,8 @@ describe('reader Webview library state', () => {
       type: 'libraryLoaded',
       books: [],
       availability: {},
-      progress: {}
+      progress: {},
+      libraryRevision: 1
     });
 
     expect(state.view).toBe('library');
@@ -47,7 +48,8 @@ describe('reader Webview library state', () => {
       type: 'libraryLoaded',
       books: [txt, epub],
       availability: { 'txt-1': true, 'epub-1': true },
-      progress: { 'txt-1': 0.25, 'epub-1': 0.7 }
+      progress: { 'txt-1': 0.25, 'epub-1': 0.7 },
+      libraryRevision: 1
     });
 
     expect(state.books).toEqual([
@@ -56,17 +58,54 @@ describe('reader Webview library state', () => {
     ]);
   });
 
+  it('derives the active immersive book from the newest authoritative shelf revision', () => {
+    const txt = book('txt-1', 'txt');
+    const epub = book('epub-1', 'epub');
+    const initial = readerAppReducer(createInitialReaderAppState(), {
+      type: 'libraryLoaded',
+      books: [txt, epub],
+      availability: { 'txt-1': true, 'epub-1': true },
+      progress: { 'txt-1': 0.4, 'epub-1': 0.2 },
+      immersiveBookId: 'txt-1',
+      libraryRevision: 2
+    });
+
+    expect(initial.libraryRevision).toBe(2);
+    expect(initial.books).toEqual([
+      expect.objectContaining({ id: 'txt-1', immersiveActive: true }),
+      expect.objectContaining({ id: 'epub-1', immersiveActive: false })
+    ]);
+    expect(getLibraryBookActions(initial.books[0])).toContain('stopImmersive');
+    expect(getLibraryBookActions(initial.books[0])).not.toContain('startImmersive');
+    expect(getLibraryBookActions(initial.books[1])).toContain('startImmersive');
+
+    const stale = readerAppReducer(initial, {
+      type: 'libraryLoaded',
+      books: [txt, epub],
+      availability: { 'txt-1': true, 'epub-1': true },
+      progress: { 'txt-1': 0.1, 'epub-1': 0.1 },
+      libraryRevision: 1
+    });
+    expect(stale).toBe(initial);
+
+    const missingRevision = readerAppReducer(initial, {
+      type: 'libraryLoaded', books: [txt], availability: { 'txt-1': true }, progress: {}
+    } as never);
+    expect(missingRevision).toBe(initial);
+  });
+
   it('marks a missing source as invalid and offers recovery actions', () => {
     const missing = book('missing', 'txt');
     const state = readerAppReducer(createInitialReaderAppState(), {
       type: 'libraryLoaded',
       books: [missing],
       availability: { missing: false },
-      progress: {}
+      progress: {},
+      libraryRevision: 1
     });
 
     expect(state.books[0]).toMatchObject({ available: false, status: 'missing' });
-    expect(getLibraryBookActions(state.books[0])).toEqual(['open', 'startTypingPractice', 'relocate', 'remove']);
+    expect(getLibraryBookActions(state.books[0])).toEqual(['open', 'startImmersive', 'startTypingPractice', 'relocate', 'remove']);
   });
 
   it('uses explicit removal copy that promises the original file is untouched', () => {
@@ -82,7 +121,7 @@ describe('reader Webview library state', () => {
   it('closes a removal confirmation when the refreshed library no longer contains that book', () => {
     const pending = readerAppReducer(createInitialReaderAppState(), { type: 'requestRemove', bookId: 'txt-1' });
     const refreshed = readerAppReducer(pending, {
-      type: 'libraryLoaded', books: [], availability: {}, progress: {}
+      type: 'libraryLoaded', books: [], availability: {}, progress: {}, libraryRevision: 1
     });
     expect(refreshed.pendingRemoval).toBeUndefined();
   });
@@ -93,10 +132,11 @@ describe('reader Webview library state', () => {
       type: 'libraryLoaded',
       books: [epub],
       availability: { 'epub-1': true },
-      progress: {}
+      progress: {},
+      libraryRevision: 1
     });
 
-    expect(getLibraryBookActions(state.books[0])).toEqual(['open', 'relocate', 'remove']);
+    expect(getLibraryBookActions(state.books[0])).toEqual(['open', 'startImmersive', 'relocate', 'remove']);
     expect(getLibraryBookActions(state.books[0])).not.toContain('startTypingPractice');
   });
 });

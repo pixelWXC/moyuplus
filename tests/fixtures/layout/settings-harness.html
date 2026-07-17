@@ -36,6 +36,10 @@
       showHash: true, showAuthor: true, showRelativeTime: true, showAbsoluteDate: true,
       layout: 'lines', maxCommits: 200
     };
+    const immersive = {
+      visualLines: 3, graphemesPerLine: 40, textColor: 'theme', backgroundColor: 'transparent',
+      fontWeight: 'normal', italic: false, leftMargin: 12
+    };
     const configValues = [
       ['moyuplus.shortcuts.enableTabRouter', false],
       ['moyuplus.typing.tabMode', 'completeRest'],
@@ -56,7 +60,7 @@
     }));
     const sendSnapshot = section => window.dispatchEvent(new MessageEvent('message', { data: {
       type: 'settingsSnapshot', protocolVersion: 2, instanceId, stateVersion: ++stateVersion,
-      section, reader, gitLog, configuration
+      section, reader, immersive, gitLog, configuration
     }}));
     window.acquireVsCodeApi = () => ({ postMessage(message) {
       window.sentMessages.push(message);
@@ -64,6 +68,7 @@
       if (message.type === 'selectSection') setTimeout(() => sendSnapshot(message.section));
       if (message.type === 'changeSetting') {
         if (message.domain === 'reader') reader[message.key] = message.value;
+        if (message.domain === 'immersive') immersive[message.key] = message.value;
         if (message.domain === 'gitLog') gitLog[message.key] = message.value;
         setTimeout(() => window.dispatchEvent(new MessageEvent('message', { data: {
           type: 'changeSaved', protocolVersion: 2, instanceId, stateVersion: ++stateVersion,
@@ -76,7 +81,7 @@
     window.settingsHarness = {
       sendSnapshot,
       sent: () => window.sentMessages,
-      select: section => document.querySelector(`.section-link:nth-child(${['reader','gitLog','typing','shortcuts'].indexOf(section) + 1})`)?.click(),
+      select: section => document.querySelector(`.section-link:nth-child(${['reader','immersive','gitLog','typing','shortcuts'].indexOf(section) + 1})`)?.click(),
       rememberRange: id => { rememberedRange = document.getElementById(id); },
       rememberedRangeIsConnected: id => rememberedRange === document.getElementById(id) && rememberedRange?.isConnected
     };

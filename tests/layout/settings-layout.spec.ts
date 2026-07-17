@@ -23,6 +23,17 @@ test('focuses a deep-linked section heading and preserves navigation focus on us
   await expect(page.getByRole('button', { name: 'Git Log', exact: true })).toBeFocused();
 });
 
+test('renders immersive reading controls and a live VS Code-native preview', async ({ page }) => {
+  await page.getByRole('button', { name: '沉浸阅读' }).click();
+  await expect(page.locator('#settings-section-title')).toHaveText('沉浸阅读');
+  await expect(page.locator('#immersive-visualLines')).toHaveValue('3');
+  await expect(page.locator('#immersive-graphemesPerLine')).toHaveValue('40');
+  await expect(page.locator('.immersive-preview')).toContainText('在代码旁安静地继续阅读');
+
+  await page.locator('#immersive-italic').check();
+  await expect(page.locator('.preview-after')).toHaveCSS('font-style', 'italic');
+});
+
 test('switches to the native top selector at 680px without hiding settings', async ({ page }) => {
   await page.setViewportSize({ width: 680, height: 760 });
   await expect(page.locator('.section-navigation')).toBeHidden();

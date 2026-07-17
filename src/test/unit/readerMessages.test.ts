@@ -75,6 +75,33 @@ describe('Reader v3 message protocol', () => {
       requestId: 'request-1',
       bookId: 'book-1'
     })).toBe(true);
+    expect(isReaderToExtensionV2Message({
+      version: READER_PROTOCOL_VERSION,
+      type: 'startImmersive',
+      requestId: 'request-2',
+      bookId: 'book-1'
+    })).toBe(true);
+  });
+
+  it('accepts only correlated immersive stop requests', () => {
+    expect(isReaderToExtensionV2Message({
+      version: READER_PROTOCOL_VERSION,
+      type: 'stopImmersive',
+      requestId: 'request-3',
+      bookId: 'book-1'
+    })).toBe(true);
+    expect(isReaderToExtensionV2Message({
+      version: READER_PROTOCOL_VERSION,
+      type: 'stopImmersive',
+      requestId: '',
+      bookId: 'book-1'
+    })).toBe(false);
+    expect(isReaderToExtensionV2Message({
+      version: READER_PROTOCOL_VERSION,
+      type: 'stopImmersive',
+      requestId: 'request-3',
+      bookId: ''
+    })).toBe(false);
   });
 
   it('requires a section id after a section has been selected', () => {

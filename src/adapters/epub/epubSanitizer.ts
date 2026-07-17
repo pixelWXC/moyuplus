@@ -1,6 +1,7 @@
 import path from 'node:path';
 import * as parse5 from 'parse5';
 import type { LocalResourceRef } from '../bookAdapter';
+import type { ImmersiveTextProjection, ProjectionSegment, ProjectionSegmentKind } from '../../domain/immersiveProjection';
 import { normalizeArchivePath } from './epubArchive';
 
 export interface SanitizerImageResource { id: string; mimeType: string }
@@ -18,13 +19,112 @@ const SAFE_ATTRIBUTES = new Set([
   'start', 'value', 'reversed'
 ]);
 
-export function sanitizeEpubSection(source: string, options: EpubSanitizerOptions): { html: string; resources: LocalResourceRef[] } {
+export function sanitizeEpubSection(source: string, options: EpubSanitizerOptions): { html: string; resources: LocalResourceRef[]; immersiveProjection: ImmersiveTextProjection } {
   const document: any = parse5.parse(source);
   const resources: LocalResourceRef[] = [];
   sanitizeChildren(document, options, resources);
   const body = find(document, 'body');
   const content = body ? (body.childNodes ?? []).map((node: any) => parse5.serializeOuter(node)).join('') : '';
-  return { html: `<div class="moyuplus-book-content">${content}</div>`, resources: uniqueResources(resources) };
+  return { html: `<div class="moyuplus-book-content">${content}</div>`, resources: uniqueResources(resources), immersiveProjection: createImmersiveProjection(body) };
+}
+
+const BLOCKS = new Set(['article', 'section', 'header', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'blockquote', 'pre', 'ul', 'ol', 'li', 'table', 'tr']);
+
+function createImmersiveProjection(body: any): ImmersiveTextProjection {
+  const builder = new ProjectionBuilder();
+  for (const child of body?.childNodes ?? []) projectNode(child, builder, false);
+  return { text: builder.text, segments: builder.segments, projectionRevision: 'immersive-projection-v1' };
+}
+
+function projectNode(node: any, builder: ProjectionBuilder, inPre: boolean): void {
+  if (node?.nodeName === '#text') {
+    builder.appendSourceText(String(node.value ?? ''), inPre);
+    return;
+  }
+  const tag = String(node?.tagName ?? '').toLowerCase();
+  if (!tag) {
+    for (const child of node?.childNodes ?? []) projectNode(child, builder, inPre);
+    return;
+  }
+  if (tag === 'button' && (attr(node, 'class') ?? '').split(/\s+/).includes('moyuplus-image-link')) {
+    builder.skipSourceText(nodeText(node));
+    return;
+  }
+  if (tag === 'nav' || (tag === 'a' && /^[↩↪←↑#\s]+$/u.test(nodeText(node)))) {
+    builder.skipSourceText(nodeText(node));
+    return;
+  }
+  if (BLOCKS.has(tag)) builder.ensureLineBreak();
+  if (tag === 'li') builder.appendSynthetic('• ');
+  if ((tag === 'td' || tag === 'th') && builder.hasTextOnCurrentLine()) builder.appendSynthetic(' | ');
+  for (const child of node.childNodes ?? []) projectNode(child, builder, inPre || tag === 'pre');
+  if (BLOCKS.has(tag)) builder.ensureLineBreak();
+}
+
+class ProjectionBuilder {
+  readonly segments: ProjectionSegment[] = [];
+  private chunks: string[] = [];
+  private sourceOffset = 0;
+  private immersiveOffset = 0;
+
+  get text(): string { return this.chunks.join(''); }
+
+  hasTextOnCurrentLine(): boolean {
+    const value = this.chunks.at(-1) ?? '';
+    return this.immersiveOffset > 0 && !value.endsWith('\n');
+  }
+
+  ensureLineBreak(): void {
+    if (this.immersiveOffset === 0 || this.text.endsWith('\n')) return;
+    this.appendSynthetic('\n');
+  }
+
+  appendSynthetic(value: string): void {
+    if (!value) return;
+    this.push('synthetic', this.sourceOffset, this.sourceOffset, value, this.sourceOffset, this.immersiveOffset);
+  }
+
+  skipSourceText(value: string): void {
+    if (!value) return;
+    const start = this.sourceOffset;
+    this.sourceOffset += value.length;
+    this.pushEmpty('hole', start, this.sourceOffset, start, this.immersiveOffset);
+  }
+
+  appendSourceText(value: string, preserveWhitespace: boolean): void {
+    if (!value) return;
+    if (preserveWhitespace) {
+      const start = this.sourceOffset;
+      this.sourceOffset += value.length;
+      this.push('identity', start, this.sourceOffset, value, start, this.immersiveOffset);
+      return;
+    }
+    for (const match of value.matchAll(/\s+|[^\s]+/gu)) {
+      const token = match[0];
+      const start = this.sourceOffset;
+      this.sourceOffset += token.length;
+      if (/^\s+$/u.test(token)) {
+        if (this.immersiveOffset === 0 || /\s$/u.test(this.text)) {
+          this.pushEmpty('hole', start, this.sourceOffset, this.sourceOffset, this.immersiveOffset);
+        } else {
+          this.push(token === ' ' ? 'identity' : 'collapsed', start, this.sourceOffset, ' ', start, this.immersiveOffset);
+        }
+      } else {
+        this.push('identity', start, this.sourceOffset, token, start, this.immersiveOffset);
+      }
+    }
+  }
+
+  private push(kind: ProjectionSegmentKind, sourceStart: number, sourceEnd: number, value: string, safeSourceFloor: number, safeImmersiveFloor: number): void {
+    const immersiveStart = this.immersiveOffset;
+    this.chunks.push(value);
+    this.immersiveOffset += value.length;
+    this.segments.push({ kind, sourceStart, sourceEnd, immersiveStart, immersiveEnd: this.immersiveOffset, safeSourceFloor, safeImmersiveFloor });
+  }
+
+  private pushEmpty(kind: ProjectionSegmentKind, sourceStart: number, sourceEnd: number, safeSourceFloor: number, safeImmersiveFloor: number): void {
+    this.segments.push({ kind, sourceStart, sourceEnd, immersiveStart: this.immersiveOffset, immersiveEnd: this.immersiveOffset, safeSourceFloor, safeImmersiveFloor });
+  }
 }
 
 function sanitizeChildren(parent: any, options: EpubSanitizerOptions, resources: LocalResourceRef[]): void {

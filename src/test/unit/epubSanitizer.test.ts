@@ -15,6 +15,9 @@ describe('sanitizeEpubSection', () => {
     expect(result.html).not.toMatch(/<style|<link|\s(?:style|width|align)=|class="(?:publication|lead)"|script|iframe|onload|onclick|javascript:|https:|position|@import|OPS\/images/i);
     expect(result.html).toContain('class="moyuplus-image-link"');
     expect(result.resources).toEqual([{ id: 'image-opaque-id', mimeType: 'image/png', label: 'Cover' }]);
+    expect(result.immersiveProjection.text).toContain('Hi');
+    expect(result.immersiveProjection.text).not.toContain('查看图片');
+    expect(result.immersiveProjection.segments.some(segment => segment.kind === 'hole')).toBe(true);
   });
 
   it('keeps semantic structure, navigation metadata and UTF-16 text order', () => {
@@ -43,6 +46,11 @@ describe('sanitizeEpubSection', () => {
     expect(result.html).not.toMatch(/\s(?:style|border|cellpadding|data-publisher)=|class="(?:numbered|footnote)"/);
     expect(textContent(result.html)).toBe(textContent(source));
     expect(textContent(result.html).length).toBe(textContent(source).length);
+    expect(result.immersiveProjection.text).toContain('标题粗体斜体2');
+    expect(result.immersiveProjection.text).toContain('• 条目');
+    expect(result.immersiveProjection.text).toContain("const 值 = '😀';");
+    expect(result.immersiveProjection.text).toMatch(/列\s*\|\s*值/);
+    expect(result.immersiveProjection.projectionRevision).toBe('immersive-projection-v1');
   });
 
   it('rewrites internal targets structurally and leaves unsafe or unknown links inert', () => {
@@ -52,6 +60,8 @@ describe('sanitizeEpubSection', () => {
         <a href="notes.xhtml#note-2">Cross</a>
         <a href="missing.xhtml#x">Missing</a>
         <a href="//example.com/x">Protocol relative</a>
+        <nav>目录噪声</nav>
+        <a href="#note-1">↩</a>
         <figure><img src="images/figure.jpg"><figcaption>结构图</figcaption></figure>
         <img src="images/not-manifest.png">
       </body></html>`, {
@@ -67,6 +77,7 @@ describe('sanitizeEpubSection', () => {
     expect(result.html).toContain('查看图片：结构图');
     expect(result.html).toContain('图片不可用');
     expect(result.html).not.toMatch(/missing\.xhtml|example\.com|moyuplus-resource:|OPS\/images/i);
+    expect(result.immersiveProjection.text).not.toMatch(/目录噪声|↩/);
   });
 });
 

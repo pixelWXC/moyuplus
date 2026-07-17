@@ -3,13 +3,15 @@ export interface LocatorBase {
   progression: number;
 }
 
-export type TxtLocator = LocatorBase & { kind: 'txt'; offset?: number };
+export type TxtLocator = LocatorBase & { kind: 'txt'; offset?: number; offsetSpace?: 'book' };
 export type EpubLocator = LocatorBase & {
   kind: 'epub';
   cfi?: string;
   fragment?: string;
   textOffset?: number;
+  immersiveOffset?: number;
   sourceRevision?: string;
+  projectionRevision?: string;
 };
 export type ReadingLocator = TxtLocator | EpubLocator;
 
@@ -35,6 +37,7 @@ export function normalizeReadingLocator(value: unknown): ReadingLocator | undefi
     if (isNonNegativeFiniteNumber(value.offset)) {
       locator.offset = Math.trunc(value.offset);
     }
+    if (value.offsetSpace === 'book') locator.offsetSpace = 'book';
     return locator;
   }
 
@@ -49,8 +52,14 @@ export function normalizeReadingLocator(value: unknown): ReadingLocator | undefi
     if (isNonNegativeFiniteNumber(value.textOffset)) {
       locator.textOffset = Math.trunc(value.textOffset);
     }
+    if (isNonNegativeFiniteNumber(value.immersiveOffset)) {
+      locator.immersiveOffset = Math.trunc(value.immersiveOffset);
+    }
     if (isNonEmptyString(value.sourceRevision)) {
       locator.sourceRevision = value.sourceRevision;
+    }
+    if (isNonEmptyString(value.projectionRevision)) {
+      locator.projectionRevision = value.projectionRevision;
     }
     return locator;
   }

@@ -443,3 +443,14 @@
 - 滑块跳动根因是保存和响应调用全量 `replaceChildren()`；最终实现把用户交互状态与最新保存等待状态分离，活动会话期间原地同步并延后结构渲染。
 - Reader 背景色不生效的根因是 `applyReaderPreferences` 未应用 `textColor`/`backgroundColor`；最终以 `theme` 作为显式继承值，自定义六位十六进制颜色才写入内联样式。
 - 2026-07-17 最终验证为 Vitest 49 文件 236/236、Playwright 36/36、compile/build 与 `git diff --check` 全通过，用户人工验收通过。
+
+## 2026-07-17 沉浸阅读书架状态同步
+
+- 规格已由提交 `f1cc5bd` 与 `5167bfb` 固化，状态为“已确认，待实施”；本轮可直接进入 TDD 实施，无需重新设计。
+- 当前未提交工作树已具备沉浸投影、分页、Decoration、会话协调器、统一设置和启动入口，但书架同步仍使用一次性 `immersiveState`，与规格的权威快照模型冲突。
+- `ReaderSessionCoordinator.snapshot()` 已能提供活动 `bookId/mode`，Provider 目前的 `refreshLibrary()` 只是直接 `snapshot → postMessage`，没有 dirty、串行 drain、实例屏障或 revision。
+- Webview 的 `libraryState` 尚无 `immersiveBookId/libraryRevision`，动作联合类型也没有 `stopImmersive`；这将是首轮最小 RED 的切入点。
+- Provider 的 ready 握手不应在同一视图已成功收到权威快照后重复扫描；若 ready 发生在首个构造进行中，则等待现有 drain。真正的书架更新请求会提升 request version，使旧构造作废并紧接着只提交新结果。
+- Git Log coordinator 的可见性恢复会自行调用 `showLibrary()` 或 `restoreReader()`；Provider 不应在 coordinator 完成后再额外刷新，否则会产生重复可用性扫描。
+- 进度保存失败时 `ReadingProgressStore` 仍保留上一次成功位置；协调器只返回 `progressPersisted: false` 并继续清理，Provider 提示错误后从 store 构造书架，因此不会显示未落盘的新百分比。
+- 2026-07-17 用户确认真实 Extension Development Host 人工核验通过；沉浸阅读启动/翻页/停止、统一设置和停止后书架状态同步均达到验收要求。

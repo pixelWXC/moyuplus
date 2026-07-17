@@ -25,9 +25,11 @@ import { AdapterRegistry } from './adapters/adapterRegistry';
 import { EpubAdapter } from './adapters/epub/epubAdapter';
 import { ReadingProgressStore } from './storage/readingProgressStore';
 import { LibraryService } from './library/libraryService';
-import { ReaderController } from './reader/readerController';
+import { ReaderSessionCoordinator } from './reader/ReaderSessionCoordinator';
+import { ImmersiveDecorationPresenter } from './reader/ImmersiveDecorationPresenter';
 import { migrateV1ToV2 } from './storage/migrations/migrateV1ToV2';
 import { ReaderPreferencesStore } from './storage/readerPreferencesStore';
+import { ImmersiveReaderPreferencesStore } from './storage/immersiveReaderPreferencesStore';
 import { GitLogPreferencesStore } from './storage/gitLogPreferencesStore';
 import { GitLogModeStore } from './storage/gitLogModeStore';
 import { GitLogService } from './git/gitLogService';
@@ -80,6 +82,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const books = new BookLibraryStore(context.globalState);
   const progress = new ReadingProgressStore(context.globalState);
   const preferences = new ReaderPreferencesStore(context.globalState);
+  const immersivePreferences = new ImmersiveReaderPreferencesStore(context.globalState);
   const gitLogPreferences = new GitLogPreferencesStore(context.globalState);
   const gitLogMode = new GitLogModeStore(context.workspaceState);
   const gitLogService = new GitLogService();
@@ -98,14 +101,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
   let readerViewProvider: ReturnType<typeof registerReaderView> | undefined;
-  const readerController = new ReaderController(books, progress, adapters, async (message) => {
+  const immersivePresenter = new ImmersiveDecorationPresenter(immersivePreferences.get());
+  const readerController = new ReaderSessionCoordinator(books, progress, adapters, async (message) => {
     await readerViewProvider?.postMessage(message);
-  }, { openImagePreview: payload => imagePreview.open(payload) });
+  }, immersivePresenter, {
+    openImagePreview: payload => imagePreview.open(payload),
+    showInformation: async message => { await vscode.window.showInformationMessage(message); },
+    setImmersiveContext: active => vscode.commands.executeCommand('setContext', 'moyuplus.immersiveReadingActive', active),
+    preflight: async book => {
+      try { await vscode.workspace.fs.stat(vscode.Uri.parse(book.uri)); return true; }
+      catch { return false; }
+    }
+  });
   const settingsAuthority = new SettingsAuthority({
     readerStore: preferences,
+    immersiveStore: immersivePreferences,
     gitLogStore: gitLogPreferences,
     configuration: createVSCodeSettingsConfigurationBridge(),
     onReaderSaved: value => readerViewProvider?.applyReaderPreferences(value),
+    onImmersiveSaved: value => immersivePresenter.applyPreferences(value),
     onGitLogSaved: (value, previous) => readerViewProvider?.applyGitLogPreferences(value, previous)
   });
   const settingsPanel = new MoyuPlusSettingsPanel(context.extensionUri ?? vscode.Uri.file('.'), settingsAuthority);
@@ -114,7 +128,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerLibraryCommands(context, library);
   context.subscriptions.push(
     settingsPanel,
-    vscode.commands.registerCommand(OPEN_SETTINGS_COMMAND_ID, () => settingsPanel.open('reader')),
+    vscode.commands.registerCommand(OPEN_SETTINGS_COMMAND_ID, () => {
+      readerController.suspendImmersive();
+      settingsPanel.open(readerController.presentationMode === 'immersive' ? 'immersive' : 'reader');
+    }),
     vscode.workspace.onDidChangeConfiguration(event => {
       if (SETTINGS_CONFIGURATION_KEYS.some(key => event.affectsConfiguration(key))) settingsPanel.refresh();
     })
@@ -131,7 +148,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     relocateBook: (bookId) => vscode.commands.executeCommand(RELOCATE_BOOK_COMMAND_ID, bookId),
     startTypingPractice: (bookId) => vscode.commands.executeCommand(START_TYPING_PRACTICE_COMMAND_ID, bookId),
     savePreferences: (value) => preferences.save(value as never),
-    openSettings: section => settingsPanel.open(section)
+    openSettings: section => {
+      readerController.suspendImmersive();
+      settingsPanel.open(section);
+    }
   }, {
     modeStore: gitLogMode,
     preferencesStore: gitLogPreferences,

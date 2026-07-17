@@ -4,6 +4,11 @@ import {
   type ReaderPreferences
 } from '../domain/readerPreferences';
 import {
+  createDefaultImmersiveReaderPreferences,
+  normalizeImmersiveReaderPreferences,
+  type ImmersiveReaderPreferences
+} from '../domain/immersiveReaderPreferences';
+import {
   createDefaultGitLogPreferences,
   normalizeGitLogPreferences,
   type GitLogPreferences
@@ -33,9 +38,11 @@ export interface SettingsConfigurationBridge {
 
 export interface SettingsAuthorityDependencies {
   readerStore: { get(): ReaderPreferences; save(value: ReaderPreferences): Promise<ReaderPreferences> };
+  immersiveStore: { get(): ImmersiveReaderPreferences; save(value: ImmersiveReaderPreferences): Promise<ImmersiveReaderPreferences> };
   gitLogStore: { get(): GitLogPreferences; save(value: GitLogPreferences): Promise<GitLogPreferences> };
   configuration: SettingsConfigurationBridge;
   onReaderSaved?(value: ReaderPreferences): void | PromiseLike<void>;
+  onImmersiveSaved?(value: ImmersiveReaderPreferences): void | PromiseLike<void>;
   onGitLogSaved?(value: GitLogPreferences, previous: GitLogPreferences): void | PromiseLike<void>;
 }
 
@@ -70,6 +77,7 @@ export interface ConfigurationSettingSnapshot {
 export interface AuthoritySnapshot {
   section: SettingsSection;
   reader: ReaderPreferences;
+  immersive: ImmersiveReaderPreferences;
   gitLog: GitLogPreferences;
   configuration: ConfigurationSettingSnapshot[];
 }
@@ -81,17 +89,24 @@ export class SettingsAuthority {
     return {
       section,
       reader: normalizeReaderPreferences(this.dependencies.readerStore.get()),
+      immersive: normalizeImmersiveReaderPreferences(this.dependencies.immersiveStore.get()),
       gitLog: normalizeGitLogPreferences(this.dependencies.gitLogStore.get()),
       configuration: SETTINGS_CONFIGURATION_KEYS.map(key => this.configurationSnapshot(key))
     };
   }
 
-  async change(domain: 'reader' | 'gitLog' | 'configuration', key: string, value: unknown): Promise<unknown> {
+  async change(domain: 'reader' | 'immersive' | 'gitLog' | 'configuration', key: string, value: unknown): Promise<unknown> {
     if (domain === 'reader') {
       const next = normalizeReaderPreferences({ ...this.dependencies.readerStore.get(), [key]: value });
       const saved = await this.dependencies.readerStore.save(next);
       await this.dependencies.onReaderSaved?.(saved);
       return saved[key as keyof ReaderPreferences];
+    }
+    if (domain === 'immersive') {
+      const next = normalizeImmersiveReaderPreferences({ ...this.dependencies.immersiveStore.get(), [key]: value });
+      const saved = await this.dependencies.immersiveStore.save(next);
+      await this.dependencies.onImmersiveSaved?.(saved);
+      return saved[key as keyof ImmersiveReaderPreferences];
     }
     if (domain === 'gitLog') {
       const previous = normalizeGitLogPreferences(this.dependencies.gitLogStore.get());
@@ -105,10 +120,15 @@ export class SettingsAuthority {
     return inspected.globalValue ?? inspected.defaultValue;
   }
 
-  async reset(section: 'reader' | 'gitLog'): Promise<ReaderPreferences | GitLogPreferences> {
+  async reset(section: 'reader' | 'immersive' | 'gitLog'): Promise<ReaderPreferences | ImmersiveReaderPreferences | GitLogPreferences> {
     if (section === 'reader') {
       const saved = await this.dependencies.readerStore.save(normalizeReaderPreferences(createDefaultReaderPreferences()));
       await this.dependencies.onReaderSaved?.(saved);
+      return saved;
+    }
+    if (section === 'immersive') {
+      const saved = await this.dependencies.immersiveStore.save(normalizeImmersiveReaderPreferences(createDefaultImmersiveReaderPreferences()));
+      await this.dependencies.onImmersiveSaved?.(saved);
       return saved;
     }
     const previous = normalizeGitLogPreferences(this.dependencies.gitLogStore.get());

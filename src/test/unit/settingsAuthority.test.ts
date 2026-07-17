@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultReaderPreferences } from '../../domain/readerPreferences';
+import { createDefaultImmersiveReaderPreferences } from '../../domain/immersiveReaderPreferences';
 import { createDefaultGitLogPreferences } from '../../git/gitLogModels';
 import {
   SettingsAuthority,
@@ -48,8 +49,10 @@ function configurationBridge(): SettingsConfigurationBridge & {
 
 function authority() {
   let reader = createDefaultReaderPreferences();
+  let immersive = createDefaultImmersiveReaderPreferences();
   let gitLog = createDefaultGitLogPreferences();
   const onReaderSaved = vi.fn();
+  const onImmersiveSaved = vi.fn();
   const onGitLogSaved = vi.fn();
   const configuration = configurationBridge();
   const value = new SettingsAuthority({
@@ -57,23 +60,29 @@ function authority() {
       get: () => reader,
       save: async next => (reader = next)
     },
+    immersiveStore: {
+      get: () => immersive,
+      save: async next => (immersive = next)
+    },
     gitLogStore: {
       get: () => gitLog,
       save: async next => (gitLog = next)
     },
     configuration,
     onReaderSaved,
+    onImmersiveSaved,
     onGitLogSaved
   });
-  return { value, configuration, onReaderSaved, onGitLogSaved };
+  return { value, configuration, onReaderSaved, onImmersiveSaved, onGitLogSaved };
 }
 
 describe('settings authority', () => {
-  it('builds all 22 settings and keeps global values separate from narrower overrides', () => {
+  it('builds all 29 settings and keeps global values separate from narrower overrides', () => {
     const { value } = authority();
     const snapshot = value.snapshot('typing');
     expect(Object.keys(snapshot.reader)).toHaveLength(10);
     expect(Object.keys(snapshot.gitLog)).toHaveLength(6);
+    expect(Object.keys(snapshot.immersive)).toHaveLength(7);
     expect(snapshot.configuration).toHaveLength(6);
     expect(snapshot.section).toBe('typing');
 
@@ -90,14 +99,16 @@ describe('settings authority', () => {
   });
 
   it('persists normalized reader and Git Log changes and notifies the active view', async () => {
-    const { value, onReaderSaved, onGitLogSaved } = authority();
+    const { value, onReaderSaved, onImmersiveSaved, onGitLogSaved } = authority();
     expect(await value.change('reader', 'fontSize', 21)).toBe(21);
     expect(await value.change('gitLog', 'maxCommits', 300)).toBe(300);
+    expect(await value.change('immersive', 'visualLines', 5)).toBe(5);
     expect(onReaderSaved).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 21 }));
     expect(onGitLogSaved).toHaveBeenCalledWith(
       expect.objectContaining({ maxCommits: 300 }),
       expect.objectContaining({ maxCommits: 200 })
     );
+    expect(onImmersiveSaved).toHaveBeenCalledWith(expect.objectContaining({ visualLines: 5 }));
   });
 
   it('writes configuration only to the global target and returns the global authority', async () => {
@@ -114,5 +125,7 @@ describe('settings authority', () => {
     const reset = await value.reset('reader');
     expect(reset).toEqual(createDefaultReaderPreferences());
     expect(onReaderSaved).toHaveBeenLastCalledWith(createDefaultReaderPreferences());
+    await value.change('immersive', 'italic', true);
+    expect(await value.reset('immersive')).toEqual(createDefaultImmersiveReaderPreferences());
   });
 });

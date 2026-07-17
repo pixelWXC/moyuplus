@@ -3,11 +3,12 @@ import { normalizeReadingLocator, normalizeReadingPosition } from '../../domain/
 
 describe('ReadingLocator', () => {
   it('normalizes TXT and EPUB locators and clamps section progression', () => {
-    expect(normalizeReadingLocator({ kind: 'txt', sectionId: 'chapter-1', progression: 1.4, offset: 42.9 })).toEqual({
+    expect(normalizeReadingLocator({ kind: 'txt', sectionId: 'chapter-1', progression: 1.4, offset: 42.9, offsetSpace: 'book' })).toEqual({
       kind: 'txt',
       sectionId: 'chapter-1',
       progression: 1,
-      offset: 42
+      offset: 42,
+      offsetSpace: 'book'
     });
     expect(
       normalizeReadingLocator({
@@ -17,7 +18,9 @@ describe('ReadingLocator', () => {
         cfi: 'epubcfi(/6/2)',
         fragment: 'intro',
         textOffset: 42.9,
-        sourceRevision: 'sha256:revision-1'
+        immersiveOffset: 24.9,
+        sourceRevision: 'sha256:revision-1',
+        projectionRevision: 'projection-v1'
       })
     ).toEqual({
       kind: 'epub',
@@ -26,7 +29,9 @@ describe('ReadingLocator', () => {
       cfi: 'epubcfi(/6/2)',
       fragment: 'intro',
       textOffset: 42,
-      sourceRevision: 'sha256:revision-1'
+      immersiveOffset: 24,
+      sourceRevision: 'sha256:revision-1',
+      projectionRevision: 'projection-v1'
     });
   });
 

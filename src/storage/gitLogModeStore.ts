@@ -6,6 +6,7 @@ export interface GitLogResumeTarget {
   bookId: string;
   locator: ReadingLocator;
   bookProgression: number;
+  presentationMode?: 'webview' | 'immersive';
 }
 
 export interface GitLogModeRecord {
@@ -47,7 +48,12 @@ function normalizeResumeTarget(value: unknown): GitLogResumeTarget | undefined {
     || typeof value.bookProgression !== 'number' || !Number.isFinite(value.bookProgression)
     || value.bookProgression < 0 || value.bookProgression > 1) return undefined;
   const locator = normalizeReadingLocator(value.locator);
-  return locator ? { bookId: value.bookId, locator, bookProgression: value.bookProgression } : undefined;
+  return locator ? {
+    bookId: value.bookId, locator, bookProgression: value.bookProgression,
+    ...(value.presentationMode === 'immersive' || value.presentationMode === 'webview'
+      ? { presentationMode: value.presentationMode }
+      : {})
+  } : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

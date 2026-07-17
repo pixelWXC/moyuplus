@@ -797,3 +797,16 @@
 - 2026-07-17 人工验收反馈修复完成：设置入口从 `explorer/context` 移至 `editor/context`；快捷键分区移除不可靠的按键值回显；范围控件在拖动、防抖保存、响应和快照期间保持节点、焦点与滚动稳定；Reader 文字色和背景色默认跟随主题，自定义颜色可实时应用并恢复继承。
 - 修订后最终门禁：`npm run compile` 通过；Vitest 49 文件 236/236；Playwright 布局/隐私测试 36/36；`git diff --check` 通过。
 - 用户于 2026-07-17 确认真实 Extension Development Host 人工验收通过；统一设置面板状态改为 complete。
+
+## 2026-07-17 沉浸阅读书架状态同步实施
+
+- 已读取并确认设计规格、brainstorming、TDD、planning-with-files、frontend-design 与 `.impeccable.md` 约束。
+- 已确认规格已获批准并提交；当前进入 Phase I1，先为协议、reducer 和动作派生编写失败测试。
+- Phase I1 RED/GREEN：`stopImmersive` 严格消息、`libraryRevision` 防回滚、`immersiveBookId → immersiveActive` 与动作替换完成；目标协议/reducer 20/20 通过。
+- Phase I2 RED/GREEN：协调器停止结果区分最终进度保存成功/失败，保存失败仍清理 Presenter、handle 与 context；Provider 统一入口校验活动书籍、合并并发停止、提示保存失败并刷新持久化百分比。
+- Phase I3 RED/GREEN：Provider 使用 dirty、request version、单一串行 drain、视图实例和模式屏障；覆盖隐藏恢复、构造 A 被更新 B 淘汰、dispose/recreate 与 ready 去重。
+- Phase I4 RED/GREEN：书架活动书籍显示危险色“停止阅读”，点击发送严格关联消息；其他书籍保持“沉浸阅读”，迟到 revision 与 Git Log 模式错配均被拒绝。
+- 聚焦回归：4 个 Vitest 文件 39/39；Git Log/书架 Chromium 10/10；进入 Phase I5 全量门禁。
+- Phase I5 最终门禁：`npm run compile` 通过；Vitest 55 文件 264/264；Playwright Chromium 39/39；`git diff --check` 通过（仅既有 CRLF 转换提示）。
+- 生产检查确认旧 `immersiveState` 已删除，`ReaderViewProvider` 未新增 interval/timeout。
+- 2026-07-17 用户确认真实 Extension Development Host 人工核验通过；设计状态、README、指导文档、CHANGELOG 与实施记录已同步更新，源码与生成 bundle 已整理进入本次提交；未推送、未发布或生成 VSIX。

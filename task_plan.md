@@ -508,3 +508,37 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 - 2026-07-16：设置布局测试首次运行时 harness 只加载了 JS、遗漏独立生成的 `settingsApp.css`，导致响应式与 forced-colors 断言失败；已在测试夹具中显式加载发布样式文件。
 - 2026-07-16：首次全量单测发现激活命令清单 fixture 尚未包含新增的 `moyuplus.openSettings`；实际注册行为正确，更新契约预期后全量 231/231 通过。
 - 2026-07-17：人工验收发现入口位置、快捷键静态回显、滑块整页重绘和背景色应用四项问题；按修订设计完成 TDD 修复，最终 236/236 单测、36/36 布局测试及人工复验通过。
+
+## 2026-07-17 沉浸阅读书架状态同步实施
+
+### Goal
+
+实施已确认并已提交的 `docs/superpowers/specs/2026-07-17-moyuplus-immersive-shelf-sync-design.md`：以会话协调器和持久化进度为权威，让书架可靠显示活动沉浸书籍的“停止阅读”动作，并在统一停止流程后刷新最新已保存进度。
+
+### Phases
+
+- [x] Phase I0：读取设计、技能约束、仓库状态与现有沉浸实现
+- [x] Phase I1：RED/GREEN——严格停止协议、权威书架状态与 revision reducer
+- [x] Phase I2：RED/GREEN——协调器停止结果、保存失败清理与统一 Provider 停止入口
+- [x] Phase I3：RED/GREEN——串行 dirty/revision 快照调度与生命周期竞态
+- [x] Phase I4：RED/GREEN——书架“停止阅读”交互与危险动作样式
+- [x] Phase I5：全量 Vitest、Playwright、TypeScript、构建与 diff 检查
+- **Status:** complete（2026-07-17 自动验收与真实 Extension Development Host 人工验收均通过）
+
+### Execution constraints
+
+- 严格 RED → GREEN → REFACTOR；每项生产行为先观察目标测试因功能缺失而失败。
+- 当前工作树包含尚未提交的沉浸阅读及设置面板实现；全部视为用户改动并在其上增量实施，不回退、不清理。
+- 不手工编辑 `media/*.js`、`media/*.css` 或 source map；仅由构建脚本生成。
+- 不新增轮询、定时刷新或逐页书架重绘；隐藏、Reader 与 Git Log 模式只标记 dirty。
+- 不自动提交、推送、发布或生成 VSIX。
+
+### Error log
+
+- 2026-07-17：首次并行读取技能、规格和仓库清单超过 10 秒默认编排时限；后续改为分组读取并显式提高单命令时限，不重复原调用。
+- 2026-07-17：首次同时追加三份实施记录时，`findings.md` 的锚点文本与真实文件尾不一致，补丁整体未应用；已分别读取三份文件真实尾部并改用准确锚点。
+- 2026-07-17：首次读取 Reader 样式时错误假设源文件为 `src/webview/readerStyles.css`，导致并行编排非零退出；后续先用文件清单定位真实样式路径，不重复错误路径。
+- 2026-07-17：首次向测试 fixture 与声明文件合并追加 `loadActiveShelf` 时，把 TypeScript 全局声明锚点错误放在 HTML 补丁中，补丁整体未应用；已按真实文件边界拆分并成功追加。
+- 2026-07-17：首次全量 Playwright 为 32/39；7 项真实 Reader App 用例均因旧 `reader-app-harness.html` 的启动 `libraryState` 缺少新增必需 revision 而停在 boot，并非生产逻辑回归。已迁移该 fixture 后按目标文件复测。
+- 2026-07-17：用于确认无轮询的组合 `rg` 检查因第二个查询按预期零匹配返回退出码 1；结果已确认生产代码无 `immersiveState`、无新增 interval/timeout，后续独立执行非空/空匹配检查。
+- 2026-07-17：首次并行运行全量 Vitest 与 `npm run compile` 时，两者的 build contract/构建脚本同时清理并生成 `out/`，导致 1 项 bundle 加载测试短暂找不到 `out/extension.js`；其余 263 项通过。该并行方式对共享构建目录不安全，改为先 compile、后全量单测串行复验。

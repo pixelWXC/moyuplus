@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:">
   <style>
-    :root { --vscode-font-family: sans-serif; --vscode-foreground: #222; --vscode-editor-foreground: #222; --vscode-editor-background: #fff; --vscode-sideBar-background: #f7f7f7; --vscode-descriptionForeground: #666; --vscode-toolbar-hoverBackground: #ddd; --vscode-focusBorder: #06c; }
+    :root { --vscode-font-family: sans-serif; --vscode-foreground: #222; --vscode-editor-foreground: #222; --vscode-editor-background: #fff; --vscode-sideBar-background: #f7f7f7; --vscode-descriptionForeground: #666; --vscode-toolbar-hoverBackground: #ddd; --vscode-focusBorder: #06c; --vscode-errorForeground: #c42b1c; }
     html, body, #app { margin: 0; width: 100%; height: 100%; }
   </style>
   <script>
@@ -38,7 +38,14 @@
     ];
     window.gitLogHarness = {
       loadLibrary() {
-        send({ type: 'libraryState', books: [], availability: {}, progress: {} });
+        send({ type: 'libraryState', books: [], availability: {}, progress: {}, libraryRevision: 1 });
+      },
+      loadActiveShelf() {
+        send({
+          type: 'libraryState', books: libraryBooks,
+          availability: { 'book-1': true, 'book-2': true },
+          progress: { 'book-1': .4, 'book-2': .2 }, immersiveBookId: 'book-1', libraryRevision: 2
+        });
       },
       load(count, preferences = {}) {
         const sessionId = `layout-${Date.now()}`;
@@ -57,7 +64,7 @@
         send({
           type: 'modeReaderRestore', modeGeneration: ++modeGeneration, book: libraryBooks[0], requestId: 'restore-1',
           books: libraryBooks, availability: { 'book-1': true, 'book-2': true },
-          progress: { 'book-1': .4, 'book-2': .2 }, preferences: readerPreferences
+          progress: { 'book-1': .4, 'book-2': .2 }, libraryRevision: 2, preferences: readerPreferences
         });
       },
       returnToLibrary() { document.querySelector('[aria-label="返回书架"]')?.click(); },

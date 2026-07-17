@@ -106,6 +106,7 @@ describe('typing practice registration and VS Code integration', () => {
       NEXT_READER_CHAPTER_COMMAND_ID,
       OPEN_READER_TOC_COMMAND_ID,
       OPEN_READER_SETTINGS_COMMAND_ID,
+      'moyuplus.immersive.stop',
       TOGGLE_GIT_LOG_COMMAND_ID,
       START_TYPING_PRACTICE_COMMAND_ID,
       STOP_TYPING_PRACTICE_COMMAND_ID,

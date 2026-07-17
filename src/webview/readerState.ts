@@ -5,17 +5,19 @@ import type { LayoutState } from './layoutEngine';
 
 export const REMOVE_BOOK_CONFIRMATION = '仅从 MoyuPlus 书架移除，不会删除原文件。';
 
-export type LibraryBookAction = 'open' | 'startTypingPractice' | 'relocate' | 'remove';
+export type LibraryBookAction = 'open' | 'startImmersive' | 'stopImmersive' | 'startTypingPractice' | 'relocate' | 'remove';
 
 export type LibraryBookItem = BookRecord & {
   available: boolean;
   status: 'available' | 'missing';
   progress: number;
+  immersiveActive: boolean;
 };
 
 export interface ReaderAppState {
   view: 'library' | 'reader';
   status: 'loading' | 'ready' | 'error';
+  libraryRevision: number;
   books: LibraryBookItem[];
   pendingRemoval?: { bookId: string; message: string };
   error?: string;
@@ -45,6 +47,8 @@ export type ReaderAppAction =
       books: BookRecord[];
       availability: Record<string, boolean>;
       progress: Record<string, number>;
+      immersiveBookId?: string;
+      libraryRevision: number;
     }
   | { type: 'requestRemove'; bookId: string }
   | { type: 'cancelRemove' }
@@ -64,25 +68,29 @@ export type ReaderAppAction =
 
 export function createInitialReaderAppState(): ReaderAppState {
   const preferences = createDefaultReaderPreferences();
-  return { view: 'library', status: 'loading', books: [], preferences };
+  return { view: 'library', status: 'loading', libraryRevision: 0, books: [], preferences };
 }
 
 export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction): ReaderAppState {
   switch (action.type) {
     case 'libraryLoaded': {
+      if (!Number.isSafeInteger(action.libraryRevision) || action.libraryRevision <= 0
+        || action.libraryRevision <= state.libraryRevision) return state;
       const books = action.books.map(book => {
         const available = action.availability[book.id] !== false;
         return {
           ...book,
           available,
           status: available ? 'available' as const : 'missing' as const,
-          progress: normalizeProgress(action.progress[book.id])
+          progress: normalizeProgress(action.progress[book.id]),
+          immersiveActive: book.id === action.immersiveBookId
         };
       });
       return {
         ...state,
         view: 'library',
         status: 'ready',
+        libraryRevision: action.libraryRevision,
         books,
         pendingRemoval: state.pendingRemoval && books.some(book => book.id === state.pendingRemoval?.bookId)
           ? state.pendingRemoval
@@ -142,6 +150,7 @@ function navigationFor(sections: SectionRef[], sectionId: string): ReaderNavigat
 export function getLibraryBookActions(book: LibraryBookItem): LibraryBookAction[] {
   return [
     'open',
+    book.immersiveActive ? 'stopImmersive' : 'startImmersive',
     ...(book.capabilities.typing ? ['startTypingPractice' as const] : []),
     'relocate',
     'remove'

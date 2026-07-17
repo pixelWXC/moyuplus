@@ -1,14 +1,14 @@
 export const SETTINGS_PROTOCOL_VERSION = 2 as const;
 
-export type SettingsSection = 'reader' | 'gitLog' | 'typing' | 'shortcuts';
-export type SettingsDomain = 'reader' | 'gitLog' | 'configuration';
+export type SettingsSection = 'reader' | 'immersive' | 'gitLog' | 'typing' | 'shortcuts';
+export type SettingsDomain = 'reader' | 'immersive' | 'gitLog' | 'configuration';
 
 export type SettingsToHostMessage =
   | { type: 'settingsReady'; protocolVersion: typeof SETTINGS_PROTOCOL_VERSION; instanceId: string }
   | { type: 'retrySnapshot'; protocolVersion: typeof SETTINGS_PROTOCOL_VERSION; instanceId: string }
   | { type: 'selectSection'; protocolVersion: typeof SETTINGS_PROTOCOL_VERSION; instanceId: string; section: SettingsSection }
   | RequestEnvelope & { type: 'changeSetting'; domain: SettingsDomain; key: string; value: unknown }
-  | RequestEnvelope & { type: 'resetSection'; section: 'reader' | 'gitLog' }
+  | RequestEnvelope & { type: 'resetSection'; section: 'reader' | 'immersive' | 'gitLog' }
   | RequestEnvelope & { type: 'openKeyboardShortcuts' };
 
 interface RequestEnvelope {
@@ -40,6 +40,16 @@ const gitLogValidators: Record<string, (value: unknown) => boolean> = {
   maxCommits: numberBetween(20, 1000)
 };
 
+const immersiveValidators: Record<string, (value: unknown) => boolean> = {
+  visualLines: numberBetween(1, 12),
+  graphemesPerLine: numberBetween(8, 160),
+  textColor: color,
+  backgroundColor: value => value === 'transparent' || canonicalColor(value),
+  fontWeight: oneOf('normal', '500', '600', 'bold'),
+  italic: boolean,
+  leftMargin: numberBetween(0, 64)
+};
+
 const configurationValidators: Record<string, (value: unknown) => boolean> = {
   'moyuplus.shortcuts.enableTabRouter': boolean,
   'moyuplus.typing.tabMode': oneOf('completeRest', 'replaceLine'),
@@ -61,7 +71,7 @@ export function isSettingsToHostMessage(value: unknown): value is SettingsToHost
   }
   if (!hasRequestEnvelope(value)) return false;
   if (value.type === 'resetSection') {
-    return hasOnlyKeys(value, requestKeys('section')) && (value.section === 'reader' || value.section === 'gitLog');
+    return hasOnlyKeys(value, requestKeys('section')) && (value.section === 'reader' || value.section === 'immersive' || value.section === 'gitLog');
   }
   if (value.type === 'openKeyboardShortcuts') {
     return hasOnlyKeys(value, requestKeys());
@@ -72,7 +82,8 @@ export function isSettingsToHostMessage(value: unknown): value is SettingsToHost
     || typeof value.key !== 'string') return false;
   const validators = value.domain === 'reader'
     ? readerValidators
-    : value.domain === 'gitLog' ? gitLogValidators : configurationValidators;
+    : value.domain === 'immersive' ? immersiveValidators
+      : value.domain === 'gitLog' ? gitLogValidators : configurationValidators;
   return Object.prototype.hasOwnProperty.call(validators, value.key) && validators[value.key](value.value);
 }
 
@@ -105,11 +116,11 @@ function isInstanceId(value: unknown): value is string {
 }
 
 function isSection(value: unknown): value is SettingsSection {
-  return value === 'reader' || value === 'gitLog' || value === 'typing' || value === 'shortcuts';
+  return value === 'reader' || value === 'immersive' || value === 'gitLog' || value === 'typing' || value === 'shortcuts';
 }
 
 function isDomain(value: unknown): value is SettingsDomain {
-  return value === 'reader' || value === 'gitLog' || value === 'configuration';
+  return value === 'reader' || value === 'immersive' || value === 'gitLog' || value === 'configuration';
 }
 
 function boolean(value: unknown): boolean {
@@ -121,7 +132,11 @@ function numberBetween(min: number, max: number): (value: unknown) => boolean {
 }
 
 function color(value: unknown): boolean {
-  return value === 'theme' || (typeof value === 'string' && /^#[0-9a-f]{6}$/.test(value));
+  return value === 'theme' || canonicalColor(value);
+}
+
+function canonicalColor(value: unknown): boolean {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/.test(value);
 }
 
 function oneOf(...allowed: unknown[]): (value: unknown) => boolean {

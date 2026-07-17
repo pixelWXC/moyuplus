@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SETTINGS_PROTOCOL_VERSION } from '../../settings/settingsMessages';
 import { createDefaultReaderPreferences } from '../../domain/readerPreferences';
+import { createDefaultImmersiveReaderPreferences } from '../../domain/immersiveReaderPreferences';
 import { createDefaultGitLogPreferences } from '../../git/gitLogModels';
 import {
   createInitialSettingsState,
@@ -16,6 +17,7 @@ function snapshot(instanceId: string, stateVersion: number, section: SettingsSna
     stateVersion,
     section,
     reader: createDefaultReaderPreferences(),
+    immersive: createDefaultImmersiveReaderPreferences(),
     gitLog: createDefaultGitLogPreferences(),
     configuration: []
   };

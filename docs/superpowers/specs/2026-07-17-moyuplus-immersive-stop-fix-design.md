@@ -1,7 +1,7 @@
 # MoyuPlus 沉浸阅读退出阻塞修复设计
 
 日期：2026-07-17
-状态：已确认，待实施
+状态：已实施并通过自动验收及真实 Extension Development Host 人工验收（2026-07-17）
 
 ## 问题
 
@@ -31,4 +31,3 @@
 - 会话协调器测试验证从沉浸模式切换到另一书籍能够完成，实时 handle 数量不超过一个。
 - package contribution 测试验证编辑器右键菜单项为英文停止命令，且只在 `moyuplus.immersiveReadingActive` 时显示。
 - 运行定向 Vitest、TypeScript 编译和相关回归。
-

@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Uri, createWebviewView } from '../shims/vscode';
+import { Uri, createWebviewView, window } from '../shims/vscode';
 import { ReaderViewProvider, type ReaderViewController } from '../../reader/ReaderViewProvider';
 import { READER_PROTOCOL_VERSION } from '../../reader/readerMessages';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
 
 function controller(): ReaderViewController {
   return {
@@ -41,7 +47,7 @@ describe('ReaderViewProvider v3', () => {
 
     await view.webview.receiveMessage({ type: 'libraryReady' });
 
-    expect(library.snapshot).toHaveBeenCalledTimes(2);
+    expect(library.snapshot).toHaveBeenCalledOnce();
     expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
       type: 'libraryState', books: [expect.objectContaining({ id: 'book-1' })]
     }));
@@ -55,9 +61,9 @@ describe('ReaderViewProvider v3', () => {
     const view = createWebviewView();
 
     provider.resolveWebviewView(view as never);
-    await vi.waitFor(() => expect(view.webview.postedMessages).toContainEqual({
+    await vi.waitFor(() => expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
       type: 'libraryState', books: [], availability: {}, progress: {}
-    }));
+    })));
 
     expect(library.snapshot).toHaveBeenCalledOnce();
   });
@@ -85,6 +91,29 @@ describe('ReaderViewProvider v3', () => {
     expect(target.reportLayout).toHaveBeenCalledWith(
       { kind: 'txt', sectionId: 's1', progression: 0.5, offset: 12 }, 0.4
     );
+  });
+
+  it('starts immersive reading from the guarded shelf action and resumes after Webview blur', async () => {
+    const target = {
+      ...controller(),
+      presentationMode: 'immersive' as const,
+      openImmersiveBook: vi.fn().mockResolvedValue(true),
+      suspendImmersive: vi.fn(),
+      resumeImmersive: vi.fn()
+    };
+    const library = { snapshot: vi.fn().mockResolvedValue({ books: [], availability: {}, progress: {} }) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target, library);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'startImmersive', requestId: 'immersive-1', bookId: 'book-1'
+    });
+    expect(target.openImmersiveBook).toHaveBeenCalledWith('book-1');
+    expect(view.webview.postedMessages).not.toContainEqual(expect.objectContaining({ type: 'immersiveState' }));
+
+    await view.webview.receiveMessage({ type: 'readerWebviewBlurred' });
+    expect(target.resumeImmersive).toHaveBeenCalledOnce();
   });
 
   it('flushes when hidden and disposes the controller with the view', async () => {
@@ -168,5 +197,164 @@ describe('ReaderViewProvider v3', () => {
       requestId: 'r1', bookId: 'book-1', sectionId: 's1', sectionGeneration: 4, resourceId: 'image-opaque-id'
     });
     expect(JSON.stringify((target.openImage as any).mock.calls)).not.toMatch(/path|\.\.|OPS\//);
+  });
+
+  it('stops only the authoritative shelf book and refreshes its persisted progress', async () => {
+    let session: { bookId: string; mode: 'immersive'; state: 'active' } | undefined = {
+      bookId: 'book-1', mode: 'immersive', state: 'active'
+    };
+    let persistedProgress = 0.25;
+    const stopImmersive = vi.fn(async () => {
+      persistedProgress = 0.75;
+      session = undefined;
+      return { stopped: true, progressPersisted: true };
+    });
+    const target = { ...controller(), snapshot: () => session, stopImmersive };
+    const library = { snapshot: vi.fn(async () => ({
+      books: [{ id: 'book-1', title: 'One' }], availability: { 'book-1': true },
+      progress: { 'book-1': persistedProgress }
+    })) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target, library as never);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
+      type: 'libraryState', immersiveBookId: 'book-1', progress: { 'book-1': 0.25 }
+    })));
+
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'stopImmersive', requestId: 'stop-1', bookId: 'stale-book'
+    });
+    expect(stopImmersive).not.toHaveBeenCalled();
+
+    await view.webview.receiveMessage({
+      version: READER_PROTOCOL_VERSION, type: 'stopImmersive', requestId: 'stop-2', bookId: 'book-1'
+    });
+    expect(stopImmersive).toHaveBeenCalledOnce();
+    expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
+      type: 'libraryState', immersiveBookId: undefined, progress: { 'book-1': 0.75 }
+    }));
+  });
+
+  it('coalesces concurrent stops and defers the single final shelf refresh while hidden', async () => {
+    let session: { bookId: string; mode: 'immersive'; state: 'active' } | undefined = {
+      bookId: 'book-1', mode: 'immersive', state: 'active'
+    };
+    const stopping = deferred<{ stopped: boolean; progressPersisted: boolean }>();
+    const stopImmersive = vi.fn(() => stopping.promise.then(result => { session = undefined; return result; }));
+    const target = { ...controller(), snapshot: () => session, stopImmersive };
+    const library = { snapshot: vi.fn().mockResolvedValue({ books: [], availability: {}, progress: {} }) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target, library);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledOnce());
+    await view.setVisible(false);
+
+    const first = provider.stopImmersive();
+    const second = provider.stopImmersive();
+    stopping.resolve({ stopped: true, progressPersisted: true });
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(stopImmersive).toHaveBeenCalledOnce();
+    expect(library.snapshot).toHaveBeenCalledOnce();
+
+    await view.setVisible(true);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledTimes(2));
+  });
+
+  it('reuses the in-flight stop while its final visible shelf refresh is still pending', async () => {
+    let session: { bookId: string; mode: 'immersive'; state: 'active' } | undefined = {
+      bookId: 'book-1', mode: 'immersive', state: 'active'
+    };
+    const finalSnapshot = deferred<{ books: never[]; availability: {}; progress: {} }>();
+    const stopImmersive = vi.fn(async () => {
+      session = undefined;
+      return { stopped: true, progressPersisted: true };
+    });
+    const target = { ...controller(), snapshot: () => session, stopImmersive };
+    const library = { snapshot: vi.fn()
+      .mockResolvedValueOnce({ books: [], availability: {}, progress: {} })
+      .mockReturnValueOnce(finalSnapshot.promise) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target, library);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledOnce());
+
+    const first = provider.stopImmersive('book-1');
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledTimes(2));
+    const second = provider.stopImmersive('book-1');
+    finalSnapshot.resolve({ books: [], availability: {}, progress: {} });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    expect(stopImmersive).toHaveBeenCalledOnce();
+  });
+
+  it('drops a stale shelf build when a newer refresh is requested', async () => {
+    const first = deferred<{ books: Array<{ id: string }>; availability: Record<string, boolean>; progress: Record<string, number> }>();
+    const library = { snapshot: vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ books: [{ id: 'new' }], availability: { new: true }, progress: {} }) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller(), library as never);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledOnce());
+
+    const ready = view.webview.receiveMessage({ type: 'importBook' });
+    first.resolve({ books: [{ id: 'old' }], availability: { old: true }, progress: {} });
+    await ready;
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledTimes(2));
+
+    const shelfMessages = view.webview.postedMessages.filter(message => (message as { type?: string }).type === 'libraryState');
+    expect(shelfMessages).toEqual([expect.objectContaining({
+      books: [{ id: 'new' }], libraryRevision: 1
+    })]);
+  });
+
+  it('never delivers an in-flight shelf build to a disposed Webview instance', async () => {
+    const first = deferred<{ books: Array<{ id: string }>; availability: Record<string, boolean>; progress: Record<string, number> }>();
+    const library = { snapshot: vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ books: [{ id: 'current' }], availability: { current: true }, progress: {} }) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller(), library as never);
+    const oldView = createWebviewView();
+    provider.resolveWebviewView(oldView as never);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledOnce());
+    await oldView.dispose();
+
+    const currentView = createWebviewView();
+    provider.resolveWebviewView(currentView as never);
+    first.resolve({ books: [{ id: 'stale' }], availability: { stale: true }, progress: {} });
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(currentView.webview.postedMessages).toContainEqual(expect.objectContaining({
+      type: 'libraryState', books: [{ id: 'current' }]
+    })));
+
+    expect(oldView.webview.postedMessages).not.toContainEqual(expect.objectContaining({ type: 'libraryState' }));
+  });
+
+  it('reports a failed final save and refreshes only the last persisted percentage', async () => {
+    let session: { bookId: string; mode: 'immersive'; state: 'active' } | undefined = {
+      bookId: 'book-1', mode: 'immersive', state: 'active'
+    };
+    const stopImmersive = vi.fn(async () => {
+      session = undefined;
+      return { stopped: true, progressPersisted: false };
+    });
+    const target = { ...controller(), snapshot: () => session, stopImmersive };
+    const library = { snapshot: vi.fn().mockResolvedValue({
+      books: [{ id: 'book-1' }], availability: { 'book-1': true }, progress: { 'book-1': 0.3 }
+    }) };
+    const provider = new ReaderViewProvider(Uri.file('/extension'), target, library as never);
+    const view = createWebviewView();
+    const previousErrors = window.errorMessages.length;
+    provider.resolveWebviewView(view as never);
+    await vi.waitFor(() => expect(library.snapshot).toHaveBeenCalledOnce());
+
+    await expect(provider.stopImmersive('book-1')).resolves.toBe(true);
+
+    expect(window.errorMessages.slice(previousErrors)).toEqual([
+      '阅读进度保存失败，已停止沉浸阅读。书架将显示上一次成功保存的位置。'
+    ]);
+    expect(view.webview.postedMessages).toContainEqual(expect.objectContaining({
+      type: 'libraryState', immersiveBookId: undefined, progress: { 'book-1': 0.3 }
+    }));
   });
 });

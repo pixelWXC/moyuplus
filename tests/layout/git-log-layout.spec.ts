@@ -26,6 +26,42 @@ test('startup Git restoration keeps the complete shelf after returning from the 
   await expect(page.locator('.book-title')).toHaveText(['One', 'Two']);
 });
 
+test('active immersive shelf book exposes a red stop action with a correlated book id', async ({ page }) => {
+  await page.evaluate(() => window.gitLogHarness.loadActiveShelf());
+
+  const firstRow = page.locator('.book-row').filter({ hasText: 'One' });
+  const secondRow = page.locator('.book-row').filter({ hasText: 'Two' });
+  const stop = firstRow.getByRole('button', { name: '停止阅读' });
+  await expect(stop).toHaveClass(/danger-action/);
+  await expect(firstRow.getByRole('button', { name: '沉浸阅读' })).toHaveCount(0);
+  await expect(secondRow.getByRole('button', { name: '沉浸阅读' })).toBeVisible();
+
+  await stop.click();
+  const message = await page.evaluate(() => window.sentMessages.at(-1));
+  expect(message).toMatchObject({ version: 3, type: 'stopImmersive', bookId: 'book-1' });
+  expect(String(message.requestId)).not.toBe('');
+});
+
+test('stale or mode-mismatched shelf revisions cannot overwrite the current interface', async ({ page }) => {
+  await page.evaluate(() => {
+    window.gitLogHarness.loadActiveShelf();
+    window.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'libraryState', books: [], availability: {}, progress: {}, libraryRevision: 1
+    }}));
+  });
+  await expect(page.getByRole('button', { name: '停止阅读' })).toBeVisible();
+  await expect(page.locator('.book-meta').first()).toContainText('已读 40%');
+
+  await page.evaluate(() => {
+    window.gitLogHarness.load(1);
+    window.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'libraryState', books: [], availability: {}, progress: {}, libraryRevision: 3
+    }}));
+  });
+  await expect(page.locator('.git-log-view')).toBeVisible();
+  await expect(page.locator('.book-row')).toHaveCount(0);
+});
+
 for (const width of [220, 280, 360]) {
   test(`Git Log is non-scrolling and paginated at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 420 });
@@ -136,6 +172,7 @@ declare global {
   interface Window {
     gitLogHarness: {
       loadLibrary(): void;
+      loadActiveShelf(): void;
       load(count: number, preferences?: Record<string, unknown>): void;
       restoreReaderFromGit(): void;
       returnToLibrary(): void;

@@ -14,6 +14,8 @@ interface V2SectionEnvelope extends V2Envelope { sectionId: string }
 
 export type ReaderToExtensionV2Message =
   | (V2Envelope & { type: 'openBook' })
+  | (V2Envelope & { type: 'startImmersive' })
+  | (V2Envelope & { type: 'stopImmersive' })
   | (V2SectionEnvelope & { type: 'requestSection' | 'requestNextSection' | 'requestPreviousSection' })
   | (V2SectionEnvelope & { type: 'requestSectionTarget'; fragment?: string })
   | (V2SectionEnvelope & { type: 'openImage'; sectionGeneration: number; resourceId: string })
@@ -35,7 +37,7 @@ export type ExtensionToReaderV2Message =
 
 export function isReaderToExtensionV2Message(value: unknown): value is ReaderToExtensionV2Message {
   if (!hasEnvelope(value)) return false;
-  if (value.type === 'openBook') return true;
+  if (value.type === 'openBook' || value.type === 'startImmersive' || value.type === 'stopImmersive') return true;
   if (!hasSectionEnvelope(value)) return false;
   if (value.type === 'requestSection' || value.type === 'requestNextSection' || value.type === 'requestPreviousSection') return true;
   if (value.type === 'requestSectionTarget') {

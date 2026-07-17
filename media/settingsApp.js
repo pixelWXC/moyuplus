@@ -22,6 +22,15 @@
     layout: oneOf("lines", "inline"),
     maxCommits: numberBetween(20, 1e3)
   };
+  var immersiveValidators = {
+    visualLines: numberBetween(1, 12),
+    graphemesPerLine: numberBetween(8, 160),
+    textColor: color,
+    backgroundColor: (value) => value === "transparent" || canonicalColor(value),
+    fontWeight: oneOf("normal", "500", "600", "bold"),
+    italic: boolean,
+    leftMargin: numberBetween(0, 64)
+  };
   var configurationValidators = {
     "moyuplus.shortcuts.enableTabRouter": boolean,
     "moyuplus.typing.tabMode": oneOf("completeRest", "replaceLine"),
@@ -37,7 +46,10 @@
     return (value) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
   }
   function color(value) {
-    return value === "theme" || typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
+    return value === "theme" || canonicalColor(value);
+  }
+  function canonicalColor(value) {
+    return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
   }
   function oneOf(...allowed) {
     return (value) => allowed.includes(value);
@@ -58,6 +70,7 @@
   var NEXT_READER_CHAPTER_COMMAND_ID = "moyuplus.reader.nextChapter";
   var OPEN_READER_TOC_COMMAND_ID = "moyuplus.reader.openToc";
   var OPEN_READER_SETTINGS_COMMAND_ID = "moyuplus.reader.openSettings";
+  var STOP_IMMERSIVE_READING_COMMAND_ID = "moyuplus.immersive.stop";
   function createShortcutSettingsState(input) {
     return [
       action(NEXT_READER_PAGE_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u4E0B\u4E00\u9875", "\u5C06\u9605\u8BFB\u5668\u7FFB\u5230\u4E0B\u4E00\u9875\u3002"),
@@ -70,6 +83,7 @@
       action(OPEN_READER_SETTINGS_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u8BBE\u7F6E", "\u6253\u5F00\u9605\u8BFB\u8BBE\u7F6E\u3002"),
       action(FOCUS_READER_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u6253\u5F00", "\u6253\u5F00\u5E76\u805A\u7126 MoyuPlus Reader\u3002"),
       action(CLOSE_READER_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u5173\u95ED", "\u5173\u95ED\u5F53\u524D\u4FA7\u8FB9\u680F\u3002"),
+      action(STOP_IMMERSIVE_READING_COMMAND_ID, "\u6C89\u6D78\u9605\u8BFB\uFF1A\u7ED3\u675F", "\u4FDD\u5B58\u5F53\u524D\u9875\u9996\u5E76\u7ED3\u675F\u6C89\u6D78\u9605\u8BFB\u3002"),
       action(TOGGLE_GIT_LOG_COMMAND_ID, "Git Log\uFF1A\u6253\u5F00\u6216\u9000\u51FA", "\u901A\u8FC7\u4E13\u7528\u5FEB\u6377\u952E\u5207\u6362\u5206\u9875\u5F0F\u5F53\u524D\u5206\u652F Git Log\u3002"),
       action(TOGGLE_TYPING_PRACTICE_COMMAND_ID, "\u6253\u5B57\u7EC3\u4E60\uFF1A\u5F00\u542F\u6216\u5173\u95ED", "\u6839\u636E\u5F53\u524D\u7EC3\u4E60\u72B6\u6001\u5F00\u542F\u6216\u5173\u95ED\u6253\u5B57\u7EC3\u4E60\u3002"),
       {
@@ -118,6 +132,19 @@
     };
   }
 
+  // src/domain/immersiveReaderPreferences.ts
+  function createDefaultImmersiveReaderPreferences() {
+    return {
+      visualLines: 3,
+      graphemesPerLine: 40,
+      textColor: "theme",
+      backgroundColor: "transparent",
+      fontWeight: "normal",
+      italic: false,
+      leftMargin: 12
+    };
+  }
+
   // src/git/gitLogModels.ts
   function createDefaultGitLogPreferences() {
     return {
@@ -138,6 +165,7 @@
       stateVersion: 0,
       section: "reader",
       reader: createDefaultReaderPreferences(),
+      immersive: createDefaultImmersiveReaderPreferences(),
       gitLog: createDefaultGitLogPreferences(),
       configuration: [],
       pending: {}
@@ -164,7 +192,7 @@
       return {
         ...state2,
         stateVersion: Math.max(state2.stateVersion, action2.stateVersion),
-        ...action2.section === "reader" ? { reader: action2.value } : { gitLog: action2.value },
+        ...action2.section === "reader" ? { reader: action2.value } : action2.section === "immersive" ? { immersive: action2.value } : { gitLog: action2.value },
         resettingSection: void 0,
         saveStatus: "saved",
         error: void 0
@@ -179,6 +207,7 @@
         stateVersion: snapshot.stateVersion,
         section: snapshot.section,
         reader: snapshot.reader,
+        immersive: snapshot.immersive,
         gitLog: snapshot.gitLog,
         configuration: snapshot.configuration,
         error: void 0
@@ -211,6 +240,7 @@
   }
   function setDomainValue(state2, domain, key, value) {
     if (domain === "reader") return { ...state2, reader: { ...state2.reader, [key]: value } };
+    if (domain === "immersive") return { ...state2, immersive: { ...state2.immersive, [key]: value } };
     if (domain === "gitLog") return { ...state2, gitLog: { ...state2.gitLog, [key]: value } };
     return {
       ...state2,
@@ -231,6 +261,7 @@
   var activeRangeSession;
   var sections = [
     { id: "reader", label: "\u9605\u8BFB" },
+    { id: "immersive", label: "\u6C89\u6D78\u9605\u8BFB" },
     { id: "gitLog", label: "Git Log" },
     { id: "typing", label: "\u6253\u5B57\u7EC3\u4E60\uFF08\u5B9E\u9A8C\u6027\uFF09" },
     { id: "shortcuts", label: "\u5FEB\u6377\u952E" }
@@ -281,7 +312,7 @@
       }
       return;
     }
-    if (message.type === "sectionReset" && message.instanceId === instanceId && (message.section === "reader" || message.section === "gitLog") && typeof message.stateVersion === "number") {
+    if (message.type === "sectionReset" && message.instanceId === instanceId && (message.section === "reader" || message.section === "immersive" || message.section === "gitLog") && typeof message.stateVersion === "number") {
       state = settingsReducer(state, {
         type: "sectionReset",
         section: message.section,
@@ -292,7 +323,7 @@
       return;
     }
     if ((message.type === "sectionResetFailed" || message.type === "keyboardShortcutsFailed") && message.instanceId === instanceId) {
-      if (message.type === "sectionResetFailed" && (message.section === "reader" || message.section === "gitLog")) {
+      if (message.type === "sectionResetFailed" && (message.section === "reader" || message.section === "immersive" || message.section === "gitLog")) {
         state = settingsReducer(state, {
           type: "resetFailed",
           section: message.section,
@@ -428,9 +459,35 @@
   }
   function renderSection() {
     if (state.section === "reader") return renderReader();
+    if (state.section === "immersive") return renderImmersive();
     if (state.section === "gitLog") return renderGitLog();
     if (state.section === "typing") return renderTyping();
     return renderShortcuts();
+  }
+  function renderImmersive() {
+    const root = sectionRoot("\u6C89\u6D78\u9605\u8BFB", "\u63A7\u5236\u9644\u52A0\u5728\u4EE3\u7801\u884C\u672B\u5C3E\u7684\u7EAF\u6587\u672C\u5206\u9875\u4E0E\u5916\u89C2\u3002");
+    const preview = node("div", "immersive-preview");
+    preview.setAttribute("aria-label", "\u6C89\u6D78\u9605\u8BFB\u6548\u679C\u793A\u610F");
+    const previewText = node("span", "preview-code", "const focus = true;");
+    const previewAfter = node("span", "preview-after", "\u5728\u4EE3\u7801\u65C1\u5B89\u9759\u5730\u7EE7\u7EED\u9605\u8BFB");
+    previewAfter.style.color = state.immersive.textColor === "theme" ? "var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))" : state.immersive.textColor;
+    previewAfter.style.backgroundColor = state.immersive.backgroundColor === "transparent" ? "transparent" : state.immersive.backgroundColor;
+    previewAfter.style.fontWeight = state.immersive.fontWeight;
+    previewAfter.style.fontStyle = state.immersive.italic ? "italic" : "normal";
+    previewAfter.style.marginLeft = `${state.immersive.leftMargin}px`;
+    preview.append(previewText, previewAfter);
+    const fields = node("div", "settings-fields");
+    fields.append(
+      rangeField("\u6BCF\u9875\u89C6\u89C9\u884C\u6570", "immersive", "visualLines", state.immersive.visualLines, 1, 12, 1, " \u884C"),
+      rangeField("\u6BCF\u884C\u6700\u5927\u5B57\u5F62\u7C07\u6570", "immersive", "graphemesPerLine", state.immersive.graphemesPerLine, 8, 160, 1),
+      immersiveColorField("\u6587\u5B57\u989C\u8272", "textColor", state.immersive.textColor, "theme"),
+      immersiveColorField("\u80CC\u666F\u989C\u8272", "backgroundColor", state.immersive.backgroundColor, "transparent"),
+      selectField("\u5B57\u91CD", "immersive", "fontWeight", state.immersive.fontWeight, [["normal", "\u5E38\u89C4"], ["500", "\u4E2D\u7B49"], ["600", "\u534A\u7C97"], ["bold", "\u7C97\u4F53"]]),
+      toggleField("\u4F7F\u7528\u659C\u4F53", "immersive", "italic", state.immersive.italic),
+      rangeField("\u4E0E\u4EE3\u7801\u6587\u672C\u7684\u5DE6\u4FA7\u95F4\u8DDD", "immersive", "leftMargin", state.immersive.leftMargin, 0, 64, 1, "px")
+    );
+    root.append(preview, fields, resetButton("immersive", "\u6062\u590D\u6C89\u6D78\u9605\u8BFB\u9ED8\u8BA4\u503C"));
+    return root;
   }
   function sectionRoot(title, description) {
     const section = node("section", "settings-section");
@@ -663,6 +720,37 @@
     field.append(row);
     return field;
   }
+  function immersiveColorField(labelText, key, value, inheritedValue) {
+    const domain = "immersive";
+    const field = fieldShell(labelText, domain, key);
+    const row = node("div", "color-control");
+    const inherited = value === inheritedValue;
+    const fallbackVariable = key === "textColor" ? "--vscode-editorCodeLens-foreground" : "--vscode-editor-background";
+    const fallback = canonicalCssColor(getComputedStyle(document.documentElement).getPropertyValue(fallbackVariable)) ?? "#808080";
+    const color2 = node("input");
+    color2.type = "color";
+    color2.value = inherited ? fallback : value;
+    color2.id = controlId(domain, key);
+    const text = node("input");
+    text.type = "text";
+    text.value = inherited ? "" : value;
+    text.placeholder = inheritedValue === "theme" ? "\u8DDF\u968F\u4E3B\u9898" : "\u900F\u660E";
+    text.pattern = "#[0-9a-fA-F]{6}";
+    text.setAttribute("aria-label", `${labelText}\u5341\u516D\u8FDB\u5236\u503C`);
+    const resetLabel = inheritedValue === "theme" ? "\u8DDF\u968F\u4E3B\u9898" : "\u900F\u660E";
+    const reset = actionButton(resetLabel, () => change(domain, key, inheritedValue), "inline-button");
+    reset.setAttribute("aria-label", `${labelText}\u6062\u590D${resetLabel}`);
+    const pending = isControlPending(domain, key);
+    color2.disabled = text.disabled = pending;
+    reset.disabled = pending || inherited;
+    color2.addEventListener("change", () => change(domain, key, color2.value.toLowerCase()));
+    text.addEventListener("change", () => {
+      if (text.validity.valid) change(domain, key, text.value.toLowerCase());
+    });
+    row.append(color2, text, reset, node("span", "color-source", inherited ? `\u5F53\u524D\uFF1A${resetLabel}` : `\u5F53\u524D\uFF1A${value}`));
+    field.append(row);
+    return field;
+  }
   function inheritedReaderColor(key) {
     const presets = {
       light: { textColor: "#1f2328", backgroundColor: "#ffffff" },
@@ -748,6 +836,7 @@
   }
   function isControlPending(domain, key) {
     if (domain === "reader" && state.resettingSection === "reader") return true;
+    if (domain === "immersive" && state.resettingSection === "immersive") return true;
     if (domain === "gitLog" && state.resettingSection === "gitLog") return true;
     return state.pending[`${domain}.${key}`] !== void 0;
   }
@@ -758,10 +847,10 @@
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
   function isSnapshot(value) {
-    return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0 && sections.some((section) => section.id === value.section) && isRecord(value.reader) && isRecord(value.gitLog) && Array.isArray(value.configuration);
+    return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0 && sections.some((section) => section.id === value.section) && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog) && Array.isArray(value.configuration);
   }
   function isChangeResponse(value) {
-    return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && typeof value.requestId === "string" && Number.isSafeInteger(value.clientRevision) && (value.domain === "reader" || value.domain === "gitLog" || value.domain === "configuration") && typeof value.key === "string";
+    return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && typeof value.requestId === "string" && Number.isSafeInteger(value.clientRevision) && (value.domain === "reader" || value.domain === "immersive" || value.domain === "gitLog" || value.domain === "configuration") && typeof value.key === "string";
   }
 })();
 //# sourceMappingURL=settingsApp.js.map

@@ -40,6 +40,7 @@ let activeRangeSession: ActiveRangeSession | undefined;
 
 const sections: Array<{ id: SettingsSection; label: string }> = [
   { id: 'reader', label: '阅读' },
+  { id: 'immersive', label: '沉浸阅读' },
   { id: 'gitLog', label: 'Git Log' },
   { id: 'typing', label: '打字练习（实验性）' },
   { id: 'shortcuts', label: '快捷键' }
@@ -93,7 +94,7 @@ window.addEventListener('message', event => {
     return;
   }
   if (message.type === 'sectionReset' && message.instanceId === instanceId
-    && (message.section === 'reader' || message.section === 'gitLog')
+    && (message.section === 'reader' || message.section === 'immersive' || message.section === 'gitLog')
     && typeof message.stateVersion === 'number') {
     state = settingsReducer(state, {
       type: 'sectionReset', section: message.section, value: message.value as never, stateVersion: message.stateVersion
@@ -103,7 +104,7 @@ window.addEventListener('message', event => {
   }
   if ((message.type === 'sectionResetFailed' || message.type === 'keyboardShortcutsFailed')
     && message.instanceId === instanceId) {
-    if (message.type === 'sectionResetFailed' && (message.section === 'reader' || message.section === 'gitLog')) {
+    if (message.type === 'sectionResetFailed' && (message.section === 'reader' || message.section === 'immersive' || message.section === 'gitLog')) {
       state = settingsReducer(state, {
         type: 'resetFailed', section: message.section,
         message: typeof message.message === 'string' ? message.message : '恢复默认值失败，请重试。'
@@ -247,9 +248,37 @@ function cancelRangeWork(): void {
 
 function renderSection(): HTMLElement {
   if (state.section === 'reader') return renderReader();
+  if (state.section === 'immersive') return renderImmersive();
   if (state.section === 'gitLog') return renderGitLog();
   if (state.section === 'typing') return renderTyping();
   return renderShortcuts();
+}
+
+function renderImmersive(): HTMLElement {
+  const root = sectionRoot('沉浸阅读', '控制附加在代码行末尾的纯文本分页与外观。');
+  const preview = node('div', 'immersive-preview');
+  preview.setAttribute('aria-label', '沉浸阅读效果示意');
+  const previewText = node('span', 'preview-code', 'const focus = true;');
+  const previewAfter = node('span', 'preview-after', '在代码旁安静地继续阅读');
+  previewAfter.style.color = state.immersive.textColor === 'theme' ? 'var(--vscode-editorCodeLens-foreground, var(--vscode-descriptionForeground))' : state.immersive.textColor;
+  previewAfter.style.backgroundColor = state.immersive.backgroundColor === 'transparent' ? 'transparent' : state.immersive.backgroundColor;
+  previewAfter.style.fontWeight = state.immersive.fontWeight;
+  previewAfter.style.fontStyle = state.immersive.italic ? 'italic' : 'normal';
+  previewAfter.style.marginLeft = `${state.immersive.leftMargin}px`;
+  preview.append(previewText, previewAfter);
+
+  const fields = node('div', 'settings-fields');
+  fields.append(
+    rangeField('每页视觉行数', 'immersive', 'visualLines', state.immersive.visualLines, 1, 12, 1, ' 行'),
+    rangeField('每行最大字形簇数', 'immersive', 'graphemesPerLine', state.immersive.graphemesPerLine, 8, 160, 1),
+    immersiveColorField('文字颜色', 'textColor', state.immersive.textColor, 'theme'),
+    immersiveColorField('背景颜色', 'backgroundColor', state.immersive.backgroundColor, 'transparent'),
+    selectField('字重', 'immersive', 'fontWeight', state.immersive.fontWeight, [['normal', '常规'], ['500', '中等'], ['600', '半粗'], ['bold', '粗体']]),
+    toggleField('使用斜体', 'immersive', 'italic', state.immersive.italic),
+    rangeField('与代码文本的左侧间距', 'immersive', 'leftMargin', state.immersive.leftMargin, 0, 64, 1, 'px')
+  );
+  root.append(preview, fields, resetButton('immersive', '恢复沉浸阅读默认值'));
+  return root;
 }
 
 function sectionRoot(title: string, description: string): HTMLElement {
@@ -452,6 +481,30 @@ function colorField(labelText: string, key: string, value: string): HTMLElement 
   field.append(row); return field;
 }
 
+function immersiveColorField(labelText: string, key: 'textColor' | 'backgroundColor', value: string, inheritedValue: 'theme' | 'transparent'): HTMLElement {
+  const domain: SettingsDomain = 'immersive';
+  const field = fieldShell(labelText, domain, key);
+  const row = node('div', 'color-control');
+  const inherited = value === inheritedValue;
+  const fallbackVariable = key === 'textColor' ? '--vscode-editorCodeLens-foreground' : '--vscode-editor-background';
+  const fallback = canonicalCssColor(getComputedStyle(document.documentElement).getPropertyValue(fallbackVariable)) ?? '#808080';
+  const color = node('input') as HTMLInputElement;
+  color.type = 'color'; color.value = inherited ? fallback : value; color.id = controlId(domain, key);
+  const text = node('input') as HTMLInputElement;
+  text.type = 'text'; text.value = inherited ? '' : value; text.placeholder = inheritedValue === 'theme' ? '跟随主题' : '透明';
+  text.pattern = '#[0-9a-fA-F]{6}'; text.setAttribute('aria-label', `${labelText}十六进制值`);
+  const resetLabel = inheritedValue === 'theme' ? '跟随主题' : '透明';
+  const reset = actionButton(resetLabel, () => change(domain, key, inheritedValue), 'inline-button');
+  reset.setAttribute('aria-label', `${labelText}恢复${resetLabel}`);
+  const pending = isControlPending(domain, key);
+  color.disabled = text.disabled = pending; reset.disabled = pending || inherited;
+  color.addEventListener('change', () => change(domain, key, color.value.toLowerCase()));
+  text.addEventListener('change', () => { if (text.validity.valid) change(domain, key, text.value.toLowerCase()); });
+  row.append(color, text, reset, node('span', 'color-source', inherited ? `当前：${resetLabel}` : `当前：${value}`));
+  field.append(row);
+  return field;
+}
+
 function inheritedReaderColor(key: string): string {
   const presets: Record<string, { textColor: string; backgroundColor: string }> = {
     light: { textColor: '#1f2328', backgroundColor: '#ffffff' },
@@ -479,7 +532,7 @@ function fieldShell(labelText: string, domain: SettingsDomain, key: string): HTM
   field.htmlFor = controlId(domain, key); field.append(node('span', 'setting-label', labelText)); return field;
 }
 
-function resetButton(section: 'reader' | 'gitLog', label: string): HTMLButtonElement {
+function resetButton(section: 'reader' | 'immersive' | 'gitLog', label: string): HTMLButtonElement {
   const button = actionButton(label, () => {
     cancelRangeWork();
     const request = requestEnvelope();
@@ -540,6 +593,7 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string,
 function controlId(domain: SettingsDomain, key: string): string { return `${domain}-${key.replace(/[^A-Za-z0-9_-]/g, '-')}`; }
 function isControlPending(domain: SettingsDomain, key: string): boolean {
   if (domain === 'reader' && state.resettingSection === 'reader') return true;
+  if (domain === 'immersive' && state.resettingSection === 'immersive') return true;
   if (domain === 'gitLog' && state.resettingSection === 'gitLog') return true;
   return state.pending[`${domain}.${key}`] !== undefined;
 }
@@ -549,11 +603,11 @@ function isSnapshot(value: Record<string, any>): value is SettingsSnapshot {
   return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId
     && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0
     && sections.some(section => section.id === value.section)
-    && isRecord(value.reader) && isRecord(value.gitLog) && Array.isArray(value.configuration);
+    && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog) && Array.isArray(value.configuration);
 }
 function isChangeResponse(value: Record<string, any>): value is Extract<Parameters<typeof settingsReducer>[1], { type: 'changeSaved' | 'changeFailed' }> {
   return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion)
     && typeof value.requestId === 'string' && Number.isSafeInteger(value.clientRevision)
-    && (value.domain === 'reader' || value.domain === 'gitLog' || value.domain === 'configuration')
+    && (value.domain === 'reader' || value.domain === 'immersive' || value.domain === 'gitLog' || value.domain === 'configuration')
     && typeof value.key === 'string';
 }

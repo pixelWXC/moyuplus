@@ -15,7 +15,7 @@ export const OPEN_SETTINGS_COMMAND_ID = 'moyuplus.openSettings';
 export interface SettingsPanelAuthority {
   snapshot(section: SettingsSection): AuthoritySnapshot;
   change(domain: SettingsDomain, key: string, value: unknown): Promise<unknown>;
-  reset(section: 'reader' | 'gitLog'): Promise<unknown>;
+  reset(section: 'reader' | 'immersive' | 'gitLog'): Promise<unknown>;
 }
 
 export class MoyuPlusSettingsPanel implements vscode.Disposable {
@@ -180,6 +180,7 @@ export class MoyuPlusSettingsPanel implements vscode.Disposable {
   private authoritativeValue(domain: SettingsDomain, key: string): unknown {
     const snapshot = this.authority.snapshot(this.section);
     if (domain === 'reader') return snapshot.reader[key as keyof typeof snapshot.reader];
+    if (domain === 'immersive') return snapshot.immersive[key as keyof typeof snapshot.immersive];
     if (domain === 'gitLog') return snapshot.gitLog[key as keyof typeof snapshot.gitLog];
     return snapshot.configuration.find(item => item.key === key)?.globalValue;
   }

@@ -18,7 +18,8 @@ import {
   FOCUS_READER_COMMAND_ID,
   NEXT_READER_PAGE_COMMAND_ID,
   PREVIOUS_READER_PAGE_COMMAND_ID,
-  UNDO_READER_LOCATION_COMMAND_ID
+  UNDO_READER_LOCATION_COMMAND_ID,
+  STOP_IMMERSIVE_READING_COMMAND_ID
 } from '../../shortcuts/shortcutSettings';
 import {
   NEXT_READER_CHAPTER_COMMAND_ID, OPEN_READER_LIBRARY_COMMAND_ID, OPEN_READER_SETTINGS_COMMAND_ID,
@@ -127,6 +128,11 @@ describe('package contributions', () => {
           key: 'enter',
           when: expect.stringContaining('config.moyuplus.shortcuts.enableEnterRouter')
         }),
+        {
+          command: STOP_IMMERSIVE_READING_COMMAND_ID,
+          key: 'alt+shift+q',
+          when: 'moyuplus.immersiveReadingActive'
+        },
         expect.objectContaining({
           command: ROUTE_TAB_COMMAND_ID,
           key: 'tab',
@@ -177,6 +183,25 @@ describe('package contributions', () => {
     });
   });
 
+  it('shows the English immersive stop command in the editor context menu only while active', async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
+
+    expect(packageJson.contributes.commands).toContainEqual({
+      command: STOP_IMMERSIVE_READING_COMMAND_ID,
+      title: 'MoyuPlus: Stop Immersive Reading'
+    });
+    expect(packageJson.contributes.menus['editor/context'] ?? []).toContainEqual({
+      command: STOP_IMMERSIVE_READING_COMMAND_ID,
+      when: 'moyuplus.immersiveReadingActive',
+      group: 'navigation@99'
+    });
+    expect(packageJson.contributes.keybindings).toContainEqual({
+      command: STOP_IMMERSIVE_READING_COMMAND_ID,
+      key: 'alt+shift+q',
+      when: 'moyuplus.immersiveReadingActive'
+    });
+  });
+
   it('contributes commands for every action shown on the shortcut settings page', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
     const commandIds = packageJson.contributes.commands.map((command: { command: string }) => command.command);
@@ -191,6 +216,7 @@ describe('package contributions', () => {
       OPEN_READER_SETTINGS_COMMAND_ID,
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
+      STOP_IMMERSIVE_READING_COMMAND_ID,
       TOGGLE_GIT_LOG_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_COMMAND_ID
     ];

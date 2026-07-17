@@ -17,7 +17,15 @@ import {
 
 export const READER_APP_BUILD_TARGET = 'webview';
 interface VsCodeApi { postMessage(message: unknown): void }
-interface LibraryStateMessage { type: 'libraryState'; books: BookRecord[]; availability: Record<string, boolean>; progress: Record<string, number>; preferences?: ReaderPreferences }
+interface LibraryStateMessage {
+  type: 'libraryState';
+  books: BookRecord[];
+  availability: Record<string, boolean>;
+  progress: Record<string, number>;
+  immersiveBookId?: string;
+  libraryRevision: number;
+  preferences?: ReaderPreferences;
+}
 type ModeReaderRestoreMessage = Omit<LibraryStateMessage, 'type'> & {
   type: 'modeReaderRestore'; modeGeneration: number; book: BookRecord; requestId: string;
 };
@@ -39,6 +47,7 @@ let currentSourceRevision = '';
 let currentResourceIds = new Set<string>();
 let pendingNavigation: PendingNavigation | undefined;
 let initialEpubRestore: { textOffset: number; sourceRevision: string } | undefined;
+let initialTxtRestore: number | undefined;
 
 interface PendingNavigation {
   kind: 'move' | 'undo';
@@ -185,6 +194,14 @@ function openBook(book: LibraryBookItem): void {
   const requestId = `webview-${Date.now()}-${++requestSequence}`;
   dispatch({ type: 'openReader', book, requestId });
   post({ version: READER_PROTOCOL_VERSION, type: 'openBook', requestId, bookId: book.id });
+}
+function startImmersive(book: LibraryBookItem): void {
+  const requestId = `immersive-${Date.now()}-${++requestSequence}`;
+  post({ version: READER_PROTOCOL_VERSION, type: 'startImmersive', requestId, bookId: book.id });
+}
+function stopImmersive(book: LibraryBookItem): void {
+  const requestId = `immersive-stop-${Date.now()}-${++requestSequence}`;
+  post({ version: READER_PROTOCOL_VERSION, type: 'stopImmersive', requestId, bookId: book.id });
 }
 function requestAdjacent(type: 'requestNextSection' | 'requestPreviousSection'): void {
   const id = state.activeSectionId; const before = currentLocation();
@@ -339,6 +356,7 @@ function resetSectionContext(): void {
   pendingNavigation?.resolve?.(false);
   pendingNavigation = undefined;
   initialEpubRestore = undefined;
+  initialTxtRestore = undefined;
   currentSectionHtml = ''; currentSectionGeneration = 0; currentSourceRevision = '';
   currentResourceIds = new Set();
 }
@@ -347,7 +365,23 @@ function currentSectionTitle(): string { return state.sections?.find(section => 
 function formatReadingProgress(): string { const page = state.layout; return page ? `${page.pageIndex + 1} / ${page.pageCount}` : '—'; }
 
 function renderBook(book: LibraryBookItem): HTMLElement { const row = element('li', `book-row${book.available ? '' : ' is-missing'}`); const open = button('', 'book-open', () => openBook(book), !book.available); open.setAttribute('aria-label', `打开《${book.title}》`); const format = element('span', `format-badge format-${book.format}`, book.format.toUpperCase()); const copy = element('span', 'book-copy'); copy.append(element('strong', 'book-title', book.title), element('span', 'book-meta', `${book.authors.length ? book.authors.join('、') : '未知作者'} · ${formatProgress(book.progress)}`)); if (!book.available) copy.append(element('span', 'missing-status', '原文件已移动或删除')); open.append(format, copy); row.append(open, renderActions(book)); return row; }
-function renderActions(book: LibraryBookItem): HTMLElement { const actions = element('div', 'book-actions'); const labels: Record<LibraryBookAction, string> = { open: '阅读', startTypingPractice: '打字练习', relocate: '重新定位', remove: '移除' }; getLibraryBookActions(book).filter(action => action !== 'open').forEach(action => actions.append(button(labels[action], action === 'remove' ? 'danger-action' : 'subtle-action', () => action === 'remove' ? dispatch({ type: 'requestRemove', bookId: book.id }) : post({ type: action, bookId: book.id })))); return actions; }
+function renderActions(book: LibraryBookItem): HTMLElement {
+  const actions = element('div', 'book-actions');
+  const labels: Record<LibraryBookAction, string> = {
+    open: '阅读', startImmersive: '沉浸阅读', stopImmersive: '停止阅读',
+    startTypingPractice: '打字练习', relocate: '重新定位', remove: '移除'
+  };
+  getLibraryBookActions(book).filter(action => action !== 'open').forEach(action => {
+    const dangerous = action === 'remove' || action === 'stopImmersive';
+    actions.append(button(labels[action], dangerous ? 'danger-action' : 'subtle-action', () => {
+      if (action === 'remove') dispatch({ type: 'requestRemove', bookId: book.id });
+      else if (action === 'startImmersive') startImmersive(book);
+      else if (action === 'stopImmersive') stopImmersive(book);
+      else post({ type: action, bookId: book.id });
+    }));
+  });
+  return actions;
+}
 function renderRemovalConfirmation(bookId: string, message: string): HTMLElement { const book = state.books.find(item => item.id === bookId); const section = element('section', 'removal-confirmation'); section.setAttribute('role', 'alertdialog'); section.append(element('strong', undefined, `移除《${book?.title ?? '这本书'}》？`), element('p', undefined, message)); const actions = element('div', 'confirmation-actions'); actions.append(button('取消', 'subtle-action', () => dispatch({ type: 'cancelRemove' })), button('从书架移除', 'danger-button', () => post({ type: 'removeBook', bookId }))); section.append(actions); return section; }
 function formatProgress(progress: number): string { return progress <= 0 ? '未开始' : `已读 ${Math.round(progress * 100)}%`; }
 function iconButton(label: string, ariaLabel: string, handler: () => void, disabled = false): HTMLButtonElement { const target = button(label, 'icon-button', handler, disabled); target.setAttribute('aria-label', ariaLabel); target.title = ariaLabel; return target; }
@@ -370,6 +404,7 @@ window.addEventListener('message', event => {
     gitLogView?.dispose(); gitLogView = undefined;
     navigator.clear(); resetSectionContext();
     appMode = 'readerApp';
+    if (state.view !== 'library') state = readerAppReducer(state, { type: 'closeReader' });
     if (event.data.message) dispatch({ type: 'showError', message: event.data.message });
     else render();
     return;
@@ -381,7 +416,8 @@ window.addEventListener('message', event => {
     appMode = 'readerApp';
     state = readerAppReducer(state, {
       type: 'libraryLoaded', books: event.data.books,
-      availability: event.data.availability, progress: event.data.progress
+      availability: event.data.availability, progress: event.data.progress,
+      immersiveBookId: event.data.immersiveBookId, libraryRevision: event.data.libraryRevision
     });
     if (event.data.preferences) state = readerAppReducer(state, { type: 'preferencesLoaded', preferences: event.data.preferences });
     dispatch({ type: 'openReader', book: event.data.book, requestId: event.data.requestId });
@@ -423,12 +459,30 @@ window.addEventListener('message', event => {
     return;
   }
   const incoming = event.data as Partial<LibraryStateMessage>;
-  if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) { appMode = 'readerApp'; dispatch({ type: 'libraryLoaded', books: incoming.books, availability: incoming.availability ?? {}, progress: incoming.progress ?? {} }); if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences }); return; }
+  if (incoming.type === 'libraryState' && Array.isArray(incoming.books)) {
+    const shelfMode = appMode === 'boot' || (appMode === 'readerApp' && state.view === 'library');
+    if (!shelfMode || !isLibraryRevision(incoming.libraryRevision)
+      || incoming.libraryRevision <= state.libraryRevision) return;
+    appMode = 'readerApp';
+    dispatch({
+      type: 'libraryLoaded', books: incoming.books,
+      availability: incoming.availability ?? {}, progress: incoming.progress ?? {},
+      immersiveBookId: typeof incoming.immersiveBookId === 'string' ? incoming.immersiveBookId : undefined,
+      libraryRevision: incoming.libraryRevision
+    });
+    if (incoming.preferences) dispatch({ type: 'preferencesLoaded', preferences: incoming.preferences });
+    return;
+  }
   if (isLibraryLoadError(event.data)) { dispatch({ type: 'showError', message: event.data.message }); return; }
   if (appMode !== 'readerApp' || !isExtensionToReaderV2Message(event.data)) return;
   const message: ExtensionToReaderV2Message = event.data;
   if (!state.requestId || message.requestId !== state.requestId || message.bookId !== state.activeBook?.id) return;
   if (message.type === 'bookReady') {
+    initialTxtRestore = message.initialLocator.kind === 'txt'
+      && message.initialLocator.offsetSpace === 'book'
+      && message.initialLocator.offset !== undefined
+      ? message.initialLocator.offset
+      : undefined;
     initialEpubRestore = message.initialLocator.kind === 'epub'
       && message.initialLocator.textOffset !== undefined && message.initialLocator.sourceRevision
       ? { textOffset: message.initialLocator.textOffset, sourceRevision: message.initialLocator.sourceRevision }
@@ -451,7 +505,11 @@ window.addEventListener('message', event => {
         ? pending.target.textOffset : pending.target.progression * target.totalLength;
     } else if (pending?.edge === 'end') targetOffset = target.totalLength;
     else if (pending) targetOffset = target.offset ?? 0;
+    else if (initialTxtRestore !== undefined && message.section.locatorSpace.kind === 'txt') {
+      targetOffset = Math.max(0, initialTxtRestore - message.section.locatorSpace.sectionStart);
+    }
     else if (initialEpubRestore?.sourceRevision === message.section.sourceRevision) targetOffset = initialEpubRestore.textOffset;
+    else if (initialEpubRestore) targetOffset = 0;
     else targetOffset = (state.initialProgression ?? 0) * target.totalLength;
     const candidate = prepareSectionLayout(message.sectionId, message.section.sanitizedHtml, targetOffset ?? 0);
     if (!candidate) {
@@ -529,7 +587,7 @@ function isModeLibrary(value: unknown): value is { type: 'modeLibrary'; modeGene
 function isModeReaderRestore(value: unknown): value is ModeReaderRestoreMessage {
   return isRecord(value) && value.type === 'modeReaderRestore' && isRecord(value.book)
     && Array.isArray(value.books) && value.books.every(isRecord)
-    && isRecord(value.availability) && isRecord(value.progress)
+    && isRecord(value.availability) && isRecord(value.progress) && isLibraryRevision(value.libraryRevision)
     && isModeGeneration(value.modeGeneration) && typeof value.book.id === 'string' && typeof value.requestId === 'string';
 }
 
@@ -538,6 +596,10 @@ function isModeInvalidated(value: unknown): value is { type: 'modeInvalidated'; 
 }
 
 function isModeGeneration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function isLibraryRevision(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
@@ -551,4 +613,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+window.addEventListener('blur', () => post({ type: 'readerWebviewBlurred' }));
 render(); post({ type: 'appReady' });
