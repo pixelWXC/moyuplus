@@ -547,9 +547,7 @@
       commits: [],
       pageIndex: 0,
       pageCount: 1,
-      settingsOpen: false,
-      preferences,
-      preferencesDraft: preferences
+      preferences
     };
   }
   function gitLogReducer(state2, action) {
@@ -563,9 +561,8 @@
           branchName: action.cached.branchName,
           detached: action.cached.detached,
           commits: action.cached.commits,
-          preferences: state2.preferences,
-          preferencesDraft: state2.preferences
-        } : { ...createInitialGitLogState(), sessionId: action.sessionId, status: "loading", preferences: state2.preferences, preferencesDraft: state2.preferences };
+          preferences: state2.preferences
+        } : { ...createInitialGitLogState(), sessionId: action.sessionId, status: "loading", preferences: state2.preferences };
       case "ready":
         if (state2.sessionId !== action.sessionId) return state2;
         return {
@@ -585,19 +582,11 @@
       case "refreshFailed":
         return state2.sessionId === action.sessionId && state2.status === "ready" ? { ...state2, refreshNotice: action.message } : state2;
       case "invalidate":
-        return state2.sessionId === action.sessionId ? { ...createInitialGitLogState(), sessionId: void 0, preferences: state2.preferences, preferencesDraft: state2.preferences } : state2;
+        return state2.sessionId === action.sessionId ? { ...createInitialGitLogState(), sessionId: void 0, preferences: state2.preferences } : state2;
       case "preferencesLoaded": {
         const preferences = normalizeGitLogPreferences(action.preferences);
-        return { ...state2, preferences, preferencesDraft: preferences };
+        return { ...state2, preferences, pageIndex: 0 };
       }
-      case "openSettings":
-        return { ...state2, settingsOpen: true, preferencesDraft: state2.preferences };
-      case "closeSettings":
-        return { ...state2, settingsOpen: false, preferencesDraft: state2.preferences };
-      case "previewPreferences":
-        return { ...state2, preferencesDraft: normalizeGitLogPreferences({ ...state2.preferencesDraft, ...action.patch }) };
-      case "preferencesSaved":
-        return { ...state2, preferences: state2.preferencesDraft, settingsOpen: false, pageIndex: 0 };
       case "pageChanged":
         return { ...state2, pageIndex: action.pageIndex, pageCount: Math.max(1, action.pageCount) };
     }
@@ -614,6 +603,10 @@
       padding: `${preferences.pagePadding}px`,
       textAlign: preferences.textAlign
     });
+    if (preferences.textColor === "theme") target.style.removeProperty("color");
+    else target.style.color = preferences.textColor;
+    if (preferences.backgroundColor === "theme") target.style.removeProperty("background-color");
+    else target.style.backgroundColor = preferences.backgroundColor;
     target.style.setProperty("--paragraph-spacing", `${preferences.paragraphSpacing}em`);
   }
 
@@ -657,6 +650,13 @@
         this.reduce({ type: "invalidate", sessionId: message.sessionId });
       }
     }
+    updatePreferences(preferences) {
+      this.reduce({ type: "preferencesLoaded", preferences });
+    }
+    updateReaderPreferences(preferences) {
+      this.readerPreferences = preferences;
+      this.render();
+    }
     dispose() {
       this.paginator?.dispose();
       this.paginator = void 0;
@@ -675,7 +675,7 @@
       const toolbar = node("header", "reader-toolbar git-log-toolbar");
       toolbar.append(node("strong", "reader-title", "Git Log"));
       const tools = node("div", "reader-tools");
-      tools.append(iconButton("Aa", "Git Log \u8BBE\u7F6E", () => this.reduce({ type: "openSettings" })));
+      tools.append(iconButton("Aa", "Git Log \u8BBE\u7F6E", () => this.post({ type: "openUnifiedSettings", section: "gitLog" })));
       toolbar.append(tools);
       const context = node("div", "chapter-bar git-log-context");
       context.append(node("span", "chapter-title", this.contextLabel()));
@@ -700,7 +700,6 @@
         this.paginator = new GitLogPaginator(viewport, (page) => this.commitPage(page));
         this.paginator.setContent(this.commitContent());
       }
-      if (this.state.settingsOpen) this.root.append(this.settingsDrawer());
     }
     updateRefreshNotice() {
       this.root.querySelector(".git-log-refresh-notice")?.remove();
@@ -716,14 +715,14 @@
       return `${this.state.repositoryName ?? "\u5DE5\u4F5C\u533A"} \xB7 ${this.state.detached ? "detached " : ""}${this.state.branchName ?? "HEAD"}`;
     }
     commitContent() {
-      const content = node("div", `git-log-document git-layout-${this.state.preferencesDraft.layout}`);
+      const content = node("div", `git-log-document git-layout-${this.state.preferences.layout}`);
       for (const commit of this.state.commits) content.append(this.commitEntry(commit));
       return content;
     }
     commitEntry(commit) {
       const entry = node("article", "git-commit");
       const values = [commit.subject, ...this.optionalValues(commit)];
-      if (this.state.preferencesDraft.layout === "inline") {
+      if (this.state.preferences.layout === "inline") {
         entry.append(node("span", "git-commit-line", values.join(" \xB7 ")));
       } else {
         for (const value of values) entry.append(node("span", "git-commit-line", value));
@@ -731,7 +730,7 @@
       return entry;
     }
     optionalValues(commit) {
-      const preferences = this.state.preferencesDraft;
+      const preferences = this.state.preferences;
       const values = [];
       if (preferences.showHash) values.push(commit.hash.slice(0, 8));
       if (preferences.showAuthor) values.push(commit.author);
@@ -753,69 +752,6 @@
     }
     moveNext() {
       this.paginator?.nextPage();
-    }
-    settingsDrawer() {
-      const view = this;
-      const drawer = node("aside", "reader-drawer git-log-settings");
-      drawer.setAttribute("aria-label", "Git Log \u8BBE\u7F6E");
-      const header = node("header", "drawer-header");
-      header.append(node("h2", void 0, "Git Log \u8BBE\u7F6E"), iconButton("\xD7", "\u5173\u95ED Git Log \u8BBE\u7F6E", () => this.reduce({ type: "closeSettings" })));
-      const form = node("form", "settings-form");
-      form.append(
-        checkField("\u663E\u793A Hash", "showHash"),
-        checkField("\u663E\u793A\u4F5C\u8005", "showAuthor"),
-        checkField("\u663E\u793A\u76F8\u5BF9\u65F6\u95F4", "showRelativeTime"),
-        checkField("\u663E\u793A\u65E5\u671F", "showAbsoluteDate"),
-        selectField2("\u63D0\u4EA4\u5185\u6392\u5217", "layout", [["lines", "\u9010\u9879\u6362\u884C"], ["inline", "\u6807\u70B9\u5206\u9694"]]),
-        rangeField2("\u6700\u591A\u52A0\u8F7D", "maxCommits", 20, 1e3, 20)
-      );
-      const actions = node("div", "settings-actions");
-      actions.append(button("\u6062\u590D\u9ED8\u8BA4", "subtle-button", () => {
-        this.state = gitLogReducer(this.state, { type: "previewPreferences", patch: createDefaultGitLogPreferences() });
-        this.render();
-      }), button("\u4FDD\u5B58", "primary-action", () => {
-        const preferences = this.state.preferencesDraft;
-        this.state = gitLogReducer(this.state, { type: "preferencesSaved" });
-        this.post({ type: "saveGitLogPreferences", preferences });
-        this.render();
-      }));
-      form.append(actions);
-      drawer.append(header, form);
-      return drawer;
-      function checkField(label, key) {
-        const field = node("label", "setting-field git-check-field");
-        const input = node("input");
-        input.type = "checkbox";
-        input.checked = Boolean(view.state.preferencesDraft[key]);
-        input.addEventListener("change", () => preview2({ [key]: input.checked }));
-        field.append(node("span", void 0, label), input);
-        return field;
-      }
-      function selectField2(label, key, options) {
-        const field = node("label", "setting-field");
-        const select = node("select");
-        for (const [value, text] of options) {
-          const option = node("option", void 0, text);
-          option.value = value;
-          option.selected = view.state.preferencesDraft[key] === value;
-          select.append(option);
-        }
-        select.addEventListener("change", () => preview2({ [key]: select.value }));
-        field.append(node("span", void 0, label), select);
-        return field;
-      }
-      function rangeField2(label, key, min, max, step) {
-        const field = node("label", "setting-field range-field");
-        const value = view.state.preferencesDraft[key];
-        const input = node("input");
-        Object.assign(input, { type: "range", min: String(min), max: String(max), step: String(step), value: String(value) });
-        input.addEventListener("input", () => preview2({ [key]: Number(input.value) }));
-        field.append(node("span", void 0, `${label} ${value}`), input);
-        return field;
-      }
-      function preview2(patch) {
-        view.reduce({ type: "previewPreferences", patch });
-      }
     }
   };
   function node(tag, className, text) {
@@ -943,8 +879,8 @@
       lineHeight: 1.6,
       letterSpacing: 0,
       paragraphSpacing: 0.75,
-      textColor: "#1f2328",
-      backgroundColor: "#ffffff",
+      textColor: "theme",
+      backgroundColor: "theme",
       pagePadding: 24,
       textAlign: "left",
       theme: "system"
@@ -969,8 +905,8 @@
         READER_PREFERENCE_LIMITS.paragraphSpacing,
         defaults.paragraphSpacing
       ),
-      textColor: normalizeColor(value.textColor) ?? defaults.textColor,
-      backgroundColor: normalizeColor(value.backgroundColor) ?? defaults.backgroundColor,
+      textColor: normalizeReaderColor(value.textColor) ?? defaults.textColor,
+      backgroundColor: normalizeReaderColor(value.backgroundColor) ?? defaults.backgroundColor,
       pagePadding: normalizeNumber(value.pagePadding, READER_PREFERENCE_LIMITS.pagePadding, defaults.pagePadding),
       textAlign: isTextAlign(value.textAlign) ? value.textAlign : defaults.textAlign,
       theme: isTheme(value.theme) ? value.theme : defaults.theme
@@ -982,7 +918,10 @@
     }
     return Math.min(limits.max, Math.max(limits.min, value));
   }
-  function normalizeColor(value) {
+  function normalizeReaderColor(value) {
+    if (value === "theme") {
+      return value;
+    }
     if (typeof value !== "string") {
       return void 0;
     }
@@ -1009,7 +948,7 @@
   var REMOVE_BOOK_CONFIRMATION = "\u4EC5\u4ECE MoyuPlus \u4E66\u67B6\u79FB\u9664\uFF0C\u4E0D\u4F1A\u5220\u9664\u539F\u6587\u4EF6\u3002";
   function createInitialReaderAppState() {
     const preferences = createDefaultReaderPreferences();
-    return { view: "library", status: "loading", books: [], preferences, preferencesDraft: preferences };
+    return { view: "library", status: "loading", books: [], preferences };
   }
   function readerAppReducer(state2, action) {
     switch (action.type) {
@@ -1074,14 +1013,8 @@
         return { ...state2, notice: action.edge === "start" ? "\u5DF2\u5230\u672C\u4E66\u5F00\u5934" : "\u5DF2\u8BFB\u5B8C\u672C\u4E66" };
       case "preferencesLoaded": {
         const preferences = normalizeReaderPreferences(action.preferences);
-        return { ...state2, preferences, preferencesDraft: preferences };
+        return { ...state2, preferences };
       }
-      case "previewPreferences":
-        return { ...state2, preferencesDraft: normalizeReaderPreferences({ ...state2.preferencesDraft, ...action.patch }) };
-      case "preferencesSaved":
-        return { ...state2, preferences: state2.preferencesDraft };
-      case "resetPreferences":
-        return { ...state2, preferencesDraft: createDefaultReaderPreferences() };
     }
   }
   function navigationFor(sections, sectionId) {
@@ -1189,7 +1122,7 @@
       void undoLocation();
     }, !navigator.canUndo);
     undo.id = "undo-location";
-    tools.append(undo, iconButton2("\u2630", "\u76EE\u5F55", () => dispatch({ type: "openDrawer", drawer: "toc" })), iconButton2("Aa", "\u9605\u8BFB\u8BBE\u7F6E", () => dispatch({ type: "openDrawer", drawer: "settings" })));
+    tools.append(undo, iconButton2("\u2630", "\u76EE\u5F55", () => dispatch({ type: "openDrawer", drawer: "toc" })), iconButton2("Aa", "\u9605\u8BFB\u8BBE\u7F6E", () => post({ type: "openUnifiedSettings", section: "reader" })));
     toolbar.append(tools);
     root.append(toolbar);
     const chapter = element("nav", "chapter-bar");
@@ -1217,7 +1150,7 @@
     next.id = "next-page";
     footer.append(previous, progress, next);
     root.append(footer);
-    applyReaderPreferences(page, state.preferencesDraft);
+    applyReaderPreferences(page, state.preferences);
     page.addEventListener("click", handleReaderContentClick);
     const priorLayout = state.layout;
     let priorProgression = 0;
@@ -1237,7 +1170,6 @@
     if (!app || appMode !== "readerApp" || state.view !== "reader") return;
     app.querySelector(":scope > .reader-drawer")?.remove();
     if (state.drawer === "toc") app.append(renderTocDrawer());
-    if (state.drawer === "settings") app.append(renderSettingsDrawer());
   }
   function syncReaderSectionUi() {
     const title = document.querySelector("#chapter-title");
@@ -1283,34 +1215,6 @@
       parent.append(item);
     });
   }
-  function renderSettingsDrawer() {
-    const drawer = drawerShell("\u9605\u8BFB\u8BBE\u7F6E");
-    const form = element("form", "settings-form");
-    form.append(
-      selectField("\u5B57\u4F53", "fontFamily", [["system", "VS Code"], ["serif", "\u886C\u7EBF"], ["sans-serif", "\u65E0\u886C\u7EBF"]]),
-      rangeField("\u5B57\u53F7", "fontSize", 12, 32, 1),
-      rangeField("\u884C\u9AD8", "lineHeight", 1.2, 2.4, 0.1),
-      rangeField("\u5B57\u8DDD", "letterSpacing", -0.05, 0.2, 0.01),
-      rangeField("\u6BB5\u8DDD", "paragraphSpacing", 0, 3, 0.25),
-      rangeField("\u9875\u8FB9\u8DDD", "pagePadding", 8, 64, 2),
-      selectField("\u5BF9\u9F50", "textAlign", [["left", "\u5DE6\u5BF9\u9F50"], ["justify", "\u4E24\u7AEF\u5BF9\u9F50"]]),
-      selectField("\u4E3B\u9898", "theme", [["system", "\u8DDF\u968F VS Code"], ["light", "\u660E\u4EAE"], ["sepia", "\u7EB8\u5F20"], ["dark", "\u6DF1\u8272"]])
-    );
-    const actions = element("div", "settings-actions");
-    actions.append(
-      button2("\u6062\u590D\u9ED8\u8BA4", "subtle-button", () => {
-        dispatch({ type: "resetPreferences" });
-        layout?.requestReflow();
-      }),
-      button2("\u4FDD\u5B58", "primary-action", () => {
-        dispatch({ type: "preferencesSaved" });
-        post({ type: "savePreferences", preferences: state.preferencesDraft });
-      })
-    );
-    form.append(actions);
-    drawer.append(form);
-    return drawer;
-  }
   function drawerShell(title) {
     const drawer = element("aside", "reader-drawer");
     drawer.setAttribute("aria-label", title);
@@ -1318,34 +1222,6 @@
     header.append(element("h2", void 0, title), iconButton2("\xD7", `\u5173\u95ED${title}`, () => dispatch({ type: "closeDrawer" })));
     drawer.append(header);
     return drawer;
-  }
-  function selectField(label, key, options) {
-    const field = element("label", "setting-field");
-    field.append(element("span", void 0, label));
-    const select = element("select");
-    options.forEach(([value, text]) => {
-      const option = element("option", void 0, text);
-      option.value = value;
-      option.selected = state.preferencesDraft[key] === value;
-      select.append(option);
-    });
-    select.addEventListener("change", () => preview(key, select.value));
-    field.append(select);
-    return field;
-  }
-  function rangeField(label, key, min, max, step) {
-    const field = element("label", "setting-field range-field");
-    const value = Number(state.preferencesDraft[key]);
-    field.append(element("span", void 0, `${label} ${value}`));
-    const input = element("input");
-    Object.assign(input, { type: "range", min: String(min), max: String(max), step: String(step), value: String(value) });
-    input.addEventListener("input", () => preview(key, Number(input.value)));
-    field.append(input);
-    return field;
-  }
-  function preview(key, value) {
-    dispatch({ type: "previewPreferences", patch: { [key]: value } });
-    layout?.requestReflow();
   }
   function openBook(book) {
     navigator.clear();
@@ -1659,7 +1535,16 @@
       else if (command === "previousChapter") requestAdjacent("requestPreviousSection");
       else if (command === "openLibrary") closeBook();
       else if (command === "openToc") dispatch({ type: "openDrawer", drawer: "toc" });
-      else if (command === "openSettings") dispatch({ type: "openDrawer", drawer: "settings" });
+      else if (command === "openSettings") post({ type: "openUnifiedSettings", section: "reader" });
+      return;
+    }
+    if (isRecord6(event.data) && event.data.type === "readerPreferencesUpdated" && isRecord6(event.data.preferences)) {
+      if (appMode === "gitLog") gitLogView?.updateReaderPreferences(event.data.preferences);
+      else dispatch({ type: "preferencesLoaded", preferences: event.data.preferences });
+      return;
+    }
+    if (isRecord6(event.data) && event.data.type === "gitLogPreferencesUpdated" && isRecord6(event.data.preferences)) {
+      if (appMode === "gitLog") gitLogView?.updatePreferences(event.data.preferences);
       return;
     }
     const incoming = event.data;

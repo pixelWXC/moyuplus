@@ -56,6 +56,7 @@ export interface ReaderLibraryBridge {
   relocateBook?(bookId: string): void | PromiseLike<unknown>;
   startTypingPractice?(bookId: string): void | PromiseLike<unknown>;
   savePreferences?(preferences: unknown): void | PromiseLike<unknown>;
+  openSettings?(section: 'reader' | 'gitLog'): void | PromiseLike<void>;
 }
 
 export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoordinatorView, vscode.Disposable {
@@ -207,6 +208,25 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
     return !this.disposed && this.view ? this.view.webview.postMessage(message) : false;
   }
 
+  async applyReaderPreferences(preferences: unknown): Promise<void> {
+    await this.postMessage({ type: 'readerPreferencesUpdated', preferences });
+  }
+
+  async applyGitLogPreferences(preferences: unknown, previous?: { maxCommits?: number }): Promise<void> {
+    await this.postMessage({ type: 'gitLogPreferencesUpdated', preferences });
+    const next = isRecord(preferences) ? preferences.maxCommits : undefined;
+    if (typeof next === 'number' && next !== previous?.maxCommits
+      && this.git?.modeStore.get().active && this.isVisible()) {
+      await this.coordinator?.visibilityChanged();
+    }
+  }
+
+  async openSettings(section: 'reader' | 'gitLog'): Promise<boolean> {
+    if (!this.library?.openSettings) return false;
+    await this.library.openSettings(section);
+    return true;
+  }
+
   private async handleMessage(value: unknown): Promise<void> {
     if (this.disposed) return;
     if (isRecord(value) && (value.type === 'libraryReady' || value.type === 'appReady')) {
@@ -216,6 +236,11 @@ export class ReaderViewProvider implements vscode.WebviewViewProvider, GitLogCoo
           await this.coordinator.bootstrap();
         }
       } else await this.refreshLibrary();
+      return;
+    }
+    if (isRecord(value) && value.type === 'openUnifiedSettings'
+      && (value.section === 'reader' || value.section === 'gitLog')) {
+      await this.library?.openSettings?.(value.section);
       return;
     }
     if (isGitLogToExtensionMessage(value) && this.git) {
@@ -426,7 +451,7 @@ export function registerReaderView(
     vscode.commands.registerCommand(PREVIOUS_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('previousChapter')),
     vscode.commands.registerCommand(NEXT_READER_CHAPTER_COMMAND_ID, () => provider.requestReaderCommand('nextChapter')),
     vscode.commands.registerCommand(OPEN_READER_TOC_COMMAND_ID, () => provider.requestReaderCommand('openToc')),
-    vscode.commands.registerCommand(OPEN_READER_SETTINGS_COMMAND_ID, () => provider.requestReaderCommand('openSettings')),
+    vscode.commands.registerCommand(OPEN_READER_SETTINGS_COMMAND_ID, () => provider.openSettings('reader')),
     ...(coordinator ? [vscode.commands.registerCommand(TOGGLE_GIT_LOG_COMMAND_ID, () => coordinator.toggle())] : [])
   );
   return provider;

@@ -30,14 +30,13 @@ describe('Git Log Webview state', () => {
     })).toMatchObject({ status: 'ready', commits: [commit], pageIndex: 0 });
   });
 
-  it('keeps a separate settings draft and resets page on save', () => {
+  it('applies authoritative preferences without retaining a second settings draft', () => {
     let state = gitLogReducer(createInitialGitLogState(), { type: 'begin', sessionId: 'g1' });
-    state = gitLogReducer(state, { type: 'preferencesLoaded', preferences: createDefaultGitLogPreferences() });
-    state = gitLogReducer(state, { type: 'openSettings' });
-    state = gitLogReducer(state, { type: 'previewPreferences', patch: { layout: 'inline', showHash: false } });
     state = { ...state, pageIndex: 3 };
-    state = gitLogReducer(state, { type: 'preferencesSaved' });
-    expect(state).toMatchObject({ settingsOpen: false, pageIndex: 0, preferences: { layout: 'inline', showHash: false } });
+    state = gitLogReducer(state, { type: 'preferencesLoaded', preferences: { ...createDefaultGitLogPreferences(), layout: 'inline', showHash: false } });
+    expect(state).toMatchObject({ pageIndex: 0, preferences: { layout: 'inline', showHash: false } });
+    expect(state).not.toHaveProperty('settingsOpen');
+    expect(state).not.toHaveProperty('preferencesDraft');
   });
 
   it('invalidates commits and page data without retaining the old session', () => {
@@ -54,11 +53,11 @@ describe('Git Log Webview state', () => {
         repositoryName: 'repo', branchName: 'main', detached: false, commits: [commit]
       }
     });
-    state = { ...state, pageIndex: 3, pageCount: 5, settingsOpen: true };
+    state = { ...state, pageIndex: 3, pageCount: 5 };
     const failed = gitLogReducer(state, { type: 'refreshFailed', sessionId: 'g1', message: '刷新失败，正在显示上次结果。' });
 
     expect(failed).toMatchObject({
-      status: 'ready', commits: [commit], pageIndex: 3, pageCount: 5, settingsOpen: true,
+      status: 'ready', commits: [commit], pageIndex: 3, pageCount: 5,
       refreshNotice: '刷新失败，正在显示上次结果。'
     });
     expect(gitLogReducer(failed, { type: 'refreshFailed', sessionId: 'stale', message: 'stale' })).toEqual(failed);

@@ -98,7 +98,7 @@ function renderReader(root: HTMLElement): void {
   toolbar.append(iconButton('←', '返回书架', closeBook), element('strong', 'reader-title', state.activeBook?.title ?? '阅读'));
   const tools = element('div', 'reader-tools');
   const undo = iconButton('↶', '撤回阅读位置', () => { void undoLocation(); }, !navigator.canUndo); undo.id = 'undo-location';
-  tools.append(undo, iconButton('☰', '目录', () => dispatch({ type: 'openDrawer', drawer: 'toc' })), iconButton('Aa', '阅读设置', () => dispatch({ type: 'openDrawer', drawer: 'settings' })));
+  tools.append(undo, iconButton('☰', '目录', () => dispatch({ type: 'openDrawer', drawer: 'toc' })), iconButton('Aa', '阅读设置', () => post({ type: 'openUnifiedSettings', section: 'reader' })));
   toolbar.append(tools); root.append(toolbar);
 
   const chapter = element('nav', 'chapter-bar'); chapter.setAttribute('aria-label', '章节导航');
@@ -117,7 +117,7 @@ function renderReader(root: HTMLElement): void {
   const progress = element('span', 'page-progress', formatReadingProgress()); progress.id = 'page-progress';
   const next = button('下一页', 'page-action', nextPage, !state.navigation?.canNextPage); next.id = 'next-page';
   footer.append(previous, progress, next); root.append(footer);
-  applyReaderPreferences(page, state.preferencesDraft);
+  applyReaderPreferences(page, state.preferences);
   page.addEventListener('click', handleReaderContentClick);
   const priorLayout = state.layout;
   let priorProgression = 0;
@@ -138,7 +138,6 @@ function syncReaderDrawer(): void {
   if (!app || appMode !== 'readerApp' || state.view !== 'reader') return;
   app.querySelector(':scope > .reader-drawer')?.remove();
   if (state.drawer === 'toc') app.append(renderTocDrawer());
-  if (state.drawer === 'settings') app.append(renderSettingsDrawer());
 }
 
 function syncReaderSectionUi(): void {
@@ -177,37 +176,10 @@ function appendTocNodes(parent: HTMLElement, nodes: NonNullable<typeof state.toc
     if (node.children?.length) { const nested = element('ol', 'toc-list'); appendTocNodes(nested, node.children, depth + 1); item.append(nested); }
     parent.append(item); });
 }
-function renderSettingsDrawer(): HTMLElement {
-  const drawer = drawerShell('阅读设置'); const form = element('form', 'settings-form');
-  form.append(selectField('字体', 'fontFamily', [['system', 'VS Code'], ['serif', '衬线'], ['sans-serif', '无衬线']]),
-    rangeField('字号', 'fontSize', 12, 32, 1), rangeField('行高', 'lineHeight', 1.2, 2.4, .1),
-    rangeField('字距', 'letterSpacing', -.05, .2, .01), rangeField('段距', 'paragraphSpacing', 0, 3, .25),
-    rangeField('页边距', 'pagePadding', 8, 64, 2),
-    selectField('对齐', 'textAlign', [['left', '左对齐'], ['justify', '两端对齐']]),
-    selectField('主题', 'theme', [['system', '跟随 VS Code'], ['light', '明亮'], ['sepia', '纸张'], ['dark', '深色']]));
-  const actions = element('div', 'settings-actions');
-  actions.append(button('恢复默认', 'subtle-button', () => { dispatch({ type: 'resetPreferences' }); layout?.requestReflow(); }),
-    button('保存', 'primary-action', () => { dispatch({ type: 'preferencesSaved' }); post({ type: 'savePreferences', preferences: state.preferencesDraft }); }));
-  form.append(actions); drawer.append(form); return drawer;
-}
-
 function drawerShell(title: string): HTMLElement {
   const drawer = element('aside', 'reader-drawer'); drawer.setAttribute('aria-label', title);
   const header = element('header', 'drawer-header'); header.append(element('h2', undefined, title), iconButton('×', `关闭${title}`, () => dispatch({ type: 'closeDrawer' }))); drawer.append(header); return drawer;
 }
-function selectField(label: string, key: keyof ReaderPreferences, options: string[][]): HTMLElement {
-  const field = element('label', 'setting-field'); field.append(element('span', undefined, label)); const select = element('select') as HTMLSelectElement;
-  options.forEach(([value, text]) => { const option = element('option', undefined, text) as HTMLOptionElement; option.value = value; option.selected = state.preferencesDraft[key] === value; select.append(option); });
-  select.addEventListener('change', () => preview(key, select.value)); field.append(select); return field;
-}
-function rangeField(label: string, key: keyof ReaderPreferences, min: number, max: number, step: number): HTMLElement {
-  const field = element('label', 'setting-field range-field'); const value = Number(state.preferencesDraft[key]);
-  field.append(element('span', undefined, `${label} ${value}`)); const input = element('input') as HTMLInputElement;
-  Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step), value: String(value) });
-  input.addEventListener('input', () => preview(key, Number(input.value))); field.append(input); return field;
-}
-function preview(key: keyof ReaderPreferences, value: unknown): void { dispatch({ type: 'previewPreferences', patch: { [key]: value } }); layout?.requestReflow(); }
-
 function openBook(book: LibraryBookItem): void {
   navigator.clear(); resetSectionContext();
   const requestId = `webview-${Date.now()}-${++requestSequence}`;
@@ -438,7 +410,16 @@ window.addEventListener('message', event => {
     else if (command === 'previousChapter') requestAdjacent('requestPreviousSection');
     else if (command === 'openLibrary') closeBook();
     else if (command === 'openToc') dispatch({ type: 'openDrawer', drawer: 'toc' });
-    else if (command === 'openSettings') dispatch({ type: 'openDrawer', drawer: 'settings' });
+    else if (command === 'openSettings') post({ type: 'openUnifiedSettings', section: 'reader' });
+    return;
+  }
+  if (isRecord(event.data) && event.data.type === 'readerPreferencesUpdated' && isRecord(event.data.preferences)) {
+    if (appMode === 'gitLog') gitLogView?.updateReaderPreferences(event.data.preferences as unknown as ReaderPreferences);
+    else dispatch({ type: 'preferencesLoaded', preferences: event.data.preferences as unknown as ReaderPreferences });
+    return;
+  }
+  if (isRecord(event.data) && event.data.type === 'gitLogPreferencesUpdated' && isRecord(event.data.preferences)) {
+    if (appMode === 'gitLog') gitLogView?.updatePreferences(event.data.preferences as unknown as GitLogPreferences);
     return;
   }
   const incoming = event.data as Partial<LibraryStateMessage>;

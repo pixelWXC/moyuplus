@@ -32,6 +32,7 @@
     "onCommand:moyuplus.reader.openLibrary",
     "onCommand:moyuplus.reader.openToc",
     "onCommand:moyuplus.reader.openSettings",
+    "onCommand:moyuplus.openSettings",
     "onCommand:moyuplus.reader.focus",
     "onCommand:moyuplus.reader.close",
     "onCommand:moyuplus.gitLog.toggle",
@@ -123,6 +124,10 @@
         "title": "MoyuPlus: Open Reader Settings"
       },
       {
+        "command": "moyuplus.openSettings",
+        "title": "MoyuPlus Settings"
+      },
+      {
         "command": "moyuplus.reader.focus",
         "title": "MoyuPlus: Open Reader"
       },
@@ -156,6 +161,12 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "moyuplus.openSettings",
+          "group": "navigation@100"
+        }
+      ],
       "commandPalette": [
         {
           "command": "moyuplus.gitLog.toggle",

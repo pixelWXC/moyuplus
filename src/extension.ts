@@ -38,6 +38,9 @@ import {
   registerLibraryCommands
 } from './commands/libraryCommands';
 import { registerMoyuplusImagePreviewService } from './reader/imagePreviewService';
+import { SettingsAuthority, SETTINGS_CONFIGURATION_KEYS } from './settings/settingsAuthority';
+import { MoyuPlusSettingsPanel, OPEN_SETTINGS_COMMAND_ID } from './settings/MoyuPlusSettingsPanel';
+import { createVSCodeSettingsConfigurationBridge } from './settings/vscodeSettingsConfiguration';
 
 export const SMOKE_COMMAND_ID = 'moyuplus.smokeTest';
 export const SMOKE_MESSAGE = 'MoyuPlus extension is active.';
@@ -98,9 +101,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const readerController = new ReaderController(books, progress, adapters, async (message) => {
     await readerViewProvider?.postMessage(message);
   }, { openImagePreview: payload => imagePreview.open(payload) });
+  const settingsAuthority = new SettingsAuthority({
+    readerStore: preferences,
+    gitLogStore: gitLogPreferences,
+    configuration: createVSCodeSettingsConfigurationBridge(),
+    onReaderSaved: value => readerViewProvider?.applyReaderPreferences(value),
+    onGitLogSaved: (value, previous) => readerViewProvider?.applyGitLogPreferences(value, previous)
+  });
+  const settingsPanel = new MoyuPlusSettingsPanel(context.extensionUri ?? vscode.Uri.file('.'), settingsAuthority);
 
   registerSmokeCommand(context);
   registerLibraryCommands(context, library);
+  context.subscriptions.push(
+    settingsPanel,
+    vscode.commands.registerCommand(OPEN_SETTINGS_COMMAND_ID, () => settingsPanel.open('reader')),
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (SETTINGS_CONFIGURATION_KEYS.some(key => event.affectsConfiguration(key))) settingsPanel.refresh();
+    })
+  );
   readerViewProvider = registerReaderView(context, readerController, {
     snapshot: async () => ({
       books: books.list(),
@@ -112,7 +130,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     removeBook: (bookId) => library.removeBook(bookId),
     relocateBook: (bookId) => vscode.commands.executeCommand(RELOCATE_BOOK_COMMAND_ID, bookId),
     startTypingPractice: (bookId) => vscode.commands.executeCommand(START_TYPING_PRACTICE_COMMAND_ID, bookId),
-    savePreferences: (value) => preferences.save(value as never)
+    savePreferences: (value) => preferences.save(value as never),
+    openSettings: section => settingsPanel.open(section)
   }, {
     modeStore: gitLogMode,
     preferencesStore: gitLogPreferences,

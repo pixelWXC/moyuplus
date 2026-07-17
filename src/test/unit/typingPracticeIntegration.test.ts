@@ -19,6 +19,7 @@ import { IMPORT_BOOK_COMMAND_ID, RELOCATE_BOOK_COMMAND_ID, REMOVE_BOOK_COMMAND_I
 import { createDefaultTypingPracticeSession } from '../../domain/models';
 import { READER_PROTOCOL_VERSION, READER_VIEW_ID } from '../../reader/readerMessages';
 import { TYPING_PRACTICE_SESSION_KEY } from '../../storage/storageKeys';
+import { OPEN_SETTINGS_COMMAND_ID } from '../../settings/MoyuPlusSettingsPanel';
 import {
   CLOSE_READER_COMMAND_ID,
   FOCUS_READER_COMMAND_ID,
@@ -94,6 +95,7 @@ describe('typing practice registration and VS Code integration', () => {
       IMPORT_BOOK_COMMAND_ID,
       REMOVE_BOOK_COMMAND_ID,
       RELOCATE_BOOK_COMMAND_ID,
+      OPEN_SETTINGS_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
       UNDO_READER_LOCATION_COMMAND_ID,

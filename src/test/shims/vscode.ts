@@ -47,11 +47,26 @@ export interface WebviewView {
   dispose(): Promise<void>;
 }
 
+export interface WebviewPanel {
+  readonly viewType: string;
+  readonly title: string;
+  readonly webview: Webview;
+  visible: boolean;
+  active: boolean;
+  readonly revealCalls: Array<{ viewColumn?: number; preserveFocus?: boolean }>;
+  reveal(viewColumn?: number, preserveFocus?: boolean): void;
+  onDidChangeViewState(callback: (event: { webviewPanel: WebviewPanel }) => unknown): Disposable;
+  onDidDispose(callback: () => unknown): Disposable;
+  setVisible(visible: boolean): Promise<void>;
+  dispose(): Promise<void>;
+}
+
 export interface TextLine {
   text: string;
 }
 
 export interface TextDocument {
+  readonly uri?: Uri;
   lineAt(line: number): TextLine;
 }
 
@@ -106,6 +121,14 @@ export class Uri {
 
   toString(): string {
     return this.value;
+  }
+
+  get scheme(): string {
+    return this.value.split(':', 1)[0];
+  }
+
+  get fsPath(): string {
+    return decodeURI(this.value.replace(/^file:\/\//, ''));
   }
 }
 
@@ -184,6 +207,8 @@ export const window = {
   inputBoxResult: undefined as string | undefined,
   statusBarItems: [] as TestStatusBarItem[],
   activeTextEditor: undefined as TextEditor | undefined,
+  nextWarningMessageResult: undefined as string | false | undefined,
+  createdWebviewPanels: [] as WebviewPanel[],
 
   async showInformationMessage(message: string): Promise<string> {
     window.informationMessages.push(message);
@@ -192,7 +217,9 @@ export const window = {
 
   async showWarningMessage(message: string): Promise<string> {
     window.warningMessages.push(message);
-    return message;
+    const result = window.nextWarningMessageResult;
+    window.nextWarningMessageResult = undefined;
+    return result === false ? undefined as never : (result ?? message);
   },
 
   async showErrorMessage(message: string): Promise<string> {
@@ -247,16 +274,30 @@ export const window = {
 
   registeredCustomEditorProvider(viewType: string): CustomReadonlyEditorProvider | undefined {
     return registeredCustomEditorProviders.get(viewType);
+  },
+
+  createWebviewPanel(
+    viewType: string,
+    title: string,
+    _showOptions: unknown,
+    options: { enableScripts?: boolean; localResourceRoots?: Uri[] }
+  ): WebviewPanel {
+    const panel = new TestWebviewPanel(viewType, title, options);
+    window.createdWebviewPanels.push(panel);
+    return panel;
   }
 };
 
 export const workspace = {
-  workspaceFolders: undefined as { uri: Uri }[] | undefined,
+  workspaceFolders: undefined as { name?: string; uri: Uri }[] | undefined,
   configurationValues: {} as Record<string, unknown>,
+  configurationDefaults: {} as Record<string, unknown>,
+  configurationCallbacks: [] as Array<(event: { affectsConfiguration(key: string): boolean }) => unknown>,
 
-  getConfiguration(section?: string): {
+  getConfiguration(section?: string, _scope?: Uri): {
     get<T>(key: string, defaultValue?: T): T;
-    update(key: string, value: unknown): Promise<void>;
+    inspect<T>(key: string): { defaultValue?: T; globalValue?: T; workspaceValue?: T; workspaceFolderValue?: T } | undefined;
+    update(key: string, value: unknown, target?: number): Promise<void>;
   } {
     return {
       get<T>(key: string, defaultValue?: T): T {
@@ -268,11 +309,37 @@ export const workspace = {
         return defaultValue as T;
       },
 
-      async update(key: string, value: unknown): Promise<void> {
+      inspect<T>(key: string) {
+        const fullKey = section ? `${section}.${key}` : key;
+        return {
+          defaultValue: workspace.configurationDefaults[fullKey] as T | undefined,
+          globalValue: workspace.configurationValues[fullKey] as T | undefined
+        };
+      },
+
+      async update(key: string, value: unknown, _target?: number): Promise<void> {
         const fullKey = section ? `${section}.${key}` : key;
         workspace.configurationValues[fullKey] = value;
       }
     };
+  },
+
+  getWorkspaceFolder(uri: Uri): { name: string; uri: Uri } | undefined {
+    return workspace.workspaceFolders?.map((folder, index) => ({ name: folder.name ?? `Folder ${index + 1}`, uri: folder.uri }))
+      .find(folder => uri.toString().startsWith(folder.uri.toString()));
+  },
+
+  onDidChangeConfiguration(callback: (event: { affectsConfiguration(key: string): boolean }) => unknown): Disposable {
+    workspace.configurationCallbacks.push(callback);
+    return { dispose: () => {
+      const index = workspace.configurationCallbacks.indexOf(callback);
+      if (index >= 0) workspace.configurationCallbacks.splice(index, 1);
+    } };
+  },
+
+  async fireConfigurationChange(...keys: string[]): Promise<void> {
+    const event = { affectsConfiguration: (key: string) => keys.includes(key) };
+    for (const callback of workspace.configurationCallbacks) await callback(event);
   }
 };
 
@@ -280,6 +347,11 @@ export const ConfigurationTarget = {
   Global: 1,
   Workspace: 2,
   WorkspaceFolder: 3
+} as const;
+
+export const ViewColumn = {
+  Active: -1,
+  Beside: -2
 } as const;
 
 export const languages = {
@@ -331,8 +403,12 @@ export function resetVSCodeShim(): void {
   window.inputBoxResult = undefined;
   window.statusBarItems.length = 0;
   window.activeTextEditor = undefined;
+  window.nextWarningMessageResult = undefined;
+  window.createdWebviewPanels.length = 0;
   workspace.workspaceFolders = undefined;
   workspace.configurationValues = {};
+  workspace.configurationDefaults = {};
+  workspace.configurationCallbacks.length = 0;
 }
 
 export function createTextDocument(lines: string[]): TextDocument {
@@ -377,6 +453,56 @@ class TestWebviewView implements WebviewView {
   }
 
   private remove(callbacks: Array<() => unknown>, callback: () => unknown): void {
+    const index = callbacks.indexOf(callback);
+    if (index >= 0) callbacks.splice(index, 1);
+  }
+}
+
+class TestWebviewPanel implements WebviewPanel {
+  readonly webview = new TestWebview();
+  visible = true;
+  active = true;
+  readonly revealCalls: Array<{ viewColumn?: number; preserveFocus?: boolean }> = [];
+  private readonly viewStateCallbacks: Array<(event: { webviewPanel: WebviewPanel }) => unknown> = [];
+  private readonly disposeCallbacks: Array<() => unknown> = [];
+
+  constructor(
+    readonly viewType: string,
+    readonly title: string,
+    options: { enableScripts?: boolean; localResourceRoots?: Uri[] }
+  ) {
+    this.webview.options = options;
+  }
+
+  reveal(viewColumn?: number, preserveFocus?: boolean): void {
+    this.visible = true;
+    this.active = true;
+    this.revealCalls.push({ viewColumn, preserveFocus });
+  }
+
+  onDidChangeViewState(callback: (event: { webviewPanel: WebviewPanel }) => unknown): Disposable {
+    this.viewStateCallbacks.push(callback);
+    return { dispose: () => this.remove(this.viewStateCallbacks, callback) };
+  }
+
+  onDidDispose(callback: () => unknown): Disposable {
+    this.disposeCallbacks.push(callback);
+    return { dispose: () => this.remove(this.disposeCallbacks, callback) };
+  }
+
+  async setVisible(visible: boolean): Promise<void> {
+    this.visible = visible;
+    this.active = visible;
+    for (const callback of this.viewStateCallbacks) await callback({ webviewPanel: this });
+  }
+
+  async dispose(): Promise<void> {
+    this.visible = false;
+    this.active = false;
+    for (const callback of this.disposeCallbacks) await callback();
+  }
+
+  private remove<T>(callbacks: T[], callback: T): void {
     const index = callbacks.indexOf(callback);
     if (index >= 0) callbacks.splice(index, 1);
   }

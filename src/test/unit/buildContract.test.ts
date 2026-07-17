@@ -77,15 +77,23 @@ describe('dual-target build contract', () => {
     await execFileAsync(process.execPath, ['scripts/build.mjs'], { cwd: projectRoot });
     const webviewBundle = await readFile(path.join(projectRoot, 'media/readerApp.js'), 'utf8');
     const webviewStyles = await readFile(path.join(projectRoot, 'media/readerApp.css'), 'utf8');
+    const settingsBundle = await readFile(path.join(projectRoot, 'media/settingsApp.js'), 'utf8');
+    const settingsStyles = await readFile(path.join(projectRoot, 'media/settingsApp.css'), 'utf8');
 
     expect(webviewBundle).not.toMatch(/\brequire\s*\(/);
     expect(webviewBundle).not.toMatch(/(?:from\s+|require\s*\()["']node:/);
     expect(webviewBundle).not.toMatch(/https?:\/\//);
     expect(webviewBundle).not.toMatch(/(?:css-tree|fast-xml-parser|parse5|yauzl)/);
     expect(webviewBundle).toContain('Git Log');
-    expect(webviewBundle).toContain('saveGitLogPreferences');
+    expect(webviewBundle).not.toContain('saveGitLogPreferences');
+    expect(webviewBundle).toContain('openUnifiedSettings');
     expect(webviewStyles).toContain('.git-log-view');
     expect(webviewStyles).toContain('.git-log-content');
     expect(webviewStyles.trim()).not.toBe('');
+    expect(settingsBundle).not.toMatch(/\brequire\s*\(/);
+    expect(settingsBundle).not.toMatch(/https?:\/\//);
+    expect(settingsBundle).toContain('MoyuPlus Settings');
+    expect(settingsStyles).toContain('.settings-shell');
+    expect(settingsStyles.trim()).not.toBe('');
   }, 15_000);
 });

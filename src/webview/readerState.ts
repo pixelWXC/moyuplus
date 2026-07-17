@@ -27,10 +27,9 @@ export interface ReaderAppState {
   initialProgression?: number;
   layout?: LayoutState;
   navigation?: ReaderNavigation;
-  drawer?: 'toc' | 'settings';
+  drawer?: 'toc';
   notice?: string;
   preferences: ReaderPreferences;
-  preferencesDraft: ReaderPreferences;
 }
 
 export interface ReaderNavigation {
@@ -58,17 +57,14 @@ export type ReaderAppAction =
   | { type: 'bookReady'; requestId: string; toc: TocNode[]; sections: SectionRef[]; initialSectionId: string; initialProgression?: number }
   | ({ type: 'layoutChanged' } & LayoutState)
   | { type: 'selectSection'; sectionId: string }
-  | { type: 'openDrawer'; drawer: 'toc' | 'settings' }
+  | { type: 'openDrawer'; drawer: 'toc' }
   | { type: 'closeDrawer' }
   | { type: 'bookBoundary'; edge: 'start' | 'end' }
-  | { type: 'preferencesLoaded'; preferences: ReaderPreferences }
-  | { type: 'previewPreferences'; patch: Partial<ReaderPreferences> }
-  | { type: 'preferencesSaved' }
-  | { type: 'resetPreferences' };
+  | { type: 'preferencesLoaded'; preferences: ReaderPreferences };
 
 export function createInitialReaderAppState(): ReaderAppState {
   const preferences = createDefaultReaderPreferences();
-  return { view: 'library', status: 'loading', books: [], preferences, preferencesDraft: preferences };
+  return { view: 'library', status: 'loading', books: [], preferences };
 }
 
 export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction): ReaderAppState {
@@ -133,11 +129,8 @@ export function readerAppReducer(state: ReaderAppState, action: ReaderAppAction)
     case 'bookBoundary': return { ...state, notice: action.edge === 'start' ? '已到本书开头' : '已读完本书' };
     case 'preferencesLoaded': {
       const preferences = normalizeReaderPreferences(action.preferences);
-      return { ...state, preferences, preferencesDraft: preferences };
+      return { ...state, preferences };
     }
-    case 'previewPreferences': return { ...state, preferencesDraft: normalizeReaderPreferences({ ...state.preferencesDraft, ...action.patch }) };
-    case 'preferencesSaved': return { ...state, preferences: state.preferencesDraft };
-    case 'resetPreferences': return { ...state, preferencesDraft: createDefaultReaderPreferences() };
   }
 }
 

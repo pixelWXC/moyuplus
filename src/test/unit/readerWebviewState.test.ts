@@ -129,15 +129,11 @@ describe('reader Webview reading state', () => {
     expect(readerAppReducer(state, { type: 'bookBoundary', edge: 'start' }).notice).toBe('已到本书开头');
   });
 
-  it('previews preferences, saves them, resets defaults and manages one overlay drawer', () => {
+  it('applies authoritative preferences while keeping the only overlay drawer for the table of contents', () => {
     let state = readerAppReducer(createInitialReaderAppState(), { type: 'preferencesLoaded', preferences: { ...createDefaultReaderPreferences(), fontSize: 18 } });
-    state = readerAppReducer(state, { type: 'openDrawer', drawer: 'settings' });
-    state = readerAppReducer(state, { type: 'previewPreferences', patch: { fontSize: 22, lineHeight: 2 } });
-    expect(state.drawer).toBe('settings');
-    expect(state.preferencesDraft).toMatchObject({ fontSize: 22, lineHeight: 2 });
-    state = readerAppReducer(state, { type: 'preferencesSaved' });
-    expect(state.preferences).toMatchObject({ fontSize: 22, lineHeight: 2 });
-    expect(readerAppReducer(state, { type: 'resetPreferences' }).preferencesDraft).toEqual(createDefaultReaderPreferences());
+    state = readerAppReducer(state, { type: 'openDrawer', drawer: 'toc' });
+    expect(state).toMatchObject({ drawer: 'toc', preferences: { fontSize: 18 } });
+    expect(state).not.toHaveProperty('preferencesDraft');
     expect(readerAppReducer(state, { type: 'closeDrawer' }).drawer).toBeUndefined();
   });
 

@@ -472,3 +472,39 @@ Reader v2 规划已完成；等待用户指示后从实施计划 Phase 1 开始�
 ### Error log
 
 - 2026-07-15：首次用 `node -e` 直接传递带引号脚本时被 PowerShell 原生命令参数转义破坏；改为 here-string 通过 stdin 传给 `node -` 后完成复现，不重复失败方式。
+
+## 2026-07-16 MoyuPlus 统一设置面板实施
+
+### Goal
+
+实施已确认并通过评审的 `docs/superpowers/specs/2026-07-16-moyuplus-unified-settings-panel-design.md`：新增单例设置 WebviewPanel，整合阅读、Git Log、实验性打字练习与快捷键设置，移除 Reader/Git Log 原地设置抽屉，并保证严格协议、串行状态同步与实时视图更新。
+
+### Phases
+
+- [x] Phase S0：读取设计、项目约束与现有实现，确认以工作区最新规格为权威输入
+- [x] Phase S1：RED/GREEN——消息协议、严格校验、快照与配置覆盖模型
+- [x] Phase S2：RED/GREEN——单例面板生命周期、串行队列、命令/菜单与实时同步
+- [x] Phase S3：RED/GREEN——设置 Webview 状态、四分区 UI、CSP 与响应式布局
+- [x] Phase S4：RED/GREEN——Reader/Git Log 入口深链并删除原地设置抽屉
+- [x] Phase S5：全量单测、布局/隐私测试、编译、构建与 diff 检查
+- [x] Phase S6：人工验收回归——编辑器右键入口、快捷键无错误回显、滑块稳定和主题颜色
+- **Status:** complete（2026-07-17）；自动验收与真实 Extension Development Host 人工验收均通过
+
+### Execution constraints
+
+- 严格 RED → GREEN → REFACTOR；每个生产行为先观察目标测试因缺失功能按预期失败。
+- 规格文件存在用户/评审后的未提交修改；保留并以其最新内容为准，不回退、不覆盖。
+- 不手工编辑 `media/*.js`/`media/*.css` bundle；只通过 `scripts/build.mjs` 生成。
+- 不自动提交、推送或发布；保留未跟踪 `.superpowers/` 视觉伴侣产物。
+- Webview 只允许 `mediaRoot` 本地资源，无网络、frame 或 media 能力；宿主消息必须严格白名单校验。
+
+### Error log
+
+- 2026-07-16：首次组合读取输出超过工具显示上限并被截断；后续改为按目标文件和行区间读取，不重复一次性输出整组大型源文件。
+- 2026-07-16：首次同时追加三份规划文件时，`progress.md` 锚点因目标行并非文件尾而校验失败；已改为使用三份文件各自的真实末行分别追加。
+- 2026-07-16：首次构建 settings bundle 时，`settingsApp` 通过 `shortcutSettings` 间接打包了 Extension Host 的 `vscode` 依赖，esbuild 拒绝浏览器 bundle；已将快捷键展示模型中的四个命令 ID 改为纯常量，保持值不变并切断 Host 依赖。
+- 2026-07-16：切断 Host 依赖后的首次重构构建暴露调用方误用了不存在的 `getShortcutSettings` 名称；实际导出为 `createShortcutSettingsState`，已按真实 API 更正。
+- 2026-07-16：扩展接入后首次 TypeScript 检查发现联合类型把 `settingsReady|retrySnapshot` 合在同一成员中而无法完整缩窄，且 VS Code `Thenable` 不能直接声明为原生 Promise；已拆分联合成员并用 `Promise.resolve` 适配。
+- 2026-07-16：设置布局测试首次运行时 harness 只加载了 JS、遗漏独立生成的 `settingsApp.css`，导致响应式与 forced-colors 断言失败；已在测试夹具中显式加载发布样式文件。
+- 2026-07-16：首次全量单测发现激活命令清单 fixture 尚未包含新增的 `moyuplus.openSettings`；实际注册行为正确，更新契约预期后全量 231/231 通过。
+- 2026-07-17：人工验收发现入口位置、快捷键静态回显、滑块整页重绘和背景色应用四项问题；按修订设计完成 TDD 修复，最终 236/236 单测、36/36 布局测试及人工复验通过。

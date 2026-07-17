@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:; connect-src 'none'; frame-src 'none'; media-src 'none'">
+  <link rel="stylesheet" href="../../../media/settingsApp.css">
+  <style>
+    :root {
+      --vscode-font-family: "Segoe UI", sans-serif; --vscode-font-size: 13px;
+      --vscode-foreground: #242424; --vscode-editor-background: #f8f8f8;
+      --vscode-editorGroupHeader-tabsBackground: #eeeeee; --vscode-descriptionForeground: #616161;
+      --vscode-panel-border: #cccccc; --vscode-focusBorder: #0066bf;
+      --vscode-list-hoverBackground: #e3e3e3; --vscode-list-activeSelectionBackground: #0060c0;
+      --vscode-list-activeSelectionForeground: #ffffff; --vscode-input-background: #ffffff;
+      --vscode-input-foreground: #202020; --vscode-input-border: #999999;
+      --vscode-dropdown-background: #ffffff; --vscode-dropdown-foreground: #202020;
+      --vscode-button-background: #0060a8; --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #004f8c; --vscode-button-secondaryBackground: #dddddd;
+      --vscode-button-secondaryForeground: #202020; --vscode-button-secondaryHoverBackground: #cccccc;
+      --vscode-inputValidation-warningBorder: #9a6700; --vscode-inputValidation-warningBackground: #fff4ce;
+      --vscode-inputValidation-warningForeground: #4d3800; --vscode-errorForeground: #a1260d;
+      --vscode-testing-iconPassed: #2e7d32; --vscode-keybindingLabel-background: #ededed;
+      --vscode-keybindingLabel-foreground: #242424; --vscode-keybindingLabel-border: #b7b7b7;
+    }
+  </style>
+  <script>
+    window.sentMessages = [];
+    let instanceId = '';
+    let stateVersion = 0;
+    const reader = {
+      fontFamily: 'system', fontSize: 16, lineHeight: 1.6, letterSpacing: 0,
+      paragraphSpacing: .75, textColor: 'theme', backgroundColor: 'theme',
+      pagePadding: 24, textAlign: 'left', theme: 'system'
+    };
+    const gitLog = {
+      showHash: true, showAuthor: true, showRelativeTime: true, showAbsoluteDate: true,
+      layout: 'lines', maxCommits: 200
+    };
+    const configValues = [
+      ['moyuplus.shortcuts.enableTabRouter', false],
+      ['moyuplus.typing.tabMode', 'completeRest'],
+      ['moyuplus.shortcuts.enableEnterRouter', false],
+      ['moyuplus.enter.insertNewLine', true],
+      ['moyuplus.enter.nextPracticeLine', false],
+      ['moyuplus.enter.nextReaderPage', false]
+    ];
+    const configuration = configValues.map(([key, value], index) => ({
+      key, defaultValue: value, globalValue: value, globalIsDefault: index !== 1,
+      workspaceValue: index === 0 ? true : undefined,
+      folders: index === 0 ? [
+        { name: 'alpha', workspaceFolderValue: false, effectiveValue: false },
+        { name: 'beta', workspaceFolderValue: true, effectiveValue: true }
+      ] : [],
+      activeResource: index === 0 ? { folderName: 'beta', effectiveValue: true } : undefined,
+      overridden: index === 0
+    }));
+    const sendSnapshot = section => window.dispatchEvent(new MessageEvent('message', { data: {
+      type: 'settingsSnapshot', protocolVersion: 2, instanceId, stateVersion: ++stateVersion,
+      section, reader, gitLog, configuration
+    }}));
+    window.acquireVsCodeApi = () => ({ postMessage(message) {
+      window.sentMessages.push(message);
+      if (message.type === 'settingsReady') { instanceId = message.instanceId; setTimeout(() => sendSnapshot('reader')); }
+      if (message.type === 'selectSection') setTimeout(() => sendSnapshot(message.section));
+      if (message.type === 'changeSetting') {
+        if (message.domain === 'reader') reader[message.key] = message.value;
+        if (message.domain === 'gitLog') gitLog[message.key] = message.value;
+        setTimeout(() => window.dispatchEvent(new MessageEvent('message', { data: {
+          type: 'changeSaved', protocolVersion: 2, instanceId, stateVersion: ++stateVersion,
+          domain: message.domain, key: message.key, value: message.value,
+          requestId: message.requestId, clientRevision: message.clientRevision
+        }})), 10);
+      }
+    }});
+    let rememberedRange;
+    window.settingsHarness = {
+      sendSnapshot,
+      sent: () => window.sentMessages,
+      select: section => document.querySelector(`.section-link:nth-child(${['reader','gitLog','typing','shortcuts'].indexOf(section) + 1})`)?.click(),
+      rememberRange: id => { rememberedRange = document.getElementById(id); },
+      rememberedRangeIsConnected: id => rememberedRange === document.getElementById(id) && rememberedRange?.isConnected
+    };
+  </script>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="../../../media/settingsApp.js"></script>
+</body>
+</html>

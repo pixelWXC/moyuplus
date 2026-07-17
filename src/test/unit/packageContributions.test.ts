@@ -31,8 +31,24 @@ import {
 } from '../../commands/libraryCommands';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 import { IMAGE_PREVIEW_VIEW_TYPE } from '../../reader/imagePreviewService';
+import { OPEN_SETTINGS_COMMAND_ID } from '../../settings/MoyuPlusSettingsPanel';
 
 describe('package contributions', () => {
+  it('contributes the unified settings command to the editor context menu only', async () => {
+    const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
+    expect(packageJson.activationEvents).toContain(`onCommand:${OPEN_SETTINGS_COMMAND_ID}`);
+    expect(packageJson.contributes.commands).toContainEqual({
+      command: OPEN_SETTINGS_COMMAND_ID,
+      title: 'MoyuPlus Settings'
+    });
+    expect(packageJson.contributes.menus['editor/context'] ?? []).toContainEqual(expect.objectContaining({
+      command: OPEN_SETTINGS_COMMAND_ID
+    }));
+    expect(packageJson.contributes.menus['explorer/context'] ?? []).not.toContainEqual(expect.objectContaining({
+      command: OPEN_SETTINGS_COMMAND_ID
+    }));
+  });
+
   it('contributes the in-memory readonly image preview editor', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
 

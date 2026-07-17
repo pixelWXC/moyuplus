@@ -1,6 +1,7 @@
 export type ReaderFontFamily = 'system' | 'serif' | 'sans-serif';
 export type ReaderTextAlign = 'left' | 'justify';
 export type ReaderTheme = 'system' | 'light' | 'sepia' | 'dark';
+export type ReaderColor = 'theme' | `#${string}`;
 
 export interface ReaderPreferences {
   fontFamily: ReaderFontFamily;
@@ -8,8 +9,8 @@ export interface ReaderPreferences {
   lineHeight: number;
   letterSpacing: number;
   paragraphSpacing: number;
-  textColor: string;
-  backgroundColor: string;
+  textColor: ReaderColor;
+  backgroundColor: ReaderColor;
   pagePadding: number;
   textAlign: ReaderTextAlign;
   theme: ReaderTheme;
@@ -30,8 +31,8 @@ export function createDefaultReaderPreferences(): ReaderPreferences {
     lineHeight: 1.6,
     letterSpacing: 0,
     paragraphSpacing: 0.75,
-    textColor: '#1f2328',
-    backgroundColor: '#ffffff',
+    textColor: 'theme',
+    backgroundColor: 'theme',
     pagePadding: 24,
     textAlign: 'left',
     theme: 'system'
@@ -58,8 +59,8 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
       READER_PREFERENCE_LIMITS.paragraphSpacing,
       defaults.paragraphSpacing
     ),
-    textColor: normalizeColor(value.textColor) ?? defaults.textColor,
-    backgroundColor: normalizeColor(value.backgroundColor) ?? defaults.backgroundColor,
+    textColor: normalizeReaderColor(value.textColor) ?? defaults.textColor,
+    backgroundColor: normalizeReaderColor(value.backgroundColor) ?? defaults.backgroundColor,
     pagePadding: normalizeNumber(value.pagePadding, READER_PREFERENCE_LIMITS.pagePadding, defaults.pagePadding),
     textAlign: isTextAlign(value.textAlign) ? value.textAlign : defaults.textAlign,
     theme: isTheme(value.theme) ? value.theme : defaults.theme
@@ -77,15 +78,18 @@ function normalizeNumber(
   return Math.min(limits.max, Math.max(limits.min, value));
 }
 
-function normalizeColor(value: unknown): string | undefined {
+function normalizeReaderColor(value: unknown): ReaderColor | undefined {
+  if (value === 'theme') {
+    return value;
+  }
   if (typeof value !== 'string') {
     return undefined;
   }
   const shortHex = /^#([0-9a-f]{3})$/i.exec(value);
   if (shortHex) {
-    return `#${[...shortHex[1]].map((digit) => digit.repeat(2)).join('')}`.toLowerCase();
+    return `#${[...shortHex[1]].map((digit) => digit.repeat(2)).join('')}`.toLowerCase() as ReaderColor;
   }
-  return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : undefined;
+  return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() as ReaderColor : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

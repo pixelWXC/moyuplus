@@ -39,24 +39,23 @@ describe('shortcut settings state', () => {
     expect(items.every((item) => item.label.length > 0 && item.description.length > 0)).toBe(true);
   });
 
-  it('shows guarded Enter and Tab defaults with their real enabled state and conflict warning', () => {
+  it('does not claim to know effective shortcut bindings', () => {
     const items = createShortcutSettingsState({
       enableEnterRouter: false,
       enableTabRouter: true
     });
 
     expect(items.find((item) => item.commandId === ROUTE_ENTER_COMMAND_ID)).toMatchObject({
-      defaultBinding: 'Enter',
       enabled: false,
       configurableEnablement: 'enter',
       risk: 'high'
     });
     expect(items.find((item) => item.commandId === ROUTE_TAB_COMMAND_ID)).toMatchObject({
-      defaultBinding: 'Tab',
       enabled: true,
       configurableEnablement: 'tab',
       risk: 'high'
     });
+    expect(items.every((item) => !('defaultBinding' in item))).toBe(true);
     expect(items.filter((item) => item.risk === 'high').every((item) => item.conflictWarning?.length)).toBe(true);
   });
 });

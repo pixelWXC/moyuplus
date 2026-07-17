@@ -1,6 +1,6 @@
 import type { ReaderPreferences } from '../domain/readerPreferences';
 import type { ExtensionToGitLogMessage, GitLogDisplayResult } from '../git/gitLogMessages';
-import { createDefaultGitLogPreferences, type GitLogCommit, type GitLogPreferences } from '../git/gitLogModels';
+import type { GitLogCommit, GitLogPreferences } from '../git/gitLogModels';
 import { GitLogPaginator, type GitLogPageState } from './gitLogPaginator';
 import { createInitialGitLogState, gitLogReducer, type GitLogAction, type GitLogState } from './gitLogState';
 import { applyReaderPreferences } from './readerPreferenceStyles';
@@ -42,6 +42,15 @@ export class GitLogView {
     }
   }
 
+  updatePreferences(preferences: GitLogPreferences): void {
+    this.reduce({ type: 'preferencesLoaded', preferences });
+  }
+
+  updateReaderPreferences(preferences: ReaderPreferences): void {
+    this.readerPreferences = preferences;
+    this.render();
+  }
+
   dispose(): void {
     this.paginator?.dispose();
     this.paginator = undefined;
@@ -63,7 +72,7 @@ export class GitLogView {
     const toolbar = node('header', 'reader-toolbar git-log-toolbar');
     toolbar.append(node('strong', 'reader-title', 'Git Log'));
     const tools = node('div', 'reader-tools');
-    tools.append(iconButton('Aa', 'Git Log 设置', () => this.reduce({ type: 'openSettings' })));
+    tools.append(iconButton('Aa', 'Git Log 设置', () => this.post({ type: 'openUnifiedSettings', section: 'gitLog' })));
     toolbar.append(tools);
 
     const context = node('div', 'chapter-bar git-log-context');
@@ -88,7 +97,6 @@ export class GitLogView {
       this.paginator = new GitLogPaginator(viewport, page => this.commitPage(page));
       this.paginator.setContent(this.commitContent());
     }
-    if (this.state.settingsOpen) this.root.append(this.settingsDrawer());
   }
 
   private updateRefreshNotice(): void {
@@ -107,7 +115,7 @@ export class GitLogView {
   }
 
   private commitContent(): HTMLElement {
-    const content = node('div', `git-log-document git-layout-${this.state.preferencesDraft.layout}`);
+    const content = node('div', `git-log-document git-layout-${this.state.preferences.layout}`);
     for (const commit of this.state.commits) content.append(this.commitEntry(commit));
     return content;
   }
@@ -115,7 +123,7 @@ export class GitLogView {
   private commitEntry(commit: GitLogCommit): HTMLElement {
     const entry = node('article', 'git-commit');
     const values = [commit.subject, ...this.optionalValues(commit)];
-    if (this.state.preferencesDraft.layout === 'inline') {
+    if (this.state.preferences.layout === 'inline') {
       entry.append(node('span', 'git-commit-line', values.join(' · ')));
     } else {
       for (const value of values) entry.append(node('span', 'git-commit-line', value));
@@ -124,7 +132,7 @@ export class GitLogView {
   }
 
   private optionalValues(commit: GitLogCommit): string[] {
-    const preferences = this.state.preferencesDraft;
+    const preferences = this.state.preferences;
     const values: string[] = [];
     if (preferences.showHash) values.push(commit.hash.slice(0, 8));
     if (preferences.showAuthor) values.push(commit.author);
@@ -146,55 +154,7 @@ export class GitLogView {
   private movePrevious(): void { this.paginator?.previousPage(); }
   private moveNext(): void { this.paginator?.nextPage(); }
 
-  private settingsDrawer(): HTMLElement {
-    const view = this;
-    const drawer = node('aside', 'reader-drawer git-log-settings'); drawer.setAttribute('aria-label', 'Git Log 设置');
-    const header = node('header', 'drawer-header');
-    header.append(node('h2', undefined, 'Git Log 设置'), iconButton('×', '关闭 Git Log 设置', () => this.reduce({ type: 'closeSettings' })));
-    const form = node('form', 'settings-form');
-    form.append(
-      checkField('显示 Hash', 'showHash'),
-      checkField('显示作者', 'showAuthor'),
-      checkField('显示相对时间', 'showRelativeTime'),
-      checkField('显示日期', 'showAbsoluteDate'),
-      selectField('提交内排列', 'layout', [['lines', '逐项换行'], ['inline', '标点分隔']]),
-      rangeField('最多加载', 'maxCommits', 20, 1000, 20)
-    );
-    const actions = node('div', 'settings-actions');
-    actions.append(button('恢复默认', 'subtle-button', () => {
-      this.state = gitLogReducer(this.state, { type: 'previewPreferences', patch: createDefaultGitLogPreferences() });
-      this.render();
-    }), button('保存', 'primary-action', () => {
-      const preferences = this.state.preferencesDraft;
-      this.state = gitLogReducer(this.state, { type: 'preferencesSaved' });
-      this.post({ type: 'saveGitLogPreferences', preferences });
-      this.render();
-    }));
-    form.append(actions); drawer.append(header, form); return drawer;
-
-    function checkField(label: string, key: BooleanPreference): HTMLElement {
-      const field = node('label', 'setting-field git-check-field');
-      const input = node('input') as HTMLInputElement; input.type = 'checkbox'; input.checked = Boolean(view.state.preferencesDraft[key]);
-      input.addEventListener('change', () => preview({ [key]: input.checked }));
-      field.append(node('span', undefined, label), input); return field;
-    }
-    function selectField(label: string, key: 'layout', options: string[][]): HTMLElement {
-      const field = node('label', 'setting-field'); const select = node('select') as HTMLSelectElement;
-      for (const [value, text] of options) { const option = node('option', undefined, text) as HTMLOptionElement; option.value = value; option.selected = view.state.preferencesDraft[key] === value; select.append(option); }
-      select.addEventListener('change', () => preview({ [key]: select.value as GitLogPreferences['layout'] }));
-      field.append(node('span', undefined, label), select); return field;
-    }
-    function rangeField(label: string, key: 'maxCommits', min: number, max: number, step: number): HTMLElement {
-      const field = node('label', 'setting-field range-field'); const value = view.state.preferencesDraft[key];
-      const input = node('input') as HTMLInputElement; Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step), value: String(value) });
-      input.addEventListener('input', () => preview({ [key]: Number(input.value) }));
-      field.append(node('span', undefined, `${label} ${value}`), input); return field;
-    }
-    function preview(patch: Partial<GitLogPreferences>): void { view.reduce({ type: 'previewPreferences', patch }); }
-  }
 }
-
-type BooleanPreference = 'showHash' | 'showAuthor' | 'showRelativeTime' | 'showAbsoluteDate';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const target = document.createElement(tag); if (className) target.className = className; if (text !== undefined) target.textContent = text; return target;

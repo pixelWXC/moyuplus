@@ -13,8 +13,8 @@ describe('ReaderPreferences', () => {
       lineHeight: 1.6,
       letterSpacing: 0,
       paragraphSpacing: 0.75,
-      textColor: '#1f2328',
-      backgroundColor: '#ffffff',
+      textColor: 'theme',
+      backgroundColor: 'theme',
       pagePadding: 24,
       textAlign: 'left',
       theme: 'system'
@@ -71,6 +71,13 @@ describe('ReaderPreferences', () => {
     expect(normalizeReaderPreferences({ fontSize: 18 })).toEqual({
       ...createDefaultReaderPreferences(),
       fontSize: 18
+    });
+  });
+
+  it('preserves theme inheritance and normalizes legacy short hex colors', () => {
+    expect(normalizeReaderPreferences({ textColor: 'theme', backgroundColor: '#FfF' })).toMatchObject({
+      textColor: 'theme',
+      backgroundColor: '#ffffff'
     });
   });
 });

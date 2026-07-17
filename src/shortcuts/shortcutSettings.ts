@@ -1,6 +1,7 @@
-import { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID } from '../commands/shortcutRouter';
-import { TOGGLE_TYPING_PRACTICE_COMMAND_ID } from '../typing/typingPracticeCommands';
-import { TOGGLE_GIT_LOG_COMMAND_ID } from '../git/gitLogModeCoordinator';
+const ROUTE_ENTER_COMMAND_ID = 'moyuplus.routeEnter';
+const ROUTE_TAB_COMMAND_ID = 'moyuplus.routeTab';
+const TOGGLE_TYPING_PRACTICE_COMMAND_ID = 'moyuplus.toggleTypingPractice';
+const TOGGLE_GIT_LOG_COMMAND_ID = 'moyuplus.gitLog.toggle';
 
 export const NEXT_READER_PAGE_COMMAND_ID = 'moyuplus.reader.nextPage';
 export const PREVIOUS_READER_PAGE_COMMAND_ID = 'moyuplus.reader.previousPage';
@@ -20,7 +21,6 @@ export interface ShortcutSettingItem {
   commandId: string;
   label: string;
   description: string;
-  defaultBinding?: string;
   enabled: boolean;
   configurableEnablement?: ShortcutEnablement;
   risk: ShortcutRisk;
@@ -50,7 +50,6 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
       commandId: ROUTE_ENTER_COMMAND_ID,
       label: '编辑器：Enter 组合动作',
       description: '插入真实换行，并按设置推进练习行或阅读器页面。',
-      defaultBinding: 'Enter',
       enabled: input.enableEnterRouter,
       configurableEnablement: 'enter',
       risk: 'high',
@@ -60,7 +59,6 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
       commandId: ROUTE_TAB_COMMAND_ID,
       label: '编辑器：Tab 练习补全',
       description: '练习开启且补全菜单与 snippet 不活跃时补全当前练习行。',
-      defaultBinding: 'Tab',
       enabled: input.enableTabRouter,
       configurableEnablement: 'tab',
       risk: 'high',

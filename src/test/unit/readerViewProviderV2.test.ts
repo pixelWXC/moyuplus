@@ -11,6 +11,20 @@ function controller(): ReaderViewController {
 }
 
 describe('ReaderViewProvider v3', () => {
+  it('routes Reader and Git Log settings requests to the unified panel bridge', async () => {
+    const openSettings = vi.fn();
+    const provider = new ReaderViewProvider(Uri.file('/extension'), controller(), {
+      snapshot: vi.fn().mockResolvedValue({ books: [], availability: {}, progress: {} }),
+      openSettings
+    });
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await view.webview.receiveMessage({ type: 'openUnifiedSettings', section: 'reader' });
+    await view.webview.receiveMessage({ type: 'openUnifiedSettings', section: 'gitLog' });
+    await view.webview.receiveMessage({ type: 'openUnifiedSettings', section: 'unknown' });
+    expect(openSettings.mock.calls).toEqual([['reader'], ['gitLog']]);
+  });
+
   it('answers the Webview libraryReady handshake so the shelf leaves loading state', async () => {
     const library = {
       snapshot: vi.fn().mockResolvedValue({

@@ -412,7 +412,7 @@
 - 当前工作树只有 `manual-gbk.txt`、`manual-utf8.txt`、`test.txt` 三个既有未跟踪手工测试文件，本阶段保持不动。
 - Phase 7 既定验收范围：主要功能快捷键状态可见、首次开启练习有安全提示、无文件/文件失效/编码失败有明确反馈。
 - Phase 7 第一组 RED 已验证：快捷键目录模块不存在，Webview 尚无快捷键面板与恢复动作，package 尚未贡献对应阅读器/练习切换命令；目标测试按预期失败。
-- 新增 `src/shortcuts/shortcutSettings.ts`，集中描述 10 个主要阅读/练习动作的功能名、默认绑定、启用状态、风险和说明。
+- 新增 `src/shortcuts/shortcutSettings.ts`，集中描述主要阅读/练习动作的功能名、启用状态、风险和说明；最终设置面板不回显无法可靠确定的实际按键值。
 - Reader Webview 新增插件内快捷键设置面板，支持 Enter/Tab 启停、打开原生 Keyboard Shortcuts 和高级 Settings。
 - 新增 7 个阅读器可绑定命令和统一的 `moyuplus.toggleTypingPractice` 命令。
 - 首次开始练习会显示“练习输入会真实写入当前编辑器文件”的一次性中文警告。
@@ -775,3 +775,25 @@
 - 用户确认“完整可读优先于原版排版”，并批准方案 2：保留 EPUB 语义结构、删除出版物 CSS、由 MoyuPlus 统一排版。
 - 已写入修复规格 `docs/superpowers/specs/2026-07-15-moyuplus-reader-canonical-layout-regression-design.md`；下一步按 brainstorming 门禁执行规格审查和用户复核，生产代码仍未修改。
 - 独立规格审查结果为 Approved，无阻断问题；已采纳两项建议，明确源属性使用允许列表、包内 stylesheet 不进入 Webview，并明确 3 个宽度 × 3 个 padding 为完整 9 组矩阵。
+
+## 2026-07-16 统一设置面板实施
+
+- **Status：** 已实施并通过自动验收及真实 Extension Development Host 人工验收（2026-07-17）。
+
+- 已确认设计规格已获用户批准并通过评审；本轮以工作区未提交的最新规格版本为权威输入。
+- 已读取 brainstorming、frontend-design、planning-with-files 与 test-driven-development 约束；由于设计阶段已完成，本轮直接进入测试先行实施。
+- 已建立 Phase S0–S5 实施记录。下一步先读取偏好模型、现有 Webview 消息/状态、VS Code shim 与测试夹具，为 Phase S1 写最小失败测试。
+- 结构检查确认：两类偏好已有可复用 store/normalize；两套原地设置抽屉仍在 Reader bundle 中；VS Code shim 尚缺 WebviewPanel 与 configuration inspect/事件能力。
+- 下一步按 Phase S1 先定义严格设置协议与快照模型测试，再实现最小纯模块；面板生命周期在协议 GREEN 后接入。
+- 已核对 build/test 与 Reader 消息路径，确定新增独立 settings bundle，并用窄 `openUnifiedSettings` 请求连接既有 Reader/Git Log 入口。
+- Phase S1 首个 RED：两个新测试模块最初因生产模块不存在无法收集；按 TDD 只补导出骨架后，协议 2 项与 Webview 状态 4 项均因功能缺失按预期失败。
+- Phase S1 首轮 GREEN：严格消息白名单覆盖四类域、数值/枚举/颜色范围、额外字段与原型键；Webview reducer 已实现实例/stateVersion 过滤和旧响应不回滚新值。目标 2 文件 7/7 通过。
+- SettingsAuthority RED/GREEN 完成：测试先锁定 22 项快照、全局/工作区/多根覆盖分离、两类偏好通知、Global 配置写入和整区恢复事务；目标 3 文件 11/11 通过。
+- Phase S2 Panel RED/GREEN：单例、`mediaRoot` 限制、协议拒绝、旧实例屏障、风险确认、可见性刷新和原生快捷键 5/5 通过；扩展激活与 Reader Host 深链 15/15 通过。
+- Phase S3 已新增独立 `settingsApp.js/css`：四分区、22 项控件、全局/覆盖分离、实验性文本、250ms 范围提交、状态 live region、681/680px 响应式与 forced-colors 样式。
+- Phase S4 已删除 Reader/Git Log 原地设置抽屉与 draft 状态，两个按钮改发 `openUnifiedSettings`；状态/遗留栈/构建目标 26/26 通过。
+- 设置布局首轮因 harness 未加载 CSS 失败；修正测试夹具后 5/5 通过。新增深链标题焦点与导航焦点测试先按预期失败，修复后通过。
+- Phase S5 完成：整节恢复默认值加入事务级控件锁定；`npm run compile` 通过，完整单测 48 文件 231/231、Playwright 布局/隐私测试 34/34 通过，`git diff --check` 无空白错误（仅 Git 的 CRLF 转换提示）。
+- 2026-07-17 人工验收反馈修复完成：设置入口从 `explorer/context` 移至 `editor/context`；快捷键分区移除不可靠的按键值回显；范围控件在拖动、防抖保存、响应和快照期间保持节点、焦点与滚动稳定；Reader 文字色和背景色默认跟随主题，自定义颜色可实时应用并恢复继承。
+- 修订后最终门禁：`npm run compile` 通过；Vitest 49 文件 236/236；Playwright 布局/隐私测试 36/36；`git diff --check` 通过。
+- 用户于 2026-07-17 确认真实 Extension Development Host 人工验收通过；统一设置面板状态改为 complete。

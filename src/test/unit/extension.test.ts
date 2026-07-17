@@ -31,6 +31,7 @@ import { commands, languages, resetVSCodeShim, type Disposable, window } from '.
 import { BOOK_LIBRARY_KEY, READER_V2_MIGRATION_KEY, TXT_LIBRARY_KEY } from '../../storage/storageKeys';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 import { IMAGE_PREVIEW_VIEW_TYPE } from '../../reader/imagePreviewService';
+import { OPEN_SETTINGS_COMMAND_ID, SETTINGS_PANEL_VIEW_TYPE } from '../../settings/MoyuPlusSettingsPanel';
 
 class MemoryMemento {
   private readonly values = new Map<string, unknown>();
@@ -67,6 +68,7 @@ describe('extension activation', () => {
       IMPORT_BOOK_COMMAND_ID,
       REMOVE_BOOK_COMMAND_ID,
       RELOCATE_BOOK_COMMAND_ID,
+      OPEN_SETTINGS_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,
       UNDO_READER_LOCATION_COMMAND_ID,
@@ -92,12 +94,16 @@ describe('extension activation', () => {
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID]);
     expect(window.registeredCustomEditorProviderIds()).toEqual([IMAGE_PREVIEW_VIEW_TYPE]);
     expect(languages.registeredInlineCompletionSelectors()).toEqual([{ pattern: '**' }]);
-    expect(context.subscriptions).toHaveLength(31);
+    expect(context.subscriptions).toHaveLength(34);
 
     const result = await commands.executeRegisteredCommand(SMOKE_COMMAND_ID);
 
     expect(result).toBe(SMOKE_MESSAGE);
     expect(window.informationMessages).toEqual([SMOKE_MESSAGE]);
+
+    await commands.executeRegisteredCommand(OPEN_SETTINGS_COMMAND_ID, { ignored: 'resource argument' });
+    expect(window.createdWebviewPanels).toHaveLength(1);
+    expect(window.createdWebviewPanels[0].viewType).toBe(SETTINGS_PANEL_VIEW_TYPE);
   });
 
   it('migrates legacy TXT records before registration and remains idempotent across activation', async () => {

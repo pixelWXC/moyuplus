@@ -15,9 +15,7 @@ export interface GitLogState {
   commits: GitLogCommit[];
   pageIndex: number;
   pageCount: number;
-  settingsOpen: boolean;
   preferences: GitLogPreferences;
-  preferencesDraft: GitLogPreferences;
   error?: string;
   refreshNotice?: string;
 }
@@ -29,17 +27,12 @@ export type GitLogAction =
   | { type: 'refreshFailed'; sessionId: string; message: string }
   | { type: 'invalidate'; sessionId: string }
   | { type: 'preferencesLoaded'; preferences: GitLogPreferences }
-  | { type: 'openSettings' }
-  | { type: 'closeSettings' }
-  | { type: 'previewPreferences'; patch: Partial<GitLogPreferences> }
-  | { type: 'preferencesSaved' }
   | { type: 'pageChanged'; pageIndex: number; pageCount: number };
 
 export function createInitialGitLogState(): GitLogState {
   const preferences = createDefaultGitLogPreferences();
   return {
-    status: 'idle', detached: false, commits: [], pageIndex: 0, pageCount: 1,
-    settingsOpen: false, preferences, preferencesDraft: preferences
+    status: 'idle', detached: false, commits: [], pageIndex: 0, pageCount: 1, preferences
   };
 }
 
@@ -55,10 +48,9 @@ export function gitLogReducer(state: GitLogState, action: GitLogAction): GitLogS
             branchName: action.cached.branchName,
             detached: action.cached.detached,
             commits: action.cached.commits,
-            preferences: state.preferences,
-            preferencesDraft: state.preferences
+            preferences: state.preferences
           }
-        : { ...createInitialGitLogState(), sessionId: action.sessionId, status: 'loading', preferences: state.preferences, preferencesDraft: state.preferences };
+        : { ...createInitialGitLogState(), sessionId: action.sessionId, status: 'loading', preferences: state.preferences };
     case 'ready':
       if (state.sessionId !== action.sessionId) return state;
       return {
@@ -74,16 +66,12 @@ export function gitLogReducer(state: GitLogState, action: GitLogAction): GitLogS
         : state;
     case 'invalidate':
       return state.sessionId === action.sessionId
-        ? { ...createInitialGitLogState(), sessionId: undefined, preferences: state.preferences, preferencesDraft: state.preferences }
+        ? { ...createInitialGitLogState(), sessionId: undefined, preferences: state.preferences }
         : state;
     case 'preferencesLoaded': {
       const preferences = normalizeGitLogPreferences(action.preferences);
-      return { ...state, preferences, preferencesDraft: preferences };
+      return { ...state, preferences, pageIndex: 0 };
     }
-    case 'openSettings': return { ...state, settingsOpen: true, preferencesDraft: state.preferences };
-    case 'closeSettings': return { ...state, settingsOpen: false, preferencesDraft: state.preferences };
-    case 'previewPreferences': return { ...state, preferencesDraft: normalizeGitLogPreferences({ ...state.preferencesDraft, ...action.patch }) };
-    case 'preferencesSaved': return { ...state, preferences: state.preferencesDraft, settingsOpen: false, pageIndex: 0 };
     case 'pageChanged': return { ...state, pageIndex: action.pageIndex, pageCount: Math.max(1, action.pageCount) };
   }
 }

@@ -113,13 +113,13 @@
 - Phase 6 阅读器下一页路由不能在扩展主进程直接重新计算 DOM 页范围，因此采用扩展向 Webview 发送 `{ type: 'command', command: 'nextPage' }`，再由 Webview 用当前 `currentRange` 回传 `nextPage` 的方式。
 - Phase 6 阅读器 Webview 已增加 `Shortcuts` 按钮，点击打开 `moyuplus shortcuts` Settings 查询；完整插件内快捷键设置页仍留给 Phase 7。
 - Phase 7 可复用现有阅读器 Webview，不必新增独立 VS Code 视图；当前 `Shortcuts` 按钮只会打开 Settings 搜索，尚不展示功能、当前绑定、启用状态或风险说明。
-- `package.json` 目前仅贡献 Enter/Tab 两个默认 keybinding，且两者默认关闭；其余主要功能只能通过命令面板执行。因此“当前绑定”需要同时展示扩展贡献的默认绑定和用户自定义绑定，不能仅从 `package.json` 静态推断。
+- `package.json` 贡献的默认 keybinding 不能代表考虑用户覆盖、冲突与 `when` 条件后的最终绑定，因此自制设置页不应将静态值展示成“当前绑定”。
 - 现有 `ShortcutConfig` 仍为空默认值，未接入配置读取；Phase 7 更适合使用 VS Code 的命令/键绑定查询能力生成只读状态，并通过标准设置/快捷键编辑器完成修改，避免自行维护第二套绑定存储。
 - 当前异常反馈不完整：Reader Webview 已有“无导入文件”空状态；TXT 命令会弹出缺失文件与解码错误；首次开启练习尚无“真实写入当前编辑器文件”的一次性安全确认。
 - `指导文档.md` 明确要求快捷键页不仅只读展示，还要允许配置：阅读器下一/上一页、关闭、打开/隐藏、切换文件、字号增减、练习开关，以及 Enter/Tab 组合行为；页面至少展示功能名、当前按键、启用状态、潜在冲突和动作说明。
-- VS Code 稳定扩展 API 没有公开“解析所有当前生效键绑定”的接口。可靠方案应把自定义动作委托给 VS Code Keybindings 编辑器，并在插件页展示本插件贡献的默认绑定/启用条件；若要精确反映用户覆盖，需要读取并解析用户 `keybindings.json`，会引入跨平台、配置同步和 JSONC 合并复杂度。
+- VS Code 稳定扩展 API 没有公开“解析所有当前生效键绑定”的接口。最终方案把实际绑定、冲突和删除全部委托给 VS Code Keybindings 编辑器，插件页只展示动作说明与风险，不解析用户 `keybindings.json`。
 - 2026-07-10 核对官方 VS Code Extension API：公开能力包括贡献 keybindings、执行命令和打开 Keyboard Shortcuts 编辑器，但没有读取当前解析后 keybinding 的稳定 API；官方也说明冲突取决于上下文规则和键盘布局，因此插件页应将“潜在冲突”视为风险提示，而不是声称能完整检测。
-- Phase 7 适合新增一个独立 `shortcutSettings` 领域模块，向 Reader Webview 提供稳定的行模型（command、功能名、默认绑定、启用状态、风险、说明），Reader provider 只负责配置读写与打开原生快捷键编辑器，避免把清单逻辑继续堆进 `webviewHtml.ts`。
+- 独立 `shortcutSettings` 领域模块向设置 Webview 提供稳定的行模型（command、功能名、启用状态、风险、说明），宿主只负责打开原生快捷键编辑器；模型不携带推断性的绑定值。
 - Reader provider 已集中处理文件读取异常并把 `error` 发给 Webview；Phase 7 可在错误态附带“重新选择/切换编码/移除记录”动作，而无需改动 TXT 解码核心。
 - 现有 Reader provider 只有 `requestNextPage` 公共动作，Phase 7 若要让全部阅读器功能可绑定，需要补齐 previous page、打开视图、切换文件、字号增减等命令入口；它们可以复用现有私有方法/Webview 消息，不需要复制分页算法。
 - 现有 VS Code 测试 shim 的 `workspace.getConfiguration` 只有 `get`，Phase 7 的 Webview 启用开关与首次安全提示测试需要补 `update` 和配置变更记录；安全提示可用 `globalState` 保存“已确认”标记，符合仅首次提醒的要求。
@@ -417,3 +417,29 @@
 - 用户确认完整可读与正确分页优先于原版排版，并批准方案 2：保留语义 HTML，删除出版物 CSS，由 MoyuPlus 提供统一阅读排版。
 - 统一排版仍保留标题、段落、列表、引用、表格、代码、粗斜体、锚点和内部导航；损失为出版物字体、颜色、缩进、复杂表格和装饰布局的原版视觉。
 - 修复不能只在 `fits()` 增加 `scrollWidth` 判断；若不先规范 `nowrap/pre/table`，二分文本无法把不可换行的横向内容变为可读页面。必须同时做 sanitizer 边界、统一 CSS 与双轴不变量。
+
+## 2026-07-16 MoyuPlus 统一设置面板
+
+- 最新规格位于 `docs/superpowers/specs/2026-07-16-moyuplus-unified-settings-panel-design.md`，状态已改为“已通过规格评审”；用户明确要求实施，可直接进入测试先行阶段。
+- 工作树起始状态包含规格文件的评审补强改动与未跟踪 `.superpowers/` 视觉伴侣产物；两者均须保留。
+- `.impeccable.md` 已提供完整设计上下文：MoyuPlus 面向 VS Code 内轻量阅读/练习用户，语气原生、克制、可靠；设置面板必须使用 VS Code 主题令牌，不引入外部字体、渐变、阴影卡片或装饰动画。
+- 规格要求四个分区共 22 项设置；Reader/Git Log 继续复用现有 store 与 normalize 边界，六项打字配置只编辑 Global 值并独立展示 workspace/workspace-folder 覆盖与实际有效值。
+- 安全与一致性关键点是 Webview 实例握手、协议版本拒绝、宿主单调 `stateVersion`、面板级串行队列、请求关联和旧实例写入屏障；这些必须先作为纯协议/模型测试固化，再接入面板 UI。
+- 现有项目已经有独立 build pipeline、Vitest 单元测试、Playwright 布局/隐私测试和 VS Code shim，适合沿现有测试结构增量扩展。
+- Reader 偏好现由 `ReaderPreferencesStore` 保存在 `globalState`，Git Log 偏好由 `GitLogPreferencesStore` 保存；两者 API 已返回规范化权威值，可直接作为设置服务的持久化适配器。
+- Reader 设置保存当前经 `ReaderLibraryBridge.savePreferences` 后全量 `refreshLibrary()`，Git Log 设置由 Reader Provider 直接接收 `saveGitLogPreferences`；统一面板需要把这两条写入路径集中，并向 Provider 提供显式的实时应用方法。
+- Reader Webview 的阅读设置和 Git Log 设置都仍是本地抽屉；入口分别触发 `openDrawer: settings` 与 GitLogView reducer 的 `openSettings`，Phase S4 必须改为宿主消息并删除抽屉渲染与保存协议。
+- 当前 VS Code shim 只有 `WebviewView`，没有 `createWebviewPanel`、panel view-state、configuration inspect/change event、workspace folder name/lookup 等能力；Phase S1/S2 测试需先扩展 shim 的公共 VS Code 行为，而不是向生产类加入测试钩子。
+- `registerReaderView` 当前把兼容命令 `moyuplus.reader.openSettings` 路由成 Webview 内部命令；统一面板注册后应由扩展层接管该命令，Reader/Git Log Webview 都只上报目标分区请求。
+- 构建脚本目前只有 `readerApp.ts` 一个 Webview entry；统一面板应新增独立 `settingsApp.ts` → `media/settingsApp.js`，样式由其 import 输出为 `settingsApp.css`，保持 Reader bundle 与设置生命周期隔离。
+- Reader toolbar 可以直接把设置按钮改为 `{type:'openUnifiedSettings', section:'reader'}`；Host 在 Reader v3 消息守卫之前处理该窄消息。GitLogView 同样通过其既有 `post` 回调发送 `section:'gitLog'`，无需扩展 Reader 导航协议。
+- Reader Webview 当前在 `libraryState` 中接收阅读偏好，Git Log 模式启动时同时接收两类偏好；为实时同步可新增宿主消息 `readerPreferencesUpdated`/`gitLogPreferencesUpdated`，在不重置书架、位置或 Git Log 数据的前提下只更新状态与重排版。
+- `scripts/build.mjs` 使用 esbuild `entryPoints`/单个 outfile；加入第二入口时应使用两个独立 build 调用，避免改变既有 bundle 文件名和测试契约。
+- 现有测试上下文普遍使用结构化假对象并通过 Vitest alias 注入 VS Code shim；设置 Panel 可沿用同一方式，扩展 shim 的公开 panel/configuration 行为后直接测试真实生产类。
+- Reader HTML 的随机 nonce/offline CSP 已有独立生成函数与安全测试；设置 HTML 应复用相同结构但进一步移除 `img-src`/`font-src` 能力，只保留 nonce script/style 和显式 `connect/frame/media-src 'none'`。
+- 整节恢复默认值的宿主响应已经携带 `section` 和请求关联信息；Webview 仍需在发起到成功/失败响应之间保存 `resettingSection`，以一次性禁用该分区全部控件并避免事务中途继续写入。
+- 真实人工验收确认设置入口应位于 `editor/context`，而不是低频的资源管理器右键菜单；最终 manifest 只贡献编辑器上下文入口。
+- VS Code 公共扩展 API 无法可靠查询考虑用户覆盖、冲突与 `when` 条件后的最终快捷键，因此设置面板不回显任何绑定值，只链接到原生 Keyboard Shortcuts 页面。
+- 滑块跳动根因是保存和响应调用全量 `replaceChildren()`；最终实现把用户交互状态与最新保存等待状态分离，活动会话期间原地同步并延后结构渲染。
+- Reader 背景色不生效的根因是 `applyReaderPreferences` 未应用 `textColor`/`backgroundColor`；最终以 `theme` 作为显式继承值，自定义六位十六进制颜色才写入内联样式。
+- 2026-07-17 最终验证为 Vitest 49 文件 236/236、Playwright 36/36、compile/build 与 `git diff --check` 全通过，用户人工验收通过。

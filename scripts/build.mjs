@@ -19,7 +19,16 @@ const webviewBuild = build({
   target: ['chrome120']
 });
 
-const builds = [webviewBuild];
+const settingsWebviewBuild = build({
+  ...sharedOptions,
+  entryPoints: ['src/webview/settingsApp.ts'],
+  format: 'iife',
+  outfile: 'media/settingsApp.js',
+  platform: 'browser',
+  target: ['chrome120']
+});
+
+const builds = [webviewBuild, settingsWebviewBuild];
 if (!webviewOnly) {
   builds.push(build({
     ...sharedOptions,

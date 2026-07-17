@@ -27,4 +27,16 @@ describe('Reader v2 legacy-stack removal', () => {
     expect(combined).not.toMatch(/\bReaderSession\b|\bPageRange\b|pageHistory|TxtFileService|TxtLibraryStore/);
     expect(combined).not.toMatch(/removeImportedTxt|checkImportedTxtFiles|reader\.selectFile|reader\.increaseFont|reader\.decreaseFont/);
   });
+
+  it('removes the Reader and Git Log in-place settings drawers and save controls', async () => {
+    const sources = await Promise.all([
+      'src/webview/readerApp.ts',
+      'src/webview/readerState.ts',
+      'src/webview/gitLogView.ts',
+      'src/webview/gitLogState.ts'
+    ].map(file => readFile(path.join(projectRoot, file), 'utf8')));
+    const combined = sources.join('\n');
+    expect(combined).not.toMatch(/renderSettingsDrawer|settingsDrawer|saveGitLogPreferences|preferencesDraft|settingsOpen/);
+    expect(combined.match(/openUnifiedSettings/g)?.length).toBeGreaterThanOrEqual(2);
+  });
 });

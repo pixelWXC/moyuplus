@@ -12,5 +12,9 @@ export function applyReaderPreferences(target: HTMLElement, preferences: ReaderP
     padding: `${preferences.pagePadding}px`,
     textAlign: preferences.textAlign
   });
+  if (preferences.textColor === 'theme') target.style.removeProperty('color');
+  else target.style.color = preferences.textColor;
+  if (preferences.backgroundColor === 'theme') target.style.removeProperty('background-color');
+  else target.style.backgroundColor = preferences.backgroundColor;
   target.style.setProperty('--paragraph-spacing', `${preferences.paragraphSpacing}em`);
 }
