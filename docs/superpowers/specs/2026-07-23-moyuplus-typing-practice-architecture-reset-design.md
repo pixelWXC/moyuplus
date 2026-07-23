@@ -364,6 +364,39 @@ interface ContentProvider {
 
 清理规则在素材 revision 中记录，避免同一素材在不同时间被隐式采用不同规范。
 
+### 6.8 内置内容与生成器最低覆盖矩阵
+
+“支持一种模式”必须有有限、可验收的最小内容集或生成规则，不能只注册一个空分类。以下是完整交付的最低覆盖；可以增加内容，但不能用增加数量替代类别覆盖。
+
+所有内置文章必须是原创、公共领域或有明确再分发授权的内容。新闻类别使用原创事实摘要或有明确授权的稿件，不直接复制不明授权的新闻全文。
+
+| 模式 | 最低内置覆盖 | 验收 |
+|---|---|---|
+| 中文现代文 | 5 篇，覆盖叙述、说明、议论 | 每篇可独立选择并生成文章/100/500 字计划 |
+| 中文新闻 | 5 篇原创或授权事实摘要 | 标点策略默认中文等价，可切严格 |
+| 中文小说片段 | 5 篇原创或公共领域片段 | 保留段落和引号边界 |
+| 中文常用句子 | 50 句 | 可按定长随机组合，seed 可复现 |
+| 英文单词 | 200 个，至少划分基础/进阶两个频率组 | 大小写与标点策略可配置 |
+| 英文句子 | 50 句 | 可计算标准 WPM 和完整单词数 |
+| 英文文章 | 5 篇 | 支持文章、定长和限时 |
+| 中英混合·程序员 | 25 句或短段 | 包含变量名、命令、路径、缩写和中文说明 |
+| 中英混合·办公 | 25 句或短段 | 包含日期、金额、英文缩写和中文说明 |
+| 高频汉字 | 500 字的版本化频率表 | 无重复抽样可配置，seed 可复现 |
+| 成语 | 100 条 | 保持四字整体，也可拆为逐字目标 |
+| 常用词组 | 100 条 | `Intl.Segmenter` 结果与素材词组边界均保留 |
+| 手机号 | 中国大陆 11 位及 `3-4-4` 分组两种显示 | 每次生成值满足格式约束 |
+| 日期 | `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYY年M月D日` | 生成有效日历日期，包括闰年 |
+| 金额 | 整数、小数、千分位、`¥`/`元` 四类 | 数值与显示字符串一致 |
+| 标点 | 中文标点集、ASCII 标点集及已配置等价对 | 中文等价与严格模式均有测试 |
+| 特殊符号 | 至少覆盖常见键盘符号 32 个 | 严格匹配，不应用中文等价 |
+| JavaScript | 10 个短片段，覆盖声明、函数、数组/对象、控制流、异步 | 严格/宽松空白均可练 |
+| TypeScript | 10 个短片段，覆盖类型、接口、泛型、联合类型、异步 | 同上 |
+| HTML | 10 个短片段，覆盖结构、属性、表单、语义标签 | 同上 |
+| CSS | 10 个短片段，覆盖选择器、布局、变量、媒体查询 | 同上 |
+| 错字强化 | 0、1、5、20+ Mastery 条目的生成路径 | 空状态可解释；非空按权重抽样且 seed 可复现 |
+
+数量属于版本 1 的验收基线。后续新增素材通过 manifest revision 独立发布，不改变已完成 Result 的解释。
+
 ## 7. 专用练习编辑器
 
 ### 7.1 资源与语言
@@ -917,65 +950,41 @@ storageUri/
 
 ## 15. 实施分解
 
-本设计是完整 program spec。实现计划必须拆成七个有边界的工作包，但共享本文定义的契约和最终验收：
+本设计是完整 program spec。实现计划必须拆成以下七个工作包。每个事实数据、Store、写入路径和恢复路径只能有一个明确拥有者；后续工作包只能使用前序工作包公开的接口。
 
-### 阶段 1：契约、模型和架构守卫
+### 15.1 工作包依赖与所有权
 
-- 目录和公开接口。
-- Content、Plan、Snapshot、Session、Result schema。
-- 端口和领域事件。
-- 禁止依赖测试。
+| 工作包 | 明确拥有 | 依赖 | 退出条件 |
+|---|---|---|---|
+| 1. 契约、Coordinator 骨架与架构守卫 | 目录入口；Content/Plan/Snapshot/Session/Result/Mastery schema；所有应用命令、领域事件和 Port；`PracticeApplicationCoordinator` 的状态无关骨架；Clock/Id/Store 测试替身；依赖守卫 | 无 | schema 和 Port 可以独立编译；Coordinator 可用测试替身完成 prepare/start/pause/restart/finish 编排；Domain/Application 无 `vscode`/文件系统导入 |
+| 2. 素材系统与 ContentCatalogStore | 内置 manifest 和本节覆盖矩阵；托管正文布局；`ContentCatalogStore`；素材文件锁、原子写入和可恢复删除；自定义/自由内容；TXT/EPUB 导入；TXT 导出；清理、计数、估时、范围；BuiltIn/Custom Provider | 1 | 全部素材来源可产出 `PreparedContent`；Catalog 并发/崩溃测试通过；所有最低内容类别有非空 fixtures 或生成数据 |
+| 3. 纯领域内核、长期结果与全局投影 | 判定状态机；Policies；Analytics；Mastery scorer；全部生成器；完整 `PracticeApplicationCoordinator`；`PracticePreferencesStore`；全局不可变 `ResultStore`；History/Daily/Mastery Projection Stores；Result 原子写、投影 watermark 和重建 | 1、2 的 `PreparedContent` 契约 | 使用内存 Editor Port 可跑通完整会话；统计/生成器测试通过；Result 是唯一事实来源；历史、日周和 Mastery 可从 Result 重建 |
+| 4. workspace 会话与原生编辑器适配 | `moyuplus-practice:` FileSystemProvider；Snapshot/Checkpoint Store；workspace `PendingResultStore`；Session Lease Store 和 heartbeat；零宽锚点；DocumentChange Adapter；Decoration Presenter；Enter/Tab/Backspace；Editor 关闭/恢复；pending Result 向全局 ResultStore 重试 | 1–3 | 真实练习文档可完成、暂停、重启、恢复；项目文件零写入；锚点恢复、pending 重试和双实例 lease 合约测试通过；微软拼音基础人工冒烟通过 |
+| 5. 独立 Typing View、Reader Bridge 与配置入口 | Activity Bar/View；版本化协议；materials/setup/live/result/history/mastery 页面；ReaderBookSourceProvider；Reader Bridge；活动会话冲突 UI；`moyuplus-practice` 语言配置桥；设置保存/当前 Plan 覆盖 | 1–4；现有 Reader/Book Adapter 公开接口 | 通过 feature gate 跑通素材、书架、自由练习三条端到端路径；Result/History/Mastery 页面只读工作包 3 Store；Typing View 不直接写领域存储 |
+| 6. 旧版迁移与正式切换 | LegacyResumeHint；旧 session key 迁移；公共命令 ID 薄别名；package contributions 切换；旧 Inline Completion 和旧状态栏退役；恢复演练；删除旧 Controller 前的回退检查点 | 1–5 全部退出条件 | 新系统成为唯一 typing 注册；旧活动状态可得到恢复提示；旧命令不导入旧 Controller；切换/回退演练通过 |
+| 7. 完整验收与旧 stack 删除 | 需求追踪证据；性能基准；Extension Host/Playwright/人工矩阵；删除旧实现和旧测试；README、设置说明、迁移说明、CHANGELOG | 1–6 | 第 18 节全部完成条件通过；仓库不再包含可执行的旧 typing stack；所有文档与最终行为一致 |
 
-### 阶段 2：素材系统
+### 15.2 Store 与恢复路径清单
 
-- 内置素材 manifest。
-- 自定义/自由内容。
-- TXT、EPUB 导入。
-- TXT 导出。
-- 清理、计数、估时和 range。
+| 数据/写入路径 | 唯一拥有工作包 | 恢复责任 |
+|---|---|---|
+| 托管素材正文、Catalog、素材锁 | 2 | 锁超时恢复、原子替换、可恢复删除 |
+| 全局偏好 | 3 | schema normalize；非法值回默认并保留诊断 |
+| 不可变 Result | 3 | 原子写入；不覆盖同 ID；失败由工作包 4 pending 接管 |
+| History/Daily/Mastery 投影 | 3 | 依据 Result watermark 增量补算或全量重建 |
+| workspace Snapshot/Checkpoint | 4 | Editor 关闭或重载后恢复 |
+| pending Result | 4 | 下次激活或手动重试提交到工作包 3 ResultStore |
+| session lease | 4 | heartbeat、超时、接管和尽力释放 |
+| Webview 临时导航状态 | 5 | 丢失时由 Application snapshot 重建，不成为事实来源 |
+| LegacyResumeHint | 6 | 一次性消费；失败不修改旧来源记录 |
 
-### 阶段 3：纯领域内核
+### 15.3 计划规则
 
-- 判定状态机。
-- 中文标点、空白和完成策略。
-- Analytics。
-- Mastery。
-- 所有内容生成器。
-
-### 阶段 4：原生编辑器适配
-
-- 内存 FileSystemProvider。
-- 零宽锚点。
-- DocumentChange Adapter。
-- Decoration Presenter。
-- Enter/Tab/Backspace。
-- IME 和滚动验证。
-
-### 阶段 5：Typing View 与跨系统入口
-
-- 独立 View 和协议。
-- materials/setup/live/result/history/mastery。
-- Reader Bridge。
-- 设置和活动冲突。
-
-### 阶段 6：迁移与切换
-
-- LegacyResumeHint。
-- 命令别名。
-- Session lease。
-- Result/projection 恢复。
-- 关闭旧 Inline Completion。
-
-### 阶段 7：完整验收
-
-- 全需求追踪。
-- 自动化测试。
-- 性能预算。
-- 人工 IME、主题、多窗口和大素材验证。
-- 旧 stack 删除。
-- 文档更新。
-
-任何阶段完成都只代表进入下一集成阶段，不代表本次架构重置已完成。
+- 工作包 1 的 Coordinator 骨架只定义编排和测试替身；业务完整性在工作包 3 达成，避免两个 Coordinator 实现。
+- 工作包 5 不得临时创建 Result、History 或 Mastery Store；它只能调用工作包 3 的 Application/Query 接口。
+- 工作包 6 不得首次实现 lease、pending 或投影恢复；这些恢复路径必须在工作包 3/4 已经稳定。
+- 每个工作包的计划都必须列出公开接口、文件、单测、集成测试和退出证据。
+- 任何阶段完成都只代表进入下一集成阶段，不代表本次架构重置已完成。
 
 ## 16. 测试策略
 
