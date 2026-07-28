@@ -254,8 +254,7 @@ export function getSettingsWebviewHtml(_webview: vscode.Webview, scriptUri: vsco
 
 function isRiskEnablement(message: Extract<SettingsToHostMessage, { type: 'changeSetting' }>): boolean {
   return message.domain === 'configuration' && message.value === true
-    && (message.key === 'moyuplus.shortcuts.enableEnterRouter'
-      || message.key === 'moyuplus.shortcuts.enableTabRouter');
+    && message.key === 'moyuplus.shortcuts.enableEnterRouter';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

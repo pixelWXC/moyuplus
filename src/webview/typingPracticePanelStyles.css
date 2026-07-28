@@ -1,0 +1,467 @@
+:root {
+  color-scheme: light dark;
+  --keyboard-left-accent: oklch(72% 0.2 250);
+  --keyboard-right-accent: oklch(79% 0.19 70);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 0;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.practice-panel {
+  min-height: 100vh;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+}
+
+.practice-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.practice-eyebrow,
+.practice-status,
+.practice-progress,
+.practice-style-note {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.practice-eyebrow {
+  color: var(--vscode-foreground);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.practice-status {
+  margin-top: 0.15rem;
+  font-size: 0.875rem;
+}
+
+.practice-header-meta {
+  text-align: right;
+}
+
+.practice-style-note {
+  margin-top: 0.1rem;
+  font-size: 0.6875rem;
+}
+
+.practice-stage {
+  display: grid;
+  align-content: center;
+  gap: clamp(0.65rem, 1.6vh, 1.2rem);
+  min-height: calc(100vh - 5rem);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-block: clamp(1.5rem, 5vh, 4rem);
+}
+
+.practice-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(2.6rem, 7vw, 4rem) minmax(0, 1fr);
+  align-items: baseline;
+  min-width: 0;
+  padding-block: clamp(0.55rem, 1.5vh, 0.9rem);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.practice-track--reference {
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.practice-track--input {
+  background: color-mix(
+    in srgb,
+    var(--vscode-editor-background) 92%,
+    var(--vscode-focusBorder)
+  );
+}
+
+.practice-track-label {
+  align-self: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.practice-line {
+  min-width: 0;
+  height: calc(var(--practice-font-size, 34px) * var(--practice-line-height, 1.6));
+  overflow: hidden;
+  font-family: var(--practice-font-family, var(--vscode-editor-font-family));
+  font-size: var(--practice-font-size, 34px);
+  line-height: var(--practice-line-height, 1.6);
+  letter-spacing: 0.02em;
+  white-space: pre;
+}
+
+.practice-unit {
+  white-space: pre;
+}
+
+.practice-unit--reference {
+  color: var(--vscode-foreground);
+}
+
+.practice-unit--reference-passed {
+  color: var(--vscode-descriptionForeground);
+}
+
+.practice-unit--reference-target {
+  color: var(--vscode-foreground);
+  background: color-mix(
+    in srgb,
+    var(--vscode-focusBorder) 18%,
+    var(--vscode-editor-background)
+  );
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 0.06em;
+}
+
+.practice-unit--correct {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.practice-unit--error {
+  color: var(--vscode-errorForeground);
+  background: color-mix(
+    in srgb,
+    var(--vscode-inputValidation-errorBackground, transparent) 55%,
+    transparent
+  );
+  text-decoration: underline wavy var(--vscode-editorError-foreground);
+  text-underline-offset: 0.18em;
+}
+
+.practice-unit--composition {
+  color: var(--vscode-input-foreground);
+  text-decoration: underline solid var(--vscode-focusBorder);
+  text-underline-offset: 0.2em;
+}
+
+.practice-unit--pending {
+  color: var(--vscode-descriptionForeground);
+  text-decoration: underline dotted var(--vscode-descriptionForeground);
+  text-underline-offset: 0.2em;
+}
+
+.practice-unit--input-target {
+  color: color-mix(
+    in srgb,
+    var(--vscode-descriptionForeground) 45%,
+    transparent
+  );
+  border-bottom: 2px solid var(--vscode-focusBorder);
+}
+
+.practice-unit--input-remaining {
+  color: transparent;
+}
+
+.practice-input {
+  position: absolute;
+  z-index: 2;
+  left: clamp(2.6rem, 7vw, 4rem);
+  bottom: 0.75rem;
+  width: 2px;
+  height: 1.25em;
+  margin: 0;
+  padding: 0;
+  color: transparent;
+  background: transparent;
+  border: 0;
+  caret-color: transparent;
+  opacity: 0.02;
+}
+
+.practice-input:focus {
+  outline: 0;
+}
+
+.practice-stage.is-focused .practice-track--input {
+  box-shadow: inset 2px 0 0 var(--vscode-focusBorder);
+}
+
+.practice-input:disabled {
+  opacity: 0;
+}
+
+.practice-error-message {
+  margin: 0;
+  padding-left: clamp(2.6rem, 7vw, 4rem);
+  color: var(--vscode-errorForeground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.practice-focus-prompt {
+  justify-self: start;
+  min-height: 2rem;
+  margin-left: clamp(2.6rem, 7vw, 4rem);
+  padding: 0.25rem 0;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--vscode-focusBorder);
+  cursor: pointer;
+}
+
+.practice-focus-prompt:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.virtual-keyboard {
+  width: min(100%, 58rem);
+  margin: clamp(0.5rem, 2vh, 1.5rem) auto 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.keyboard-heading,
+.keyboard-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.keyboard-heading > :first-child {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.keyboard-board {
+  display: grid;
+  gap: clamp(2px, 0.45vw, 5px);
+  margin-top: 0.55rem;
+}
+
+.keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(2px, 0.45vw, 5px);
+  min-width: 0;
+}
+
+.keyboard-key {
+  display: grid;
+  flex: 1 1 0;
+  place-items: center;
+  min-width: 0;
+  max-width: 3.7rem;
+  height: clamp(1.45rem, 4.5vw, 2.4rem);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-bottom-color: var(--vscode-descriptionForeground);
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: clamp(0.45rem, 1.35vw, 0.72rem);
+  line-height: 1;
+}
+
+.keyboard-key--wide {
+  flex-grow: 1.45;
+  max-width: 5.2rem;
+}
+
+.keyboard-key--shift {
+  flex-grow: 2;
+  max-width: 7rem;
+}
+
+.keyboard-key--space {
+  flex: 0 1 42%;
+  max-width: 22rem;
+}
+
+.color-keyboard-hands .keyboard-key--left {
+  background: color-mix(
+    in srgb,
+    var(--keyboard-left-accent) 52%,
+    var(--vscode-editor-background)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--keyboard-left-accent) 82%,
+    var(--vscode-panel-border)
+  );
+}
+
+.color-keyboard-hands .keyboard-key--right {
+  background: color-mix(
+    in srgb,
+    var(--keyboard-right-accent) 52%,
+    var(--vscode-editor-background)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--keyboard-right-accent) 82%,
+    var(--vscode-panel-border)
+  );
+}
+
+.color-keyboard-hands .keyboard-key--both {
+  background: linear-gradient(
+    90deg,
+    color-mix(
+      in srgb,
+      var(--keyboard-left-accent) 52%,
+      var(--vscode-editor-background)
+    ) 0 50%,
+    color-mix(
+      in srgb,
+      var(--keyboard-right-accent) 52%,
+      var(--vscode-editor-background)
+    ) 50% 100%
+  );
+  border-color: var(--vscode-focusBorder);
+}
+
+.keyboard-key.is-next {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-focusBorder);
+  box-shadow: 0 0 0 2px color-mix(
+    in srgb,
+    var(--vscode-focusBorder) 35%,
+    transparent
+  );
+  transform: translateY(-1px);
+}
+
+.keyboard-legend {
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.keyboard-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.legend-swatch {
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+}
+
+.legend-swatch--left {
+  background: color-mix(
+    in srgb,
+    var(--keyboard-left-accent) 68%,
+    var(--vscode-editor-background)
+  );
+  border-color: var(--keyboard-left-accent);
+}
+
+.legend-swatch--right {
+  background: color-mix(
+    in srgb,
+    var(--keyboard-right-accent) 68%,
+    var(--vscode-editor-background)
+  );
+  border-color: var(--keyboard-right-accent);
+}
+
+.practice-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 32rem) {
+  .practice-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .practice-header-meta {
+    text-align: left;
+  }
+
+  .practice-stage {
+    align-content: start;
+    min-height: auto;
+    padding-block: 1.5rem;
+  }
+
+  .practice-track {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+  }
+
+  .practice-input {
+    left: 2.4rem;
+  }
+
+  .practice-error-message,
+  .practice-focus-prompt {
+    padding-left: 0;
+    margin-left: 2.4rem;
+  }
+
+  .keyboard-legend {
+    justify-content: space-between;
+  }
+}
+
+@media (forced-colors: active) {
+  .practice-unit--correct,
+  .practice-unit--error,
+  .practice-unit--pending,
+  .practice-unit--reference-target,
+  .keyboard-key.is-next {
+    forced-color-adjust: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keyboard-key.is-next {
+    transform: none;
+  }
+}

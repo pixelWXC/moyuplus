@@ -28,7 +28,32 @@ const settingsWebviewBuild = build({
   target: ['chrome120']
 });
 
-const builds = [webviewBuild, settingsWebviewBuild];
+const typingWebviewBuild = build({
+  ...sharedOptions,
+  entryPoints: ['src/webview/typingApp.ts'],
+  format: 'iife',
+  outfile: 'media/typingApp.js',
+  platform: 'browser',
+  target: ['chrome120']
+});
+
+const typingPracticePanelBuild = build({
+  ...sharedOptions,
+  entryPoints: ['src/webview/typingPracticePanelApp.ts'],
+  format: 'iife',
+  legalComments: 'none',
+  minify: true,
+  outfile: 'media/typingPracticePanelApp.js',
+  platform: 'browser',
+  target: ['chrome120']
+});
+
+const builds = [
+  webviewBuild,
+  settingsWebviewBuild,
+  typingWebviewBuild,
+  typingPracticePanelBuild
+];
 if (!webviewOnly) {
   builds.push(build({
     ...sharedOptions,

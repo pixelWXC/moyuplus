@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:">
+  <link rel="stylesheet" href="../../../media/typingPracticePanelApp.css">
+  <style>
+    :root {
+      --vscode-font-family: "Segoe UI", sans-serif;
+      --vscode-editor-font-family: Consolas, monospace;
+      --vscode-editor-font-size: 16px;
+      --vscode-foreground: #242424;
+      --vscode-editor-background: #ffffff;
+      --vscode-descriptionForeground: #616161;
+      --vscode-focusBorder: #0066bf;
+      --vscode-input-background: #ffffff;
+      --vscode-input-foreground: #242424;
+      --vscode-input-border: #808080;
+      --vscode-testing-iconPassed: #247d35;
+      --vscode-errorForeground: #b42318;
+      --vscode-editorError-foreground: #b42318;
+      --vscode-progressBar-background: #0066bf;
+      --vscode-panel-border: #cccccc;
+    }
+  </style>
+  <script>
+    window.sentMessages = [];
+    let persistedState;
+    const baseSnapshot = {
+      sessionId: 'session-1',
+      revision: 0,
+      status: 'running',
+      targetIndex: 0,
+      totalUnits: 3,
+      window: {
+        start: 0,
+        end: 3,
+        units: [
+          { index: 0, text: 'a', display: 'a', state: 'target' },
+          { index: 1, text: '主', display: '主', state: 'remaining' },
+          { index: 2, text: '题', display: '题', state: 'remaining' }
+        ]
+      },
+      updatedAt: 1
+    };
+    window.acquireVsCodeApi = () => ({
+      postMessage(message) {
+        window.sentMessages.push(message);
+        if (message.type === 'practice/ready') {
+          queueMicrotask(() => window.practiceHarness.sendSnapshot(baseSnapshot));
+        }
+      },
+      getState() { return persistedState; },
+      setState(value) { persistedState = value; }
+    });
+    window.practiceHarness = {
+      sent: () => window.sentMessages,
+      clear: () => { window.sentMessages.length = 0; },
+      sendSnapshot(snapshot) {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { protocolVersion: 1, type: 'practice/snapshot', snapshot }
+        }));
+      },
+      sendBlocked() {
+        this.sendSnapshot({
+          ...baseSnapshot,
+          revision: 1,
+          status: 'blockedOnError',
+          blockedAttempt: {
+            attemptId: 'input-error',
+            expected: 'a',
+            actual: 'X'
+          },
+          window: {
+            ...baseSnapshot.window,
+            units: [
+              { index: 0, text: 'a', display: 'a', state: 'blocked' },
+              ...baseSnapshot.window.units.slice(1)
+            ]
+          }
+        });
+      },
+      setTheme(theme) {
+        const root = document.documentElement;
+        root.style.setProperty(
+          '--vscode-editor-background',
+          theme === 'dark' ? '#1f1f1f' : '#ffffff'
+        );
+        root.style.setProperty(
+          '--vscode-foreground',
+          theme === 'dark' ? '#f0f0f0' : '#242424'
+        );
+        root.style.setProperty(
+          '--vscode-descriptionForeground',
+          theme === 'dark' ? '#c8c8c8' : '#616161'
+        );
+      }
+    };
+  </script>
+</head>
+<body data-session-id="session-1">
+  <div id="app"></div>
+  <script src="../../../media/typingPracticePanelApp.js"></script>
+</body>
+</html>

@@ -16,9 +16,7 @@ describe('Reader v2 legacy-stack removal', () => {
 
   it('keeps v1 Reader shapes isolated inside the read-only migration module', async () => {
     const runtimeFiles = [
-      'src/domain/models.ts',
       'src/reader/readerMessages.ts',
-      'src/storage/workspaceSessionStore.ts',
       'src/extension.ts'
     ];
     const sources = await Promise.all(runtimeFiles.map(file => readFile(path.join(projectRoot, file), 'utf8')));

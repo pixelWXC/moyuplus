@@ -47,8 +47,8 @@ describe('settings message protocol', () => {
       ...envelope,
       type: 'changeSetting',
       domain: 'configuration',
-      key: 'moyuplus.typing.tabMode',
-      value: 'replaceLine'
+      key: 'moyuplus.shortcuts.enableEnterRouter',
+      value: true
     })).toBe(true);
   });
 
@@ -100,7 +100,7 @@ describe('settings message protocol', () => {
       { ...envelope, type: 'changeSetting', domain: 'reader', key: '__proto__', value: 16 },
       { ...envelope, type: 'changeSetting', domain: 'gitLog', key: 'maxCommits', value: 1001 },
       { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.unknown', value: true },
-      { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.typing.tabMode', value: 'unknown' },
+      { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.shortcuts.enableEnterRouter', value: 'yes' },
       { ...envelope, type: 'changeSetting', domain: 'reader', key: 'fontSize', value: 18, extra: true },
       { ...envelope, type: 'unknown' },
       { ...envelope, type: 'resetSection', section: 'typing' },

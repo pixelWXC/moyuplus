@@ -10,15 +10,14 @@ import {
   STOP_IMMERSIVE_READING_COMMAND_ID,
   createShortcutSettingsState
 } from '../../shortcuts/shortcutSettings';
-import { ROUTE_ENTER_COMMAND_ID, ROUTE_TAB_COMMAND_ID } from '../../commands/shortcutRouter';
-import { TOGGLE_TYPING_PRACTICE_COMMAND_ID } from '../../typing/typingPracticeCommands';
+import { ROUTE_ENTER_COMMAND_ID } from '../../commands/shortcutRouter';
+import { TOGGLE_TYPING_PRACTICE_COMMAND_ID } from '../../typing/registration';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 
 describe('shortcut settings state', () => {
   it('describes every major reader and typing action in a stable order', () => {
     const items = createShortcutSettingsState({
-      enableEnterRouter: false,
-      enableTabRouter: true
+      enableEnterRouter: false
     });
 
     expect(items.map((item) => item.commandId)).toEqual([
@@ -35,26 +34,19 @@ describe('shortcut settings state', () => {
       STOP_IMMERSIVE_READING_COMMAND_ID,
       TOGGLE_GIT_LOG_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_COMMAND_ID,
-      ROUTE_ENTER_COMMAND_ID,
-      ROUTE_TAB_COMMAND_ID
+      ROUTE_ENTER_COMMAND_ID
     ]);
     expect(items.every((item) => item.label.length > 0 && item.description.length > 0)).toBe(true);
   });
 
   it('does not claim to know effective shortcut bindings', () => {
     const items = createShortcutSettingsState({
-      enableEnterRouter: false,
-      enableTabRouter: true
+      enableEnterRouter: false
     });
 
     expect(items.find((item) => item.commandId === ROUTE_ENTER_COMMAND_ID)).toMatchObject({
       enabled: false,
       configurableEnablement: 'enter',
-      risk: 'high'
-    });
-    expect(items.find((item) => item.commandId === ROUTE_TAB_COMMAND_ID)).toMatchObject({
-      enabled: true,
-      configurableEnablement: 'tab',
       risk: 'high'
     });
     expect(items.every((item) => !('defaultBinding' in item))).toBe(true);

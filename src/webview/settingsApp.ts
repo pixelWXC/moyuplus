@@ -336,8 +336,7 @@ function renderShortcuts(): HTMLElement {
   const root = sectionRoot('快捷键', '按键配置、冲突检查和删除由 VS Code 的键盘快捷方式界面负责。');
   const config = Object.fromEntries(state.configuration.map(item => [item.key, item.globalValue]));
   const shortcuts = createShortcutSettingsState({
-    enableEnterRouter: config['moyuplus.shortcuts.enableEnterRouter'] === true,
-    enableTabRouter: config['moyuplus.shortcuts.enableTabRouter'] === true
+    enableEnterRouter: config['moyuplus.shortcuts.enableEnterRouter'] === true
   });
   const groups: Array<{ title: string; test: (command: string) => boolean; experimental?: boolean }> = [
     { title: '阅读', test: command => command.startsWith('moyuplus.reader.') },
@@ -362,20 +361,13 @@ function renderShortcuts(): HTMLElement {
 
 function configurationField(item: ConfigurationSettingSnapshot): HTMLElement {
   const labels: Record<string, string> = {
-    'moyuplus.shortcuts.enableTabRouter': 'Tab 路由总开关（实验性）',
-    'moyuplus.typing.tabMode': 'Tab 补全方式（实验性）',
     'moyuplus.shortcuts.enableEnterRouter': 'Enter 路由总开关（实验性）',
     'moyuplus.enter.insertNewLine': '插入真实换行（实验性）',
-    'moyuplus.enter.nextPracticeLine': '推进练习行（实验性）',
     'moyuplus.enter.nextReaderPage': '阅读器下一页（实验性）'
   };
   const wrapper = node('div', 'configuration-setting');
   const key = item.key;
-  if (key === 'moyuplus.typing.tabMode') {
-    wrapper.append(selectField(labels[key], 'configuration', key, String(item.globalValue), [['completeRest', '只补全剩余文字'], ['replaceLine', '替换当前整行']]));
-  } else {
-    wrapper.append(toggleField(labels[key], 'configuration', key, item.globalValue === true));
-  }
+  wrapper.append(toggleField(labels[key], 'configuration', key, item.globalValue === true));
   wrapper.append(node('p', 'scope-note', item.globalIsDefault ? '全局值：使用默认值' : '全局值：已显式设置'));
   if (item.overridden) {
     const override = node('div', 'override-note');
@@ -416,7 +408,7 @@ function rangeField(labelText: string, domain: SettingsDomain, key: string, valu
   Object.assign(input, { type: 'range', min: String(min), max: String(max), step: String(step), value: String(value) });
   input.id = controlId(domain, key);
   input.disabled = isControlPending(domain, key);
-  const output = node('output', undefined, `${value}${unit}`); output.htmlFor = input.id;
+  const output = node('output', undefined, `${value}${unit}`); output.htmlFor.add(input.id);
   const id = rangeId(domain, key);
   const session = () => beginRangeSession(domain, key, input, output, unit);
   const commit = () => {

@@ -31,14 +31,6 @@
     italic: boolean,
     leftMargin: numberBetween(0, 64)
   };
-  var configurationValidators = {
-    "moyuplus.shortcuts.enableTabRouter": boolean,
-    "moyuplus.typing.tabMode": oneOf("completeRest", "replaceLine"),
-    "moyuplus.shortcuts.enableEnterRouter": boolean,
-    "moyuplus.enter.insertNewLine": boolean,
-    "moyuplus.enter.nextPracticeLine": boolean,
-    "moyuplus.enter.nextReaderPage": boolean
-  };
   function boolean(value) {
     return typeof value === "boolean";
   }
@@ -57,7 +49,6 @@
 
   // src/shortcuts/shortcutSettings.ts
   var ROUTE_ENTER_COMMAND_ID = "moyuplus.routeEnter";
-  var ROUTE_TAB_COMMAND_ID = "moyuplus.routeTab";
   var TOGGLE_TYPING_PRACTICE_COMMAND_ID = "moyuplus.toggleTypingPractice";
   var TOGGLE_GIT_LOG_COMMAND_ID = "moyuplus.gitLog.toggle";
   var NEXT_READER_PAGE_COMMAND_ID = "moyuplus.reader.nextPage";
@@ -89,20 +80,11 @@
       {
         commandId: ROUTE_ENTER_COMMAND_ID,
         label: "\u7F16\u8F91\u5668\uFF1AEnter \u7EC4\u5408\u52A8\u4F5C",
-        description: "\u63D2\u5165\u771F\u5B9E\u6362\u884C\uFF0C\u5E76\u6309\u8BBE\u7F6E\u63A8\u8FDB\u7EC3\u4E60\u884C\u6216\u9605\u8BFB\u5668\u9875\u9762\u3002",
+        description: "\u63D2\u5165\u771F\u5B9E\u6362\u884C\uFF0C\u5E76\u53EF\u6309\u8BBE\u7F6E\u63A8\u8FDB\u9605\u8BFB\u5668\u9875\u9762\u3002",
         enabled: input.enableEnterRouter,
         configurableEnablement: "enter",
         risk: "high",
         conflictWarning: "Enter \u662F\u9AD8\u9891\u7F16\u8F91\u6309\u952E\uFF1B\u4EC5\u5728\u660E\u786E\u9700\u8981\u7EC4\u5408\u52A8\u4F5C\u65F6\u542F\u7528\u3002"
-      },
-      {
-        commandId: ROUTE_TAB_COMMAND_ID,
-        label: "\u7F16\u8F91\u5668\uFF1ATab \u7EC3\u4E60\u8865\u5168",
-        description: "\u7EC3\u4E60\u5F00\u542F\u4E14\u8865\u5168\u83DC\u5355\u4E0E snippet \u4E0D\u6D3B\u8DC3\u65F6\u8865\u5168\u5F53\u524D\u7EC3\u4E60\u884C\u3002",
-        enabled: input.enableTabRouter,
-        configurableEnablement: "tab",
-        risk: "high",
-        conflictWarning: "Tab \u53EF\u80FD\u4E0E\u8865\u5168\u6216 snippet \u51B2\u7A81\uFF1B\u8DEF\u7531\u5E26\u6709\u9650\u5B9A\u6761\u4EF6\u4E14\u9ED8\u8BA4\u5173\u95ED\u3002"
       }
     ];
   }
@@ -546,8 +528,7 @@
     const root = sectionRoot("\u5FEB\u6377\u952E", "\u6309\u952E\u914D\u7F6E\u3001\u51B2\u7A81\u68C0\u67E5\u548C\u5220\u9664\u7531 VS Code \u7684\u952E\u76D8\u5FEB\u6377\u65B9\u5F0F\u754C\u9762\u8D1F\u8D23\u3002");
     const config = Object.fromEntries(state.configuration.map((item) => [item.key, item.globalValue]));
     const shortcuts = createShortcutSettingsState({
-      enableEnterRouter: config["moyuplus.shortcuts.enableEnterRouter"] === true,
-      enableTabRouter: config["moyuplus.shortcuts.enableTabRouter"] === true
+      enableEnterRouter: config["moyuplus.shortcuts.enableEnterRouter"] === true
     });
     const groups = [
       { title: "\u9605\u8BFB", test: (command) => command.startsWith("moyuplus.reader.") },
@@ -571,20 +552,13 @@
   }
   function configurationField(item) {
     const labels = {
-      "moyuplus.shortcuts.enableTabRouter": "Tab \u8DEF\u7531\u603B\u5F00\u5173\uFF08\u5B9E\u9A8C\u6027\uFF09",
-      "moyuplus.typing.tabMode": "Tab \u8865\u5168\u65B9\u5F0F\uFF08\u5B9E\u9A8C\u6027\uFF09",
       "moyuplus.shortcuts.enableEnterRouter": "Enter \u8DEF\u7531\u603B\u5F00\u5173\uFF08\u5B9E\u9A8C\u6027\uFF09",
       "moyuplus.enter.insertNewLine": "\u63D2\u5165\u771F\u5B9E\u6362\u884C\uFF08\u5B9E\u9A8C\u6027\uFF09",
-      "moyuplus.enter.nextPracticeLine": "\u63A8\u8FDB\u7EC3\u4E60\u884C\uFF08\u5B9E\u9A8C\u6027\uFF09",
       "moyuplus.enter.nextReaderPage": "\u9605\u8BFB\u5668\u4E0B\u4E00\u9875\uFF08\u5B9E\u9A8C\u6027\uFF09"
     };
     const wrapper = node("div", "configuration-setting");
     const key = item.key;
-    if (key === "moyuplus.typing.tabMode") {
-      wrapper.append(selectField(labels[key], "configuration", key, String(item.globalValue), [["completeRest", "\u53EA\u8865\u5168\u5269\u4F59\u6587\u5B57"], ["replaceLine", "\u66FF\u6362\u5F53\u524D\u6574\u884C"]]));
-    } else {
-      wrapper.append(toggleField(labels[key], "configuration", key, item.globalValue === true));
-    }
+    wrapper.append(toggleField(labels[key], "configuration", key, item.globalValue === true));
     wrapper.append(node("p", "scope-note", item.globalIsDefault ? "\u5168\u5C40\u503C\uFF1A\u4F7F\u7528\u9ED8\u8BA4\u503C" : "\u5168\u5C40\u503C\uFF1A\u5DF2\u663E\u5F0F\u8BBE\u7F6E"));
     if (item.overridden) {
       const override = node("div", "override-note");
@@ -630,7 +604,7 @@
     input.id = controlId(domain, key);
     input.disabled = isControlPending(domain, key);
     const output = node("output", void 0, `${value}${unit}`);
-    output.htmlFor = input.id;
+    output.htmlFor.add(input.id);
     const id = rangeId(domain, key);
     const session = () => beginRangeSession(domain, key, input, output, unit);
     const commit = () => {

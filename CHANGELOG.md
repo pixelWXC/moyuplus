@@ -1,6 +1,21 @@
 # Changelog
 
-## 未发布
+## 0.2.0
+
+- 将打字输入迁移到独立 Webview 面板：使用浏览器 composition 事件保留输入法预编辑，最终候选、普通键入和粘贴统一按 Unicode 字素事务判定。
+- 打字练习改为上下双行单视口对照，输入字符独立渲染并按正确/错误状态着色，避免与原文共用 DOM 引发的布局抖动。
+- 新增高对比左右手虚拟键盘、下一物理按键提示和显示开关；中文练习会结合短语拼音与输入法预编辑状态逐键提示。
+- 新增练习记录清理能力，并在清理后重建历史、每日统计和熟练度投影，避免记录无限增长。
+- EPUB 练习素材改为先选择章节，再按选中章节内容校验和截取最大长度。
+- 新增单 in-flight FIFO、稳定事务 ID、revision ack、先写日志再更新权威状态、崩溃重放与重复完成防护。
+- 删除练习虚拟文档、语言贡献、文件系统 Provider、Decoration、文档保存/回滚、按键路由和延迟候选推断；练习不再打开或保存 TextDocument。
+- 增加 workspace Snapshot/Checkpoint、pending Result、原子 Session Lease/heartbeat 和超时检查点恢复，避免多窗口同时写同一活动会话。
+- 旧 `moyuplus.typingPracticeSession.v1` 只迁移为一次性安全设置提示，不生成 Result；保留的 start/stop/toggle/reset 命令改为新版 Application 薄别名。
+- 删除旧 TypingPracticeController、全局 Inline Completion、状态栏、物理行 SourceCatalog、全局 Tab 路由和旧专属设置/测试。
+- 修复输入热路径随历史增长进行深拷贝的问题；50k 条既有历史下的领域输入和 200k 字素快照可见窗口现由性能门禁约束。
+- 自动测试已覆盖 composition 协议模拟、真实 Chromium、WebviewPanel 宿主、恢复和性能；新的 Windows 微软拼音候选切换/取消/词组/恢复矩阵仍需用户真实执行。
+
+## 0.1.0
 
 - 新增 TXT/EPUB 沉浸阅读：聚焦文本编辑器后，以不修改文档的 Decoration 在代码行末尾分页显示纯文本，并跟随活动编辑器与光标重绘。
 - 常规阅读与沉浸阅读统一为单一书籍会话和同一份阅读进度；复用翻页/切章命令，并提供仅在沉浸模式活动时生效的 `Alt+Shift+Q` 停止命令。

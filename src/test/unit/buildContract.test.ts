@@ -79,6 +79,16 @@ describe('dual-target build contract', () => {
     const webviewStyles = await readFile(path.join(projectRoot, 'media/readerApp.css'), 'utf8');
     const settingsBundle = await readFile(path.join(projectRoot, 'media/settingsApp.js'), 'utf8');
     const settingsStyles = await readFile(path.join(projectRoot, 'media/settingsApp.css'), 'utf8');
+    const typingBundle = await readFile(path.join(projectRoot, 'media/typingApp.js'), 'utf8');
+    const typingStyles = await readFile(path.join(projectRoot, 'media/typingApp.css'), 'utf8');
+    const practiceBundle = await readFile(
+      path.join(projectRoot, 'media/typingPracticePanelApp.js'),
+      'utf8'
+    );
+    const practiceStyles = await readFile(
+      path.join(projectRoot, 'media/typingPracticePanelApp.css'),
+      'utf8'
+    );
 
     expect(webviewBundle).not.toMatch(/\brequire\s*\(/);
     expect(webviewBundle).not.toMatch(/(?:from\s+|require\s*\()["']node:/);
@@ -95,5 +105,14 @@ describe('dual-target build contract', () => {
     expect(settingsBundle).toContain('MoyuPlus Settings');
     expect(settingsStyles).toContain('.settings-shell');
     expect(settingsStyles.trim()).not.toBe('');
+    expect(typingBundle).not.toMatch(/\brequire\s*\(/);
+    expect(typingBundle).not.toMatch(/https?:\/\//);
+    expect(typingBundle).toMatch(/\\u6253\\u5b57\\u7ec3\\u4e60/i);
+    expect(typingStyles).toContain('.typing-shell');
+    expect(typingStyles.trim()).not.toBe('');
+    expect(practiceBundle).not.toMatch(/\brequire\s*\(/);
+    expect(practiceBundle).not.toMatch(/https?:\/\//);
+    expect(practiceStyles).toContain('.practice-panel');
+    expect(practiceStyles.trim()).not.toBe('');
   }, 15_000);
 });

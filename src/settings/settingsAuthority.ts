@@ -47,11 +47,8 @@ export interface SettingsAuthorityDependencies {
 }
 
 export const SETTINGS_CONFIGURATION_KEYS = [
-  'moyuplus.shortcuts.enableTabRouter',
-  'moyuplus.typing.tabMode',
   'moyuplus.shortcuts.enableEnterRouter',
   'moyuplus.enter.insertNewLine',
-  'moyuplus.enter.nextPracticeLine',
   'moyuplus.enter.nextReaderPage'
 ] as const;
 

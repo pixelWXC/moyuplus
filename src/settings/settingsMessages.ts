@@ -51,11 +51,8 @@ const immersiveValidators: Record<string, (value: unknown) => boolean> = {
 };
 
 const configurationValidators: Record<string, (value: unknown) => boolean> = {
-  'moyuplus.shortcuts.enableTabRouter': boolean,
-  'moyuplus.typing.tabMode': oneOf('completeRest', 'replaceLine'),
   'moyuplus.shortcuts.enableEnterRouter': boolean,
   'moyuplus.enter.insertNewLine': boolean,
-  'moyuplus.enter.nextPracticeLine': boolean,
   'moyuplus.enter.nextReaderPage': boolean
 };
 

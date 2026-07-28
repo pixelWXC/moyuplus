@@ -810,3 +810,326 @@
 - Phase I5 最终门禁：`npm run compile` 通过；Vitest 55 文件 264/264；Playwright Chromium 39/39；`git diff --check` 通过（仅既有 CRLF 转换提示）。
 - 生产检查确认旧 `immersiveState` 已删除，`ReaderViewProvider` 未新增 interval/timeout。
 - 2026-07-17 用户确认真实 Extension Development Host 人工核验通过；设计状态、README、指导文档、CHANGELOG 与实施记录已同步更新，源码与生成 bundle 已整理进入本次提交；未推送、未发布或生成 VSIX。
+
+## 2026-07-23 打字练习整体架构重置
+
+- 已完整读取用户确认的 1122 行设计文档，并确认进入七工作包实施阶段。
+- 已读取并启用 TDD 与文件化规划规范。
+- 已盘点仓库、现有 typing 入口、测试布局、TypeScript/Vitest 配置和脏工作树边界。
+- 已创建详细实施计划，当前进入 WP1：先写契约、Coordinator 和架构守卫的失败测试。
+- 已记录四项初始错误及替代方案：Git dubious ownership、技能路径误判、设计输出截断、工作记忆追加锚点不精确。
+- 已读取现有协调器、build contract、旧 typing Controller/命令实现，确定 WP1 采用纯 TypeScript 内存替身与旁路公开入口。
+- WP1 RED：新增 3 个测试文件后，契约/Coordinator 因 `src/typing/index.ts` 缺失无法加载，架构守卫因 domain/application 目录与公开入口缺失失败；失败原因与预期一致。
+- WP1 GREEN：已建立 content/session/analytics/mastery/policies/generators schema、命令/事件/Port、无状态 Coordinator 和模块公开入口；目标 3 文件 12/12 通过。
+- TypeScript 严格 `--noEmit` 编译通过。
+- 首次执行测试使用 `npx`，沙箱 PATH 中不存在该命令；已改用 Codex 工作区依赖提供的 Node 直接运行本地 Vitest/TypeScript，不重复依赖 PATH。
+- WP1 测试替身 RED：`inMemoryTypingPorts` 缺失导致目标 suite 无法加载；实现 Manual Clock、Sequence ID、深拷贝 Snapshot/Session stores 后，WP1 聚焦 4 文件 15/15 通过。
+- WP1 退出门禁：Vitest 59 文件 279/279、TypeScript `--noEmit`、extension/webview build、`git diff --check` 全部通过；仅有既有 CRLF 提示。
+- WP1 状态改为 complete，进入 WP2 素材流水线与 ContentCatalogStore。
+- WP2 盘点完成：确认 TXT 解码/sectionizer 与 EPUB 安全 projection 可复用，Catalog/正文存储需新建原子文件与锁实现。
+- WP2 内容流水线 RED/GREEN：换行/BOM/空行清理、Unicode 字素/词数、选择范围、200k 上限与递归冻结 Snapshot 共 5/5 通过。
+- WP2 Catalog RED/GREEN：确定性正文路径、双 writer 并发、过期锁诊断归档、catalog 写失败不前移、软删除/恢复、路径穿越拒绝共 6/6 通过。
+- 首轮 Catalog GREEN 虽通过但 Vitest 报告 6 个未 await 的 resolves 断言；已修正测试并复验 11/11，输出干净，TypeScript 严格编译通过。
+- WP2 Provider RED：`typing/adapters/sources` 公开入口缺失，目标 suite 无法加载；实现后 TXT 导入/纯文本导出、自定义 Provider、EPUB 安全章节导入和失败原子性 4/4 通过。
+- 当前阶段完整门禁：Vitest 62 文件 294/294、TypeScript `--noEmit`、extension/webview build、`git diff --check` 全部通过；旧注册栈仍旁路保留。
+- WP2 仍为 in_progress：内置素材最低覆盖矩阵、BuiltIn Provider、自由内容持久化入口及全部生成型来源尚未完成，不能视为整体交付。
+- WP2 内置包 RED：覆盖校验与 `BuiltInPackProvider` 导出缺失，3 项按预期失败；GREEN 后 15 篇中文长文、5 篇英文文章、句/词/字/成语/词组、混合内容、标点符号和四类代码片段达到设计 6.8 门槛。
+- 内置正文边界反查测试首次发现中文标点 `itemCount` 18/实际 21；修正中文与 ASCII 计数后内置包 4/4 通过，manifest 数量不再仅依赖自报元数据。
+- WP2 自由内容 RED/GREEN：临时 Provider、显式自定义保存入口均先因构造器缺失失败；实现内容哈希 revision、默认零持久化、显式托管保存和空内容写前拒绝后 3/3 通过。
+- WP2 生成内容 RED/GREEN：`GeneratedContentProvider` 缺失导致 5 项失败；实现 14 类非 Mastery seed 决定性生成、手机号/日期/闰日/金额格式和算法版本后 5/5 通过。
+- WP2 Mastery 路径 RED/GREEN：Provider 缺失导致 0/1/5/20+ 与权重测试 5 项失败；以窄条目源实现空状态和确定性加权抽样后 5/5 通过，计分/衰减/持久化留在 WP3。
+- WP2 聚焦回归：8 个测试文件 36/36；退出门禁：Vitest 66 文件 312/312、TypeScript `--noEmit`、extension/webview build、`git diff --check` 全部通过，仅有既有 CRLF 提示。
+- WP2 状态改为 complete；七工作包整体仍为 implementation_in_progress，下一步进入 WP3 纯领域内核、长期结果与全局投影。
+- 2026-07-23：恢复 WP3 实施上下文；已复核 brainstorming、TDD、planning-with-files 约束以及当前脏工作树。设计门禁已由既有批准规格满足，下一步读取 WP3 对应设计条款和现有公开契约后写首个 Session Engine RED。
+- WP3 Session Engine 首个 RED/GREEN：测试先以 `PracticeSessionEngine is not a constructor` 失败；最小实现使用 `Intl.Segmenter` 将 `👩‍💻` 与组合字符 `é` 各作为一个输入尝试，目标测试 1/1 通过。
+- Session 文本策略 RED/GREEN：中文 `，。` 与 ASCII `,.` 起初无法推进；加入版本化 `zh-punctuation-v1` 规范化且保留 raw expected/actual 后，目标 2/2 通过。
+- 阻塞修正 RED/GREEN：`xbc` 起初保持 running；实现同一批次后续字素继续记错、blockedInputCount、Backspace 精确清除和重新输入后，目标 3/3 通过。
+- allowSkip RED/GREEN：先移除此前尚无测试覆盖的提前实现，再观察错误不消耗目标导致失败；恢复最小分支后 4/4 通过。
+- ignore whitespace RED/GREEN：`a \n\tb` 输入 `ab` 起初阻塞在空白；按 Snapshot policy 自动跨过空白 TargetUnit 后 5/5 通过。严格 TypeScript `--noEmit` 同步通过。
+- pause/resume RED/GREEN：最初缺少生命周期方法；实现 monotonic 倒退防线、暂停态输入拒绝、暂停区间记录与恢复后，Session 目标 6/6 通过。
+- Analytics 基础 RED/GREEN：`buildPracticeResult` 缺失导致失败；实现“妮→Backspace→你”的不可变 Result、尝试/进度分离、准确率、速度、错误对和 benchmark key 后通过。
+- 10 秒桶 RED/GREEN：起初 speedBuckets 为空；加入暂停区间交集与跨午夜 wall bucket 后，三个桶活动时长 10s/5s/10s、Raw CPM 6/12/6，Session+Analytics 8/8 通过。
+- Mastery RED/GREEN：投影函数起初不存在；Result 新增可重建的 mastery observations，`mastery-v1` 按结束时间稳定排序，重复错误增权、强化连续正确降权、30 天半衰期衰减且 wrongCount 永不回退，聚焦 3 文件 9/9 通过。
+- ResultStore RED/GREEN：构造器起初缺失；实现按 UTC 月分目录、原子 staging + exclusive hard-link 提交、同内容幂等和同 ID 异内容拒绝，目标 1/1 通过。
+- 三投影 RED/GREEN：History/Daily/Mastery stores 起初缺失；实现 sourceResultIds watermark、Result 全量扫描、普通历史 outcome 过滤、按 10 秒桶拆分每日数据、Mastery 重建及损坏 JSON 自动重建，Result/Projection 2/2 通过。
+- Preferences RED/GREEN：Store 与默认契约起初缺失；实现版本化默认偏好、分区 schema normalize、非法值回默认并返回诊断、合法快照原子保存，目标 2/2 通过。
+- 完整 Coordinator RED/GREEN：内存端到端最初因 `PracticeSessionRuntime` 缺失失败；新增 input/correct 命令与事件、无本地状态 Coordinator 编排、真实 Runtime 生命周期/Result 构建后，可完成“错→退格→对→自动提交 Result”，目标 1/1 通过。
+- WP1 Coordinator 测试首次聚焦回归仅因 finish 新增稳定 Snapshot 参数有 1 项旧期望失败；迁移契约期望后进入严格类型检查，修正一次 TypeScript 缩窄问题并通过。
+- Session 策略继续补齐：自动跨行、collapse whitespace 与 length target 均先观察到阻塞/不完成 RED，再最小实现；Session 目标累计 9/9。
+- Runtime restart/timedOut 先将未覆盖分支退回显式失败/错误状态，再分别观察 RED；GREEN 后 restart 复用原 Snapshot/seed 并保存 restarted Result，timedOut 以 completed session 保存稳定批次，Runtime 2/2。
+- 10 秒桶边界 RED 暴露结束瞬间输入被 `< bucketEnd` 漏计且修正无时间戳；加入 correctionEvents 与末桶闭区间后，尝试和 Backspace 均完整归桶，Session/Analytics/Runtime 13/13。
+- WP3 聚焦回归：8 个文件 25/25；完整 Vitest：73 个文件 331/331，含架构守卫与双目标 build contract。
+- 严格 TypeScript `--noEmit` 通过；extension、Reader 与 Settings Webview bundle 串行重建通过。
+- 对照退出条件补强 RED/GREEN：History 起初无 benchmark best，ProjectedResultCommitter 不存在；加入同 benchmark 有效 CPM/准确率最佳项，以及 Result 先持久化、投影后刷新且投影失败不丢事实的适配器，Result/Projection 3/3。
+- 错误词上下文 RED/GREEN：中文/英文/代码 errorWords 起初为空；内容准备阶段以 `Intl.Segmenter` 和轻量代码 token span 写入 TargetUnit.wordKey，Analytics/Content Preparation 8/8。
+- 投影 refresh 已在 GREEN 上重构为 watermark 前缀增量：History/Daily 只合并缺失 Result，Mastery 用现有 entry + 新 Result 继续纯函数投影；水印不连续或损坏时仍全量重建。
+- `trimLineEdges` RED/GREEN：行首尾空白起初触发阻塞；按 TargetUnit 的同行字素前后关系仅忽略行边空白，Session 10/10。
+- Mastery 字符/词双维度回归已修正：中文词错误同时保留 grapheme 与 word entry，强化只降低对应字符分数，聚焦 Mastery/Projection 4/4。
+- Result 全局 ID RED/GREEN：同 ID 改变 endedAt 可绕到另一月份写第二份事实；新增 `.ids` 原子 hard-link claim 后，ID 在所有月份全局不可覆盖，重试可从 claim 补齐月目录文件，Result/Projection 3/3。
+- 最终全量 Vitest 首轮 333/334；唯一失败来自 Windows 对 `media/settingsApp.js.map` 的瞬时内存映射占用，build contract 无法覆写，非业务断言失败。改走独立 build → 定向 build contract 复验。
+- 独立 extension/webview build 随后通过，定向 build contract 5/5；严格 TypeScript 与 `git diff --check` 通过。
+- WP3 状态改为 complete：聚焦测试 28/28，所有 334 项单测在最终全量/定向复验中均有通过证据；七工作包整体仍为 implementation_in_progress，下一步进入 WP4。
+- 2026-07-24：继续按实施计划推进，已复核 WP4 为当前依赖链下一工作包；现有 WP1–WP3 成果和旧 typing 栈均保留。
+- 已定位 WP4 设计条款与预期模块：`moyuplus-practice:` 内存文件系统、workspace Snapshot/Checkpoint/PendingResult、Session Lease、零宽锚点、DocumentChange 分类、可见范围 Decoration 与修正命令路由。
+- 已记录两项恢复错误及替代方案：技能完整路径修正；宽递归/Git 组合检查超时后改用窄检查。
+- 下一步读取设计第 7/12/13/14 节及现有 application ports、VS Code shim 和注册模式，然后写 WP4 首个失败 contract test。
+- WP4 设计复核完成：大型 Snapshot/Checkpoint/PendingResult 必须落在 workspace `storageUri/typing/sessions/<id>`，Memento 仅保存小型导航/lease 元数据；同 workspace 只允许一个有效可写 lease。
+- 现有 VS Code shim 尚不支持 FileSystemProvider、文档变更、Decoration 或保存事件；首个 TDD 切片先从不依赖 shim 的 workspace Store contract 开始，随后再按真实公开 API 扩展 shim。
+- 已新增 workspace Store contract 测试，锁定 Snapshot/Checkpoint 恢复和 pending Result“失败保留、成功删除”；首次运行因 Vitest 启动超过 30 秒尚未得到 RED 结论，将提高时限复跑。
+- WP4 workspace Store RED：2 项测试按预期以 `WorkspaceSessionStore/PendingResultStore is not a constructor` 失败。
+- WP4 workspace Store GREEN：新增原子 Snapshot/Checkpoint 存储及 pending Result 重试；提交失败保留 pending 文件，成功且文件内容未被并发替换时才删除。目标测试 2/2 通过。
+- WP4 lease RED/GREEN：双实例并发争抢先以 `SessionLeaseStore is not a constructor` 失败；实现 owner/session/heartbeat/updatedAt lease、原子更新互斥、有效租约拒绝、超时接管和 owner-only 释放后，workspace Store 目标 3/3 通过。
+- 当前严格 TypeScript `--noEmit` 通过；下一 TDD 切片进入 `moyuplus-practice:` 内存文件系统与锚点文档模型。
+- Practice FileSystem RED：目标 suite 因 `typing/adapters/editor` 不存在而无法收集，符合缺失适配器预期。
+- Practice FileSystem GREEN：新增 `moyuplus-practice:` 内存 Provider、零宽行锚点构建/解析和 Checkpoint 恢复；Created/Changed save 事件与锚点结构校验通过。
+- 修正一次 VS Code Event 数组可变性类型边界后，严格 TypeScript 与 WP4 当前 2 个测试文件 5/5 通过。
+- 已复核 DocumentChange/IME 设计：下一切片先实现纯变更分类与受控差异，确保锚点、行数、活动输入区域和单光标约束可独立 contract 测试；VS Code 事件订阅在纯分类 GREEN 后接入。
+- DocumentChange 分类 RED/GREEN：3 项先以函数缺失失败；实现单活动行尾部输入、Unicode 字素拆分、锚点/跨行/中间位置回滚，以及 Delete/Undo/extension 分类后通过。
+- committedBatch RED/GREEN：IME `ni → 你` 合并测试先以 Buffer 缺失失败；短稳定窗口只从最后判定 Checkpoint 到最终文档计算一次差异，目标 4/4 与严格 TypeScript 通过。
+- 下一切片转入 Decoration Presenter；已选择复用 Reader 的 host 注入测试模式，并记录 blockedText 恢复缺口，要求在编辑器集成前补齐回归测试。
+- blockedText 恢复 RED/GREEN：新增回归先观察错误输入在恢复后消失；Provider 现在要求同时提供 Snapshot，校验 snapshot/line 归属并按 `session.targetIndex` 把 blockedText 恢复到当前行锚点前。目标 3/3 与严格 TypeScript 通过。
+- Decoration Presenter RED/GREEN：2 项先以类缺失失败；实现 practice scheme 守卫、正确/错误实际 Range、current-before/remaining-after 有序 attachment、可见范围 + 缓冲行和 revealRange。
+- 首轮 GREEN 暴露测试 host 仍依赖全局 ThemeColor；把主题色纳入 host 注入后，Decoration 2/2 与严格 TypeScript 通过。
+- pending activation retry RED/GREEN：Resilient committer 缺失先失败；全局 Result commit 失败现在原子保存 workspace pending 并允许会话继续，激活重试扫描全部 session 目录，成功删除、失败保留。Store 4/4 与严格 TypeScript 通过。
+- Practice command router RED/GREEN：2 项先以类缺失失败；Backspace/Enter/Tab 仅在活动 `moyuplus-practice` session 路由 Application 命令，暂停态阻止文档变更，非练习编辑器保留 deleteLeft/type/tab 原生行为。目标 2/2 与严格 TypeScript 通过。
+- editor registration RED/GREEN：目标 suite 先因 registration 模块缺失无法收集；新增独立 FSP + 三个窄命令注册入口及 shim contract 后 1/1、严格 TypeScript 通过。模块尚未接入 `extension.ts`，符合 WP4 旁路共存要求。
+- Workspace Editor lifecycle RED/GREEN：先以适配器缺失失败；实现 PracticeEditorPort 的 open/render/complete、workspace Snapshot/Checkpoint、内存文档、强制 save、close 和 restore。
+- 输入后通过 staged anchored document + Session `blockedInputCount` 重新分离 accepted/blocked 文本；关闭后新 Adapter 实例从文件恢复同一 session/target/document。目标 1/1 与严格 TypeScript 通过。
+- practice language manifest RED/GREEN：新增 package contract 先因 languages 缺失失败；现在贡献 `moyuplus-practice` 语言并仅对该语言关闭 quickSuggestions、inlineSuggest、formatOnType。package 10/10 与严格 TypeScript 通过。
+- Reader Decoration 排除 RED/GREEN：真实 Reader Presenter 起初会把阅读内容附加到 practice 文档；加入 scheme guard 后，Immersive Presenter 3/3 与严格 TypeScript 通过。
+- lease heartbeat RED/GREEN：生命周期类缺失先失败；现在活动 session 定时 heartbeat，受控 stop 取消 timer 并尽力释放 owner lease，心跳失败停止续约并可上报。workspace Store 5/5 与严格 TypeScript 通过。
+- WP4 聚焦回归：11 个测试文件 35/35，通过 workspace stores/editor、FSP、DocumentChange/IME、Decoration、commands、registration、Reader 排除、manifest、Application 集成与架构守卫。
+- `git diff --check` 通过，仅输出既有 CRLF 转换提示；下一步串行执行全量 Vitest 与 extension/webview build 门禁。
+- WP4 本轮全量门禁：Vitest 80 文件 354/354；严格 TypeScript `--noEmit`；extension、Reader、Settings bundle；`git diff --check` 全部通过。
+- 详细实施计划中的 WP4 状态已从 pending 改为 in_progress；仍未达到退出条件，下一步需要把真实 VS Code document/save/close 事件宿主接入旁路 registration，并补 Extension Host 与微软拼音人工证据。
+- WP4 宿主生命周期 RED：新增 5 项目标断言后分别以 lifecycle 构造器缺失、document listener 未注册和 render 未后台 save 失败；GREEN 后逐字输入、结构回滚、稳定上屏合并、save 前 flush、close 丢弃未确认批次及真实事件转发全部通过。
+- Workspace editor host RED/GREEN：活动文档上下文、回滚、VS Code close detach 与真实 `openTextDocument → showTextDocument → save` host 均先因公开接口缺失失败；实现后目标 3/3、严格 TypeScript 通过。
+- practice scheme keybinding RED/GREEN：package contract 先观察三个命令缺失；manifest 现贡献专用 Backspace/Enter/Tab 命令、activation event 与 `resourceScheme == moyuplus-practice` 守卫，package 11/11。
+- Extension Host runner 首次启动因 Windows `.cmd` 路径含空格且 `shell:true` 被截断；改为直接 spawn `Code.exe` 且禁用 shell，不重复不安全参数拼接。
+- Extension Host 首轮真实运行发现编辑器关闭后 `onDidCloseTextDocument` 不保证在文档退出可见列表前触发；自动化改为断言真实 editor 已关闭，close 事件转发由确定性的 registration contract 覆盖，不把 VS Code 文档缓存时机误当产品失败。
+- Extension Host 隔离实例最终通过：真实 FSP 文档打开、变更/save 事件、专用命令和 editor 关闭均完成，退出码 0。
+- 全量 Vitest 首轮 361 项业务断言全部通过，但 Extension Host runner 使用 `.test.ts` 命名被 Vitest 误收集为 0-test suite；改名为独立 runner 后重跑 82 文件 361/361。
+- WP4 当前全量门禁：Vitest 82 文件 361/361；严格 TypeScript `--noEmit`；extension、Reader、Settings bundle；Extension Host；`git diff --check` 全部通过。只剩微软拼音人工冒烟和正式切换前 Delete/Undo/Redo 命令级核对，因此 WP4 仍为 in_progress。
+- Delete/Undo/Redo 路由 RED/GREEN：新增命令测试先以三个 route 缺失失败；实现命名 correction、原生命令包装和 `runExtensionEdit` 事件抑制后，单次修正不会被 document listener 重复计数。
+- manifest/registration/Extension Host 同步扩展为六个专用命令；聚焦 4 文件 20/20，真实隔离 Extension Host 退出码 0。
+- WP4 最新全量门禁：Vitest 82 文件 363/363；严格 TypeScript `--noEmit`；extension、Reader、Settings bundle；六命令 Extension Host；`git diff --check` 全部通过。当前只剩 Windows 微软拼音人工冒烟，WP4 继续保持 in_progress。
+- 新增 `test:typing-ime-manual` 隔离手工入口：打开 `moyuplus-practice:` 中文文档，持续显示固定目标长句，使用真实 committedBatch lifecycle 累积稳定上屏文本，匹配后明确提示通过并关闭测试窗口；独立 runner TypeScript 编译通过。
+- 用户首次人工执行后输入完成无反馈；复核确认 manual runner 的 30ms 稳定窗口可能过早接收候选阶段临时拼音，且默认 `reportError` 会静默吞掉异步错误，并非用户操作问题。
+- 手工入口修复 RED/GREEN：状态模块先因缺失无法收集；实现 1.5 秒候选窗口、按最终 anchored document 派生进度、显式前缀错误、居中说明/结果对话框和左下角实时进度后，目标 3/3、全量 83 文件 366/366、严格 TypeScript 与 `git diff --check` 通过。
+- 用户终端日志确认首次修复被 VS Code Extension Test Host 的模态对话框保护直接中止，并非输入没有被识别；`DialogService: refused to show dialog in tests` 是唯一致命错误，mutex/mermaid/deprecation 日志均非阻断项。
+- 模态保护回归 RED/GREEN：新增源码契约先因三处 `modal: true` 失败；手工入口改为编辑器灰色内联目标、左下角常驻进度、非模态通知和通过后 3 秒自动关闭。目标 4/4、全量 83 文件 367/367、严格 TypeScript、独立 runner 编译与 extension build 通过。
+- 2026-07-24 用户确认 Windows 微软拼音手工入口显示“微软拼音冒烟通过”；逐字、候选稳定上屏和固定长句提交人工证据成立。WP4 状态更新为 complete，下一依赖工作包为 WP5 Typing View、Reader Bridge 与配置入口。
+- WP5 启动：复核已批准设计第 11、15、16 节与 `.impeccable.md`；首个 TDD 切片选择独立版本化 Webview 协议和页面/命令校验，随后再接 View Provider 与 UI，确保 Webview 不直接写 Result/History/Mastery Store。
+- WP5 协议 RED/GREEN：view 模块缺失和 host validator 缺失分别触发预期失败；实现独立版本 1、materials/recent/setup/live/result/history/mastery 七页、严格实例/请求修订与 shell snapshot 校验，目标 4/4。
+- Typing View Provider RED/GREEN：构造器缺失先失败；实现安全 CSP、媒体根限制、单实例绑定、乱序 client revision 抑制和异步 snapshot generation 后目标 2/2。
+- Webview state RED/GREEN：状态模块缺失先失败；浏览器端只接受当前实例的新版本快照，旧版本和其他实例保持对象不变，目标 2/2。
+- Typing bundle 首轮 GREEN 暴露 Webview 从 `adapters/view` barrel 导入时把 `vscode`/`node:crypto` 拉入浏览器；改为只导入 `typingViewProtocol` 后宿主/浏览器物理隔离，Typing JS/CSS 自包含构建通过。
+- 独立 Activity Bar 贡献、View registration 与 extension activation 均先由缺失断言观察 RED；实现本地单色键盘图标、七页 VS Code 原生侧栏骨架和旁路 provider 注册后通过。
+- WP5 首个切片门禁：聚焦 6 文件 23/23；全量 Vitest 87 文件 377/377；严格 TypeScript；extension、Reader、Settings、Typing bundles 全部通过。WP5 仍为 in_progress。
+- 2026-07-24 停止检查点：按用户要求更新文档后停止，不再继续实现。当前 shell query 是固定占位事实（无活动会话、零 pending），WP5 尚缺 Application 页面查询、materials/setup/live/result/history/mastery 业务内容、Reader Bridge、会话冲突、配置入口和端到端验收。
+- WP5 恢复后的 Application query RED/GREEN：新测试先以 `TypingViewApplicationQuery is not a constructor` 失败；实现只读 Catalog Port、内置 manifest 投影、用户素材按更新时间排序、会话/pending 摘要端口与未加载页面显式占位后，目标 2/2。
+- 页面内容协议/状态 RED/GREEN：旧 shell 快照因缺少 `content` 按预期失败；严格 materials summary/count/source/action 校验与 activePage/content 一致性守卫接入后，协议、Provider、registration、Webview state 5 文件 11/11。
+- materials 渲染 RED/GREEN：纯渲染测试先因模块缺失无法收集；实现动作工具栏、内置/用户素材分区、profile/origin、计数/估时、来源说明、教学型空状态、HTML 转义和属性编码后 2/2。
+- extension activation RED/GREEN：真实 View 握手先收到旧固定空壳；现以 `globalStorageUri` 构造 `ContentCatalogStore` 并注入 `TypingViewApplicationQuery`，activation 3/3，内置素材通过真实宿主快照进入 Webview。
+- WP5 本轮门禁：全量 Vitest 89 文件 382/382；严格 TypeScript `--noEmit`；完整 extension/Reader/Settings/Typing build；`git diff --check` 全部通过。
+- 当前边界：materials 已有事实查询与安全展示，但选择/自由粘贴/TXT/EPUB 动作尚未接入命令；活动会话与 pending 成绩端口仍使用默认值，setup/live/result/history/mastery 继续显式 `unavailable`。下一步从 materials 命令与刷新开始。
+
+## 2026-07-24 WP5 materials 命令继续实施
+
+- 已重新读取架构重置设计、实施计划、WP5 当前源文件、素材 Provider/Importer/Store 与现有测试。
+- 已确认既有设计门禁覆盖本轮行为，不重新发散页面视觉方案。
+- 已确认下一轮 RED 目标：协议严格拒绝畸形素材动作；Provider 只通过命令端口执行动作并按结果刷新；Webview 将现有按钮转换为严格消息。
+- 当前未写生产代码；下一步先新增失败测试并观察预期 RED。
+- 协议/Provider/渲染首轮 RED 为 3/11：素材动作未识别、命令端口零调用、粘贴表单缺失；最小实现后 11/11 通过。
+- Application 命令与 profile 推断 RED 为 4 个命令构造失败、2 个 importer 缺省 profile 运行失败；实现 `PracticeSetupDraft`、`TypingViewMaterialCommands` 与领域 profile 推断后 10/10 通过。
+- registration/activation RED 证明命令端口未注入、真实 TXT 导入后 catalog 仍为空；注入真实 importer、VS Code 文件选择/读取与刷新后 5/5 通过。
+- 边界补强 RED 复现无效粘贴仍跳 setup、文件选择异常会拒绝消息处理；命令返回 applied 结果并统一报告错误后 10/10 通过。
+- Webview 已绑定素材选择、TXT/EPUB 导入、粘贴展开/取消/提交；粘贴内容保存在临时前端草稿中，业务 recipe 只由 Application 草稿保存。
+- 最终验证：聚焦 8 文件 28/28；边界补强 2 文件 10/10；全量 Vitest 90 文件 394/394；严格 TypeScript；extension/Reader/Settings/Typing build；`git diff --check` 全部通过。
+- materials 命令切片完成，WP5 保持 `in_progress`；下一步是 setup 页面查询和表单。
+
+## 2026-07-24 WP5 setup 查询与表单
+
+- setup 首轮 RED：Application query 仍返回 `unavailable`，协议拒绝 `configureSetup`/setup snapshot，渲染器把 setup 当成 materials；4 个目标断言按预期失败。
+- 草稿/Provider RED：`PracticeSetupDraft.configure` 缺失，Provider 未调用 setup 命令端口；2 个目标断言按预期失败。
+- GREEN：草稿保存不可分离的 content recipe、`PracticePlan` 与 `SourceRange`；查询适配器通过 Content Provider inspect 投影标题、profile、计数和范围，并用全局偏好填充本次默认策略。
+- 协议升级为 v2：严格验证范围、完成约束、判定、文本、推进、显示结构；setup snapshot 不包含 content recipe 或自由粘贴正文。
+- Webview 新增窄侧栏 setup 表单和纯 `createTypingSetupConfiguration` 转换；输入范围、限时/定长/全文、判定、空白/标点、推进和指标显示均通过 revisioned `configureSetup` 返回宿主。
+- 为补齐 TDD 证据，真实 activation inspect 注入和浏览器表单转换均先撤回未直接覆盖的实现，新增失败测试观察到 setup unavailable / 模块缺失后再恢复最小实现。
+- 聚焦验证：7 个测试文件 32/32；严格 TypeScript `--noEmit`；extension、Reader、Settings、Typing 四目标 build 通过。
+- 全量 Vitest 首轮为 90 文件 402/402 通过，唯一未通过项来自既有 workspace lease 临时锁在并行运行中读取 `catalog.lock` 时收到 Windows 瞬时 `EPERM`；该文件独立复验 5/5 通过，未修改无关锁实现。
+- setup 查询/表单切片完成，WP5 保持 `in_progress`；下一步接入 prepare/start、活动会话冲突和 live 页面。
+
+## 2026-07-24 WP5 prepare/start 与活动会话冲突（恢复）
+
+- 已读取文件化计划、详细实施计划断点、工作日志与 Git 状态，确认从 setup 后的 prepare/start 切片继续。
+- 已记录本次技能路径、Git safe-directory 和跨文件补丁锚点三项恢复错误；后续不重复相同调用。
+- 当前尚未修改生产代码。下一步读取 WP5 对应计划条目、Coordinator/草稿/Provider/协议现状，然后先写目标失败测试。
+- prepare/start 首轮 RED：聚焦 4 文件共 24 项，14 项既有断言通过，10 项按预期失败。失败分别来自 `TypingViewPracticeCommands` 缺失、协议仍为 v2 且不识别 start/conflict、Provider 未路由新命令，以及 setup/冲突 UI 缺失；均为目标行为缺失而非测试语法错误。
+- prepare/start GREEN：新增 Application 侧 `TypingViewPracticeCommands`、严格协议 v3、三选一冲突页、Provider 路由和 `ActivePracticeStateStore`；聚焦 5 文件 28/28。
+- 真实 activation RED/GREEN：开始请求先以 `this.commands.startPractice is not a function` 失败；接入真实 Coordinator、Content Provider、Runtime、Result Store、workspace editor/FSP/Decoration/lifecycle/六命令 registration 后，内置素材可创建 Snapshot/Session 并打开 `moyuplus-practice:` 文档。
+- live 首轮 RED：6 个目标断言分别因 control 命令、live 内容、metrics 渲染和 Provider 路由缺失失败；GREEN 后 6 文件 35/35，严格 TypeScript 通过。
+- 真实 live 接线补强先撤回 `controlPractice` 注入并观察 activation 失败，再恢复后验证 running → paused、live controls 和权威快照；冲突查询同样先撤回注入观察 setup 普通页错误，再恢复为 `sessionConflict` 三选一页面。
+- 聚焦回归：13 文件 53/53；全量首轮唯一失败是旧 registration 清单未包含六个现已正式激活的 practice 命令，更新契约后定向 8/8 通过。
+- 最终门禁：Vitest 93 文件 420/420；严格 TypeScript `--noEmit`；Typing/Settings/Reader/extension 四目标 build；`git diff --check` 全部通过。
+- 当前子切片完成，但 WP5 保持 `in_progress`：单 Host 冲突与 live 已完成，多窗口 lease 原子接线、result/history/mastery、Reader Bridge 和配置入口仍待推进。
+
+## 2026-07-24 WP5 多窗口 Session Lease 原子装配
+
+- RED：Coordinator/完整会话/workspace store 首轮 9 个目标断言按预期失败，证明 acquire、竞争阻断、失败释放、finish/自动完成释放、restart transition 与无释放 heartbeat stop 均未接线；另一个既有 lease 并发用例出现已记录的 Windows 瞬时 `EPERM`。
+- GREEN：Application 新增窄 `PracticeSessionLeasePort` 和 `practiceStartBlocked` 事件；Coordinator 在 runtime 前预分配 ID 并 acquire，竞争失败零 Session/editor 副作用，启动失败释放。
+- workspace adapter GREEN：`SessionLeaseStore.transition` 在 owner/session 校验下原子换绑；`WorkspacePracticeSessionLease` 从检查点投影冲突状态并管理 heartbeat、transition、release/dispose。
+- View/activation GREEN：原子竞争即使发生在本地 preflight 之后也返回 setup 冲突；真实 extension 以 workspace `storageUri` 装配独立 owner 的 lease 与 heartbeat。
+- 聚焦验证：5 个测试文件 30/30；严格 TypeScript `--noEmit`；Settings/Typing/Reader/extension 完整 build 通过。
+- 全量回归：93 文件中 92 文件、425 项通过；唯一失败为既有 `contentCatalogStore` Windows `catalog.lock` 瞬时 `EPERM`，目标文件立即独立复验 6/6 通过。
+- lease 原子装配子切片完成，WP5 保持 `in_progress`；下一步进入 result/history/mastery 只读事实页面，超时接管后的旧检查点恢复 UI 留在后续多窗口验收切片。
+
+## 2026-07-24 WP5 Result / History / Mastery 继续
+
+- 已读取详细实施计划、设计中 WP5/长期事实/性能边界、三份工作记忆、Git 状态与近期提交。
+- 已确认当前断点为三个只读事实页，且不得在 View 层创建、写入或重新推算长期事实 Store。
+- 已记录技能路径、Git safe-directory 与 Windows `rg` 路径通配三项恢复错误；后续采用已验证的完整技能路径、单次 Git 安全参数和 `rg --files` 过滤。
+- 当前尚未修改生产代码；下一步读取查询、Store、协议、Provider 和渲染现状，然后先写会因目标行为缺失而失败的聚焦测试。
+- 已确认 WP3 Store 公开能力足够，不需要修改长期事实存储：Result `list/get` 与三个 Projection `read()` 可直接作为 View 查询的只读依赖。
+- 选定最小设计：Application Query 负责 DTO 投影；协议严格校验；现有 Provider 导航刷新沿用 query；渲染器分别实现事实、空态与分页摘要。下一步进入 RED。
+- RED 已观察：聚焦 3 文件 24 项中 4 项按预期失败。Query 对三页仍返回 `unavailable`；协议拒绝 result/history/mastery 事实；渲染器把未知事实内容落入 materials 分支并因缺少 actions 失败。
+- 新增三种 Host→Webview 内容联合会改变线格式，因此协议版本预期先从 v3 提升为 v4；下一步单独观察版本 RED 后实现最小 GREEN。
+- 协议版本 RED 已观察：当前常量仍为 3，新预期为 4；与新增事实内容联合的线格式变化一致。
+- 第一轮 GREEN：Query 增加四个窄只读 Port，协议升级 v4 并严格校验三类 DTO，渲染器增加事实与真实空态；聚焦 3 文件 24/24。
+- 下一步先为真实 activation 的 Store 注入新增失败断言，再复用 Coordinator 的同一个 ResultStore 装配 History/Daily/Mastery Projection Store。
+- activation RED 已观察：导航到 result 后仍收到 `unavailable`；GREEN 后 result/history/mastery 均返回真实空事实内容。
+- 聚焦验证：Query/协议/渲染/activation 4 文件 31/31；严格 TypeScript `--noEmit` 通过。
+- 下一步运行关联 View 状态/Provider 回归、完整 build 与全量 Vitest；若全部通过，再更新详细实施计划中的 WP5 证据与下一断点。
+- 关联回归最终为 7 文件 44/44；完整 Typing/Settings/Reader/extension build 通过；`git diff --check` 通过。
+- 全量 Vitest：93 文件中 92 文件、430 项通过；唯一失败是既有 `ContentCatalogStore` 并发锁在 Windows 临时目录收到瞬时 `EPERM`。目标文件立即独立复验 6/6，通过且未修改无关锁实现。
+- Result/History/Mastery 只读事实页子切片完成；WP5 保持 `in_progress`。下一切片是超时 lease 接管后的旧检查点恢复 UI，其后为 Reader Bridge、配置入口与 feature-gate/可访问性验收。
+
+## 2026-07-24 WP5 超时 Lease 旧检查点恢复 UI
+
+- RED：Application 恢复服务、过期候选、协议 v5、恢复提示渲染、Provider 路由、真实 activation 与延迟 claim 竞态均先因目标行为缺失失败。
+- GREEN：新增 `PracticeSessionRecovery`；`SessionLeaseStore.inspect/claimExpired`；`WorkspacePracticeSessionLease.recoveryCandidate/claimRecovery`；恢复摘要查询、严格消息、可访问提示和真实 activation 装配。
+- 恢复成功后旧 Session 先落为 paused；旧 monotonic 时间轴整体平移到当前 Extension Host，离线时间不计入 active elapsed。
+- 聚焦回归：10 文件 62/62；延迟 claim 竞态定向 10/10。
+- 最终门禁：Vitest 94 文件 442/442；TypeScript `--noEmit`；Typing/Settings/Reader/extension 完整 build；`git diff --check` 通过。
+- Playwright：沙箱内 Chromium 因 `spawn EPERM` 无法启动；沙箱外全量 38/39，唯一既有 settings 初始焦点时序失败独立复验 1/1。
+- 本切片 complete；WP5 保持 `in_progress`。下一切片进入 Reader Bridge。
+
+## 2026-07-27 WP5 Reader Bridge
+
+- RED：两个新测试文件先因 `ReaderBookSourceProvider` / `ReaderTypingEntryPoint` 模块缺失而无法收集；真实 activation 书架动作仍返回 materials，证明旧命令链路尚未切换。
+- GREEN：新增 Reader Book Content Provider，使用现有安全 Book Adapter 投影读取整本/章节，生成确定性 revision、profile、计数与 `PreparedContent`，并在成功/失败时释放 handle。
+- GREEN：新增 `ReaderTypingEntryPoint`，只接收 book ID 与可选 locator，向草稿保留 recipe 和推荐章节；真实书架动作改为聚焦新版 Typing View setup，不再启动旧 typing controller。
+- HARDEN RED/GREEN：失效来源原先会污染 setup 草稿；现在在写入前报错并请求 Reader 重新定位。冷启动时 setup 原先被 resolve/handshake 重置为 materials；现在外部请求页可跨首次 bootstrap 保留。
+- 聚焦回归：Reader Provider 3/3、Reader Bridge 4/4、extension activation 9/9，相关 View/Reader/Content 回归通过。
+- 全量回归：96 文件中 95 文件、449 项通过；唯一失败为已记录的 Windows `ContentCatalogStore` 并发锁瞬时 `EPERM`，目标文件独立复验 6/6。
+- 严格 TypeScript `--noEmit`、Typing/Settings/Reader/extension 四目标 build 与 `git diff --check` 通过。
+- Reader Bridge 子切片完成；WP5 保持 `in_progress`。下一断点为配置入口，然后完成素材、书架、自由练习三条 feature-gate 端到端及可访问性验收。
+
+## 2026-07-27 WP5 语言与默认偏好配置入口恢复
+
+- 已读取批准的架构设计、详细实施计划与现有工作记忆，确认当前断点紧接 Reader Bridge。
+- 已确认本切片两条独立权威写路径：显式“设为默认”写全局 `PracticePreferencesStore`；编辑器字体/字号/行高/字距只写 `moyuplus-practice` 语言覆盖。
+- 已保留当前大量既有未提交改动；后续按 RED → GREEN → REFACTOR 推进，不清理、不回退。
+- 首次 Git 组合读取触发 dubious ownership，已改用单命令 `safe.directory`；首次跨目录 `rg` 使用无效 Windows 通配路径，后续改用真实文件清单。
+- 已确认最小正确配置切片：显式设置练习文档语言 ID；在 setup 增加“设为默认”和“编辑练习字体与外观”两个独立动作；后者打开 VS Code 的练习语言设置，避免复制编辑器配置事实。
+- RED/GREEN：原生 editor host 测试先因未调用 `setTextDocumentLanguage` 失败，现已在显示文档前设置 `moyuplus-practice`，目标测试 1/1 通过。
+- RED/GREEN：Application 默认保存测试先因 `saveSetupAsDefault` 缺失失败，现只持久化 evaluation/text/flow/display 四轴；普通 start 不写全局默认，目标测试 8/8 通过。
+- RED/GREEN：Typing 协议 v6、Provider 路由和 setup 渲染分别先按缺失消息/命令/按钮失败，现协议 13/13、Provider 10/10、渲染 7/7 通过。
+- RED/GREEN：语言配置桥先因构造器缺失失败，现固定打开 VS Code `@lang:moyuplus-practice` 的字体、字号、行高与字距设置，目标测试 1/1 通过。
+- 真实 activation 已验证显式默认写入 `preferences/practice.v1.json`，且不含 completion；设置入口向 VS Code 内置设置命令发送固定语言过滤。既有 start 路径先因测试 shim 缺少语言切换 API 失败，补齐真实 API 语义后通过并断言活动文档 languageId。
+- 聚焦回归 7 文件 50/50、严格 TypeScript 与 extension/Reader/Settings/Typing 四目标构建通过。
+- 首次全量 Vitest 在 30 秒工具时限内尚未完成而被终止；终止前已输出项目均通过，现改用 120 秒时限完成全量证据。
+- 最终全量 Vitest 97 文件 455/455；严格 TypeScript；完整 extension/Reader/Settings/Typing build；真实 Extension Host 退出码 0；`git diff --check` 通过。
+- 配置入口子切片 complete：协议 v6、显式全局默认、固定练习语言设置入口和原生文档 languageId 均已接通。WP5 仍为 `in_progress`，下一断点为 recent 只读事实页，其后是三条 feature-gate 端到端与可访问性矩阵。
+
+## 2026-07-27 WP5 Recent 只读事实页
+
+- RED：Recent 查询仍返回 `unavailable`；协议仍为 v6；渲染器落入 materials 分支。三个失败面均已观察后再实施。
+- GREEN：`TypingViewApplicationQuery` 从同一真实 Result Store 投影最多 20 条最近结果；Typing View 协议升级至 v7；Webview 增加 Recent 列表与明确空状态。
+- HARDEN：协议严格限制条目数量、安全 ID、有限数值和时间；渲染继续转义 material/profile 文本。正文、路径、Store 写接口与无法由当前 schema 支持的伪重放动作均未进入页面。
+- 聚焦回归：Query/协议/渲染 3 文件 28/28；真实 activation 的 Recent/Result/History/Mastery 空事实路径通过。
+- 最终门禁：Vitest 97 文件 455/455；严格 TypeScript `--noEmit`；Typing/Settings/Reader/extension 四目标 build；真实 Extension Host 退出码 0。
+- Recent 子切片 complete，七页面均为真实事实或明确空状态。WP5 保持 `in_progress`；下一断点为素材、书架、自由练习三条 feature-gate 端到端与窄侧栏/主题/高对比/键盘/ARIA 可访问性验收。
+
+## 2026-07-27 WP5 Feature Gate 与可访问性验收
+
+- **Status:** in_progress
+- 已读取 `brainstorming`、`planning-with-files`、`test-driven-development`、`audit` 与其要求的 `frontend-design` 技能。
+- 已确认既有架构设计、实施计划和 WP1–WP5 进度；本轮从 Recent 完成后的 feature-gate / a11y 断点继续，不重开已批准的产品设计。
+- 已记录两项恢复错误：目标计划快速过滤与 Git safe-directory 组合失败；三文件日志补丁锚点不匹配。两者均未修改业务文件，后续采用真实路径、单次只读 Git 参数与精确尾部锚点。
+- 下一步读取 `.impeccable.md`、设计验收矩阵、现有 Playwright/Extension Host 测试和 Typing View DOM/CSS，形成只读审计结论。
+- 已确认 `.impeccable.md` 包含完整用户、任务与品牌语境；现有原生、克制、VS Code 令牌方向覆盖 `frontend-design` 的上下文门禁。
+- 已发现 Typing View 没有 Playwright harness/spec；该缺口将作为本轮第一个测试基础设施切片。
+- 已新增真实 Typing bundle Playwright harness 与 4 项 layout/a11y 断言。
+- 隐藏指标 RED：3 个聚焦文件 31 项中 4 项按预期失败；查询泄露 metrics、协议仍为 v7/拒绝空 metrics、渲染器解引用空 metrics。
+- Layout RED：真实 Chromium 已确认双 main landmark、导航刷新丢焦点、高对比当前页无非颜色轮廓；窄栏首版因夹具 ID 超长未命中目标，已修正后待复验。
+- GREEN：协议升级 v8；隐藏 live 策略现在同时投影 `progress: null` 与 `metrics: null`，Renderer 只显示“练习中”和控制命令。
+- GREEN：Webview 根节点改为普通容器，页面只保留一个 main landmark；导航 host refresh 恢复原 page button 焦点；forced-colors 当前页增加系统色 outline；粗指针可见动作达到 44px。
+- 聚焦证据：Query/Protocol/Render 31/31，严格 TypeScript 通过；Typing bundle 已重建；Chromium 基础 5/5。
+- Feature gate：真实 activation 集成测试已证明内置素材、Reader Book 与自由粘贴三条路径均经 setup/Coordinator 打开 `moyuplus-practice:` 原生编辑器，`extension.test.ts` 11/11。
+- 扩展浏览器矩阵覆盖七页面、setup 原生控件 accessible name、隐藏 live、pending status、暗色主题令牌与零外部资源；新增定位器问题已修正，七页面定向复验 1/1。
+- 下一步：执行完整 Vitest、全量 Playwright、严格 TypeScript、四目标 build、真实 Extension Host 与 `git diff --check`。
+- 最终 WP5 门禁：全量 Vitest 97 文件中 96 文件、458 项通过；唯一既有 Windows lease `catalog.lock` 瞬时 `EPERM` 文件独立复验 10/10。严格 TypeScript、四目标 build、全量 Chromium 47/47、真实 Extension Host 退出码 0、`git diff --check` 均通过。
+- 详细实施计划中的 WP5 已更新为 `complete`。
+
+## 2026-07-27 WP6 旧版迁移与正式切换
+
+- **Status:** in_progress
+- 目标：一次性迁移旧恢复提示、不伪造成绩；把旧公共命令收敛为新 Application 薄别名；确保新 typing 是唯一注册入口并保留可验证回退检查点。
+- 下一步先只读盘点旧 stack 与现有测试，不删除生产文件。
+- 盘点结果：`extension.ts` 仍构造旧 `WorkspaceSessionStore + TypingSourceCatalog + TypingPracticeController`，并注册旧状态栏、全局 Inline Completion、旧命令菜单与依赖 Controller 的 ShortcutRouter；新旧系统当前同时激活。
+- 旧 typing session key 为 `moyuplus.typingPracticeSession.v1`，仅含 fileId/physical lineIndex/空白设置与旧路由偏好，没有成绩事实。
+- Reader v2 迁移会把旧 TXT 记录映射到新 Book，但未持久化 legacy ID mapping；Typing 迁移需通过旧 TXT URI 与 BookLibraryStore `getByUri` 重新建立安全映射。
+- `LegacyTypingMigration` 已按 RED→GREEN 完成 5/5：活动会话只生成安全 hint；缺失 Book 不猜测 ID；非活动会话不生成 hint；marker 保证幂等；hint 写入或回读失败时保留旧 session 且不写 marker。
+- 迁移只保存来源引用、physical line index、四个旧空白偏好和创建时间，不写 Result、Snapshot、正文或路径；Book 映射只使用旧 TXT URI → Reader v2 Book。
+- 下一步接入 activation，再为恢复提示确认 UI、公共命令薄别名和唯一注册守卫写 RED。
+- 旧公共命令薄别名已按 RED→GREEN 完成 3/3：start/stop/toggle/reset 只调用新 View/Application port；旧 next/jump/trim/menu 只显示弃用提示并导航新版视图；适配器源码不导入或命名旧 Controller、Inline Completion、状态栏或旧 context key。
+- 下一步把别名与迁移接入真实 activation，并补恢复提示确认 UI。
+- activation 切换已按 RED→GREEN 完成：Reader v2 迁移后立即执行旧 typing 迁移；扩展装配已移除旧 Controller/SourceCatalog/session store/`registerTypingPractice`，不再注册全局 Inline Completion、状态栏或 `moyuplus.typingPracticeActive`。
+- `ShortcutRouter` 已切断旧 Controller；旧 Tab 路由只回退原生 Tab，旧“下一练习行”配置只显示迁移说明。新 `moyuplus-practice:` 专用命令仍负责正式练习键路由。
+- 迁移、别名、切换守卫聚焦验证 3 文件 10/10。下一步补恢复提示确认 UI，再清理 package 旧贡献面。
+- Typing View 协议升级到 v9，并只投影标题、可用性、1-based 物理行附近提示和四项空白偏好；Webview 不接收 legacy/book ID。确认/忽略消息同样不携带标识，Host 始终重新读取权威 hint。
+- 恢复提示明确声明“进入新版设置确认、不会生成旧成绩”；来源不可用时只提供忽略，不显示伪恢复按钮。Query/Protocol/Render/Provider 聚焦 5/5。
+- package 贡献面已移除旧 next/jump/trim/routeTab 命令面板项、旧全局 Tab keybinding 和 enableTabRouter/tabMode/nextPracticeLine 设置；兼容 activation events 与宿主弃用适配器仍保留一轮。package 切换验证 2/2。
+- 真实 activation 集成现覆盖：旧 hint 出现在 Typing View → Host 重新检查源文件可用性 → 预选 Reader Book 与首个合法范围 → 仅无损映射空白策略 → 清除 hint → 打开 setup；整个过程不创建 Snapshot/Session/Result。
+- 旧 Controller/ghost text/状态栏行为集成测试已由迁移、别名、唯一装配和恢复确认测试替换；package/protocol 聚焦回归 3 文件 28/28。
+- 回退演练补强为迁移 7/7：marker 提交失败时旧 session 保留；marker 已验证但旧 key 清理失败时，下次 activation 只重试清理且不覆盖首次 hint。切换相关聚焦回归 10 文件 70/70。
+- 首轮全量 Vitest 101 文件中 99 文件、468 项通过；两项失败均为切换后的陈旧期望（extension 注册顺序/全局补全，Webview 初始 state 缺少 `legacyResumeHint:null`），生产行为无失败。期望已更新并聚焦复验 13/13。
+- 修正后全量 Vitest 101/101 文件、470/470 项通过；严格 TypeScript 通过；extension/Reader/Settings/Typing 四目标构建通过并重建 v9 Typing bundle。
+- WP6 最终门禁：全量 Chromium 47/47；真实 VS Code Extension Host 退出码 0；`git diff --check` 通过。静态引用核对确认旧 Controller/Inline Completion/状态栏只剩待 WP7 删除的孤立旧文件及其纯单元测试，生产装配无引用。
+- **WP6 Status:** complete。下一断点进入 WP7：物理删除旧 typing stack、完成最终需求追踪/性能/人工矩阵与文档发布收口。
+
+## 2026-07-27 WP7 完整验收与旧 stack 删除
+
+- **Status:** in_progress
+- 已新增删除守卫 `typingLegacyStackRemoval.test.ts`，先证明旧 Controller、旧来源目录、旧 session store、旧领域模型和对应纯单元测试仍在仓库中。
+- RED 基线为 10 项中 1 项通过、9 项预期失败；除已在 WP6 删除的旧集成测试外，其余失败精确覆盖 8 个旧文件和全局 Tab/旧设置残留。
+- 下一步物理删除已确认无生产引用的旧栈，再同步收口快捷键、设置协议、设置页和测试期望。
+- 已物理删除旧 Controller、SourceCatalog、旧 WorkspaceSessionStore、旧领域模型和三个专属测试；删除守卫 10/10，相关聚焦回归 8 文件 52/52。
+- 全局 `routeTab`、Tab 设置和 `nextPracticeLine` 已从 production/package/统一设置中清除；新版 `moyuplus-practice:` 资源专用 Tab 保留。
+- 性能 RED 证明 50k attempt 历史下旧输入热路径 p95 约 405.569ms；改为活动 Session 原位追加后，长历史/200k 可见窗口预算测试通过。
+- 最终自动门禁：Vitest 100 文件 469/469；严格 TypeScript；四目标 build；Chromium 47/47；真实 Extension Host 退出码 0，Decoration p95 3.179ms、最大 6.090ms（51 样本）；`git diff --check`。
+- README、设置说明、迁移说明、CHANGELOG 和设计第 18 节追踪表已收口。
+- 根据人工验收反馈，`docs/typing-practice-verification.md` 已把剩余矩阵重写为 M1–M4：每项均包含前置条件、逐步操作、逐步可观察结果、通过条件和统一记录表。
+- 第三方 IME 步骤明确区分候选预编辑与稳定上屏；双窗口步骤明确要求强制终止 A 的 Extension Host、等待 20 秒并由 B 显式恢复，避免用正常关闭误测 lease 超时。
+- 大文件步骤提供可复制 PowerShell：生成 1,000 行、194,999 字素/194,000 可打印字符的 TXT，并生成 14 章节 EPUB；EPUB 生成脚本已实际验证，产物结构校验通过。
+- **Remaining:** 第三方中文输入法、真实主题切换、双窗口 lease 和接近 200k 字素的大 TXT/EPUB 仍需真实人工验收；WP7 因此保持 `in_progress`。
+
+### WP6 error log
+
+- 恢复提示接入后的首次严格 TypeScript 检查发现同步 query port 被误声明为只接受 `PromiseLike`，以及合并成一个 union member 的两种新消息无法在 Provider 中穷尽缩窄；已允许同步/异步窄查询并把消息拆成两个判别联合成员。
+- 更新旧 package 贡献测试时一次宽锚点补丁误改了 Reader View 的 `expect.objectContaining` 闭括号，随后目标行又保留了多余 `)`；两次 transform RED 均未进入测试执行，已按行号恢复语法并复验 28/28。
+- 首轮全量 Vitest 的两个失败来自测试仍断言旧全局 Inline Completion/旧别名注册顺序，以及 Webview 初始状态的旧精确对象；已改为断言“无全局补全/状态栏”和新版 v9 状态字段，未修改生产逻辑。
+
+## 2026-07-28 Webview 输入架构实施
+
+- **Status:** 自动实现与自动验证进行收口；Windows 微软拼音真实矩阵待用户执行。
+- 删除 `evaluation.mode` 的新写入，旧偏好、Snapshot、Checkpoint 和 origin 只在迁移器中兼容读取。
+- 新增纯 `PracticeTransactionEngine`、稳定 receipt/digest、单调 revision、分段校验 JSONL 日志、先持久化后更新权威状态、连续恢复和压缩。
+- 新增严格版本化面板协议、正交 composition/transport/authority 状态机、单 in-flight FIFO、尾随 input 精确去重和可恢复 transaction ID。
+- 新增可见 DOM 输入、VS Code 主题化有界投影、真实 Chromium composition/paste/布局测试和真实 `WebviewPanel` 宿主。
+- 扩展装配已切换到面板事务协调器；练习虚拟文档、FSP、Decoration、文档生命周期、编辑器 Host、专用语言和按键贡献已物理删除。
+- 恢复使用 Checkpoint 加事务日志，重复 transaction、迟到输入和重复完成不会再次推进或写第二份 Result。
+- 设置、README、迁移、CHANGELOG 和人工验收矩阵已按新输入事实更新。
+- 最终自动门禁：Vitest 100 文件、493/493；Chromium 54/54；严格 TypeScript、五目标 build、真实 VS Code WebviewPanel Extension Host、静态旧链路守卫和 `git diff --check` 全部通过。
+- **Remaining:** 必须由用户在真实 Windows 微软拼音中完成候选切换、停留、取消、单字/词组、错误修正、关闭恢复与控制台检查；确认前整体状态保持待人工验收。

@@ -1,6 +1,6 @@
 # MoyuPlus
 
-MoyuPlus 是一个离线优先的 VS Code 阅读器，支持 TXT、EPUB 2/3 书架管理、侧边栏章节分页、附着在代码行末尾的沉浸阅读，以及仅面向 TXT 的打字练习。
+MoyuPlus 是一个离线优先的 VS Code 阅读与打字练习扩展，支持 TXT、EPUB 2/3 书架管理、侧边栏章节分页、附着在代码行末尾的沉浸阅读，以及独立的打字练习 Webview。
 
 ## 隐私
 
@@ -26,11 +26,24 @@ MoyuPlus 是一个离线优先的 VS Code 阅读器，支持 TXT、EPUB 2/3 书�
 - `MoyuPlus: Stop Immersive Reading` 默认绑定 `Alt+Shift+Q`，仅在沉浸阅读活动时生效；也可通过编辑器右键菜单或书架活动项结束。
 - 页面视觉行数、每行字形簇数、文字/背景颜色、字重、斜体和左侧间距可在统一设置面板的“沉浸阅读”分区调整。
 
+## 打字练习
+
+- Activity Bar 中的 **MoyuPlus Typing** 提供素材、最近、设置、进行中、结果、历史和强化七个页面。
+- 素材可来自内置中文/英文/混合/数字符号/代码内容、自定义 TXT/EPUB、自由粘贴，以及 Reader 书架中的 TXT 或 EPUB。
+- 练习会打开独立的 Webview 面板，以浏览器原生 composition 事件区分输入法预编辑和最终提交；候选切换不推进，确认候选只提交一次。
+- 设置页可选择范围、限时/定长/整篇/自由完成条件、必须修正或允许跳错、标点/空白规则、自动或 Enter 推进、连续或逐行显示，以及是否显示实时指标。
+- Backspace、Delete、Undo、Redo、Enter 和 Tab 由面板中的可见输入框处理；旧版练习文档、语言贡献、Inline Completion、状态栏和全局 Tab 路由已移除。
+- 面板跟随 VS Code 字体和主题令牌，并为当前、正确、错误和未输入状态提供颜色之外的可识别样式。
+- Result 是不可变事实；历史、每日统计和强化列表由 Result 增量投影，可在投影损坏时从事实重建。
+
+详细说明见 [打字练习设置](docs/typing-practice-settings.md)、[旧版迁移说明](docs/typing-practice-migration.md) 和 [验收追踪](docs/typing-practice-verification.md)。
+
 ## 已知限制
 
 - 首版不支持 DRM、加密 EPUB、音视频和脚本型交互内容。
 - EPUB 使用 MoyuPlus 统一阅读排版，不保留原书字体、颜色、字号、边距、多栏、浮动或固定版式；复杂出版物会退化为可读的语义内容，而不是像素级还原原版。
-- 打字练习仅支持 TXT；移动或删除原文件后需从书架重新定位。
+- 在线练习来源尚未启用；当前素材来自扩展内置内容、用户本地文件、Reader 书架或自由粘贴。
+- 旧版物理行练习状态只迁移为一次性设置提示，不会伪造成新版成绩或自动恢复为活动 Session。
 - 阅读进度按章节定位保存，不保存正文或文本引用。
 - 撤回历史仅存在于当前 Webview 阅读会话，不跨重载或重启持久化。
 
@@ -38,10 +51,10 @@ MoyuPlus 是一个离线优先的 VS Code 阅读器，支持 TXT、EPUB 2/3 书�
 
 在资源管理器中打开 **MoyuPlus Reader**，点击“导入”选择 TXT 或 EPUB。书架条目的“阅读”进入侧边栏分页，“沉浸阅读”会等待文本编辑器获得焦点后在代码行末尾显示正文。按 `Alt+Q` 可在 Reader 与当前 Git 仓库的 Git Log Reader 模式之间切换。
 
-Reader 与 Git Log 页面右上角的设置按钮会打开同一个 MoyuPlus 设置面板。面板集中提供阅读、沉浸阅读、Git Log、实验性打字练习和快捷键五个分区；编辑器右键菜单也可打开该面板。
+Reader 与 Git Log 页面右上角的设置按钮会打开同一个 MoyuPlus 设置面板。面板集中提供阅读、沉浸阅读、Git Log、兼容性 Enter 路由和快捷键分区；编辑器右键菜单也可打开该面板。练习策略在 MoyuPlus Typing 设置页管理，练习面板外观跟随 VS Code 当前主题。
 
 Git Log 首次进入时读取当前仓库与分支；同一扩展运行期间再次进入会立即显示上次结果，并在后台刷新。仓库没有变化时页面和分页保持不动，刷新失败时已有缓存仍可阅读。缓存只存在于内存中，Reload Window、重启 VS Code 或扩展重新激活后会自然清空。
 
 返回目标由进入 Git Log 时的页面决定：从阅读页进入会恢复原书和最后位置，从书架进入会返回书架。如果插件启动时已经处于 Git Log，并保存了阅读恢复目标，退出后会恢复该书；之后返回书架仍会保留完整书籍列表。
 
-快捷键路由默认关闭，可在 MoyuPlus 设置面板中按需开启。Git Log 切换命令默认绑定 `Alt+Q`，沉浸阅读停止命令默认绑定 `Alt+Shift+Q`；两者都可在 Keyboard Shortcuts 中重新绑定。
+兼容性 Enter 路由默认关闭，可在 MoyuPlus 设置面板中按需开启。Git Log 切换命令默认绑定 `Alt+Q`，沉浸阅读停止命令默认绑定 `Alt+Shift+Q`；两者都可在 Keyboard Shortcuts 中重新绑定。

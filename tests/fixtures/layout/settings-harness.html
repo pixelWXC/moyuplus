@@ -41,15 +41,12 @@
       fontWeight: 'normal', italic: false, leftMargin: 12
     };
     const configValues = [
-      ['moyuplus.shortcuts.enableTabRouter', false],
-      ['moyuplus.typing.tabMode', 'completeRest'],
       ['moyuplus.shortcuts.enableEnterRouter', false],
       ['moyuplus.enter.insertNewLine', true],
-      ['moyuplus.enter.nextPracticeLine', false],
       ['moyuplus.enter.nextReaderPage', false]
     ];
     const configuration = configValues.map(([key, value], index) => ({
-      key, defaultValue: value, globalValue: value, globalIsDefault: index !== 1,
+      key, defaultValue: value, globalValue: value, globalIsDefault: true,
       workspaceValue: index === 0 ? true : undefined,
       folders: index === 0 ? [
         { name: 'alpha', workspaceFolderValue: false, effectiveValue: false },

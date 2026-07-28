@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' file:; style-src 'unsafe-inline' file:; connect-src 'none'; frame-src 'none'; media-src 'none'">
+  <link rel="stylesheet" href="../../../media/typingApp.css">
+  <style>
+    :root {
+      --vscode-font-family: "Segoe UI", sans-serif;
+      --vscode-foreground: #242424;
+      --vscode-sideBar-background: #f8f8f8;
+      --vscode-editor-background: #ffffff;
+      --vscode-descriptionForeground: #616161;
+      --vscode-sideBarSectionHeader-border: #cccccc;
+      --vscode-panel-border: #cccccc;
+      --vscode-widget-border: #a0a0a0;
+      --vscode-focusBorder: #0066bf;
+      --vscode-list-hoverBackground: #e3e3e3;
+      --vscode-list-activeSelectionBackground: #0060c0;
+      --vscode-list-activeSelectionForeground: #ffffff;
+      --vscode-disabledForeground: #767676;
+      --vscode-textLink-foreground: #005a9e;
+      --vscode-button-background: #0060a8;
+      --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #004f8c;
+      --vscode-button-secondaryBackground: #dddddd;
+      --vscode-button-secondaryForeground: #202020;
+      --vscode-button-secondaryHoverBackground: #cccccc;
+      --vscode-input-background: #ffffff;
+      --vscode-input-foreground: #202020;
+      --vscode-input-border: #999999;
+      --vscode-inputValidation-warningBorder: #9a6700;
+      --vscode-inputValidation-warningForeground: #4d3800;
+      --vscode-textBlockQuote-background: #f0f0f0;
+      --vscode-testing-iconPassed: #2e7d32;
+      --vscode-progressBar-background: #0066bf;
+    }
+  </style>
+  <script>
+    window.sentMessages = [];
+    let instanceId = '';
+    let protocolVersion = 0;
+    let snapshotRevision = 0;
+
+    const materials = {
+      kind: 'materials',
+      builtIn: [{
+        id: 'builtin-zh-1',
+        revision: 'entry-v1',
+        title: '清晨',
+        origin: 'builtIn',
+        profileKey: 'chinese.modernArticle',
+        tags: ['中文', '文章'],
+        counts: {
+          graphemes: 120,
+          hanGraphemes: 110,
+          englishWords: 0,
+          printableUnits: 118
+        },
+        estimatedSeconds: 70,
+        sourceNotice: {
+          license: 'CC0-1.0',
+          attribution: 'MoyuPlus original practice content'
+        }
+      }],
+      library: [],
+      actions: {
+        paste: true,
+        importTxt: true,
+        importEpub: true
+      }
+    };
+
+    const contentFor = page => {
+      if (page === 'materials') return materials;
+      if (page === 'recent') return { kind: 'recent', items: [] };
+      if (page === 'setup') {
+        return {
+          kind: 'setup',
+          source: {
+            title: '清晨',
+            profileKey: 'chinese.modernArticle',
+            counts: {
+              graphemes: 120,
+              hanGraphemes: 110,
+              englishWords: 0,
+              printableUnits: 118
+            }
+          },
+          ranges: [{
+            label: '全文',
+            range: { kind: 'article', articleId: 'builtin-zh-1' }
+          }],
+          selectedRange: {
+            kind: 'article',
+            articleId: 'builtin-zh-1'
+          },
+          plan: {
+            completion: { kind: 'sourceRange', range: 'article' },
+            evaluation: { errorPolicy: 'block' },
+            textPolicy: {
+              punctuation: {
+                mode: 'equivalent',
+                mappingVersion: 'zh-punctuation-v1'
+              },
+              whitespace: { mode: 'trimLineEdges' },
+              caseSensitive: true
+            },
+            flowPolicy: {
+              lineAdvance: 'automatic',
+              presentation: 'continuous'
+            },
+            displayPolicy: {
+              showLiveMetrics: false,
+              showWhitespace: false
+            }
+          }
+        };
+      }
+      if (page === 'live') {
+        return {
+          kind: 'live',
+          status: 'running',
+          progress: null,
+          metrics: null,
+          controls: {
+            pause: true,
+            resume: false,
+            restart: true,
+            finish: true
+          }
+        };
+      }
+      if (page === 'result') {
+        return { kind: 'result', result: null, benchmarkBest: null };
+      }
+      if (page === 'history') {
+        return {
+          kind: 'history',
+          page: 1,
+          pageSize: 50,
+          totalItems: 0,
+          items: [],
+          days: []
+        };
+      }
+      if (page === 'mastery') {
+        return { kind: 'mastery', totalEntries: 0, entries: [] };
+      }
+      return { kind: 'unavailable', page };
+    };
+
+    const send = (page, content = contentFor(page), options = {}) => {
+      window.dispatchEvent(new MessageEvent('message', { data: {
+        protocolVersion,
+        instanceId,
+        type: 'shellSnapshot',
+        snapshotRevision: ++snapshotRevision,
+        snapshot: {
+          activePage: page,
+          availablePages: [
+            'materials',
+            'recent',
+            'setup',
+            'live',
+            'result',
+            'history',
+            'mastery'
+          ],
+          activeSessionStatus: options.activeSessionStatus ?? null,
+          pendingResultCount: options.pendingResultCount ?? 0,
+          recovery: null,
+          content
+        }
+      }}));
+    };
+
+    window.acquireVsCodeApi = () => ({
+      postMessage(message) {
+        window.sentMessages.push(message);
+        if (message.type === 'typingReady') {
+          instanceId = message.instanceId;
+          protocolVersion = message.protocolVersion;
+          setTimeout(() => send('materials'));
+        } else if (message.type === 'navigate') {
+          setTimeout(() => send(message.page));
+        }
+      }
+    });
+
+    window.typingHarness = {
+      sent: () => window.sentMessages,
+      send,
+      sendPending() {
+        send('materials', materials, { pendingResultCount: 2 });
+      },
+      setTheme(theme) {
+        const root = document.documentElement;
+        if (theme === 'dark') {
+          root.style.setProperty('--vscode-foreground', '#f0f0f0');
+          root.style.setProperty('--vscode-sideBar-background', '#181818');
+          root.style.setProperty('--vscode-editor-background', '#1f1f1f');
+          root.style.setProperty('--vscode-descriptionForeground', '#c8c8c8');
+        } else {
+          root.style.setProperty('--vscode-foreground', '#242424');
+          root.style.setProperty('--vscode-sideBar-background', '#f8f8f8');
+          root.style.setProperty('--vscode-editor-background', '#ffffff');
+          root.style.setProperty('--vscode-descriptionForeground', '#616161');
+        }
+      },
+      sendLongRecent() {
+        send('recent', {
+          kind: 'recent',
+          items: [{
+            resultId: 'result-1',
+            materialId: 'material-' + 'unbroken-identifier-'.repeat(10),
+            sourceRevision: 'revision-1',
+            profileKey: 'chinese.modernArticle',
+            outcome: 'completed',
+            endedAt: Date.UTC(2026, 6, 27, 12),
+            activeElapsedMs: 60_000,
+            accuracy: 95,
+            effectiveCpm: 42
+          }]
+        });
+      }
+    };
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="../../../media/typingApp.js"></script>
+</body>
+</html>

@@ -454,3 +454,260 @@
 - Git Log coordinator 的可见性恢复会自行调用 `showLibrary()` 或 `restoreReader()`；Provider 不应在 coordinator 完成后再额外刷新，否则会产生重复可用性扫描。
 - 进度保存失败时 `ReadingProgressStore` 仍保留上一次成功位置；协调器只返回 `progressPersisted: false` 并继续清理，Provider 提示错误后从 store 构造书架，因此不会显示未落盘的新百分比。
 - 2026-07-17 用户确认真实 Extension Development Host 人工核验通过；沉浸阅读启动/翻页/停止、统一设置和停止后书架状态同步均达到验收要求。
+
+## 2026-07-23 打字练习整体架构重置
+
+- 用户已明确确认 `docs/superpowers/specs/2026-07-23-moyuplus-typing-practice-architecture-reset-design.md` 无误，可直接实施，无需重新进行需求发散。
+- 设计是完整 program spec，明确要求七个工作包顺序推进；任何中间切片都不能视为最终完成。
+- 当前 typing stack 只有 `TypingPracticeController`、全局 Inline Completion、快捷键路由和 workspace 小型行号状态；新架构尚未建立。
+- 现有 Vitest 位于 `src/test/unit`，通过 VS Code shim 运行；适合先加入纯 TypeScript contract、Coordinator 和架构守卫测试。
+- 当前仓库已有旧 typing 单元/集成测试，工作包 1–5 旁路期间必须保留；工作包 6/7 切换后再删除只覆盖旧行为的测试。
+- Git 工作树相对 `master` ahead 2，且 `CHANGELOG.md`、`package*.json` 已修改，还有若干未跟踪文档/脚本；这些均视为用户资产。
+- `tsconfig.json` 的生产 include 是 `src/**/*.ts` 且严格模式开启；纯领域契约可在不改构建配置的前提下独立编译。
+- 新实施计划已落盘到 `docs/superpowers/plans/2026-07-23-moyuplus-typing-practice-architecture-reset-implementation.md`。
+- 既有协调器测试偏好结构化内存替身和直接行为断言；WP1 可以沿用这一风格，不需要引入新的测试框架或依赖。
+- `buildContract.test.ts` 会实际触发共享 `out/` 构建；WP1 聚焦测试应只运行新增 Vitest 文件，完整门禁时再串行执行 compile 与全量测试，避免并发清理构建目录。
+- 旧 `src/typing` 文件会与新目录共存，因此新公开入口必须只导出新架构符号，不能重新导出或依赖 `TypingPracticeController`。
+- 沙箱未把项目 Node 工具链放入 PATH，但本地 `node_modules` 完整；使用 Codex bundled Node 直接调用 `node_modules/vitest/vitest.mjs` 和 `node_modules/typescript/bin/tsc` 可稳定运行。
+- WP1 Coordinator 当前每条命令都从 Snapshot/Session Store 重新加载事实，不保存活动 session 字段；这为后续多窗口 lease 和恢复保留了正确边界。
+- WP1 新代码未修改 `extension.ts`、`package.json` 或旧 typing 注册，符合旁路构建要求；全量旧 Reader/Typing 回归保持绿色。
+- 现有 TXT Adapter 已具备 fatal UTF-8/GBK 解码、BOM 清理、物理行切分和稳定章节划分；Typing 导入可复用解码/章节规则，但必须复制规范化正文到全局托管目录，不能长期依赖原路径。
+- 现有 EPUB Adapter 通过安全 sanitizer 暴露 `immersiveProjection.text` 和版本化 `sourceRevision`，适合作为 Typing 章节纯文本提取入口；导入器只应保存这些安全文本，不保存 HTML、样式、图片或脚本。
+- 既有 Book Store 依赖 Memento，不满足 WP2 的多窗口锁、临时文件 + 原子 replace 和正文独立文件要求；ContentCatalogStore 需要新的文件系统适配器，不能复用该存储实现。
+- ContentCatalogStore 采用正文先写、Catalog 后写：Catalog 失败最多留下不可达的不可变 orphan body，不会产生 Catalog 指向缺失正文；相同 material/revision 若正文不同会拒绝覆盖。
+- Catalog 锁带 owner/token/time；过期锁通过原子 rename 移入 `recovered-locks` 保留诊断，而不是直接删除。并发测试确认两个 Store 同时 upsert 不丢记录。
+- TXT 导入以清理后的正文计算 SHA-256 revision，导出只返回托管纯文本；原 URI 仅作为来源信息。
+- EPUB 导入通过现有安全 Adapter 的 `immersiveProjection.text` 建立章节索引，只有全部章节成功后才写 Catalog；HTML、图片、样式和脚本不进入 Typing 存储。
+- 内置素材采用随 TypeScript bundle 打包的只读版本化 manifest；每条记录含稳定 ID、revision、标签和授权/来源说明，Provider 只返回 defensive copy。
+- 覆盖矩阵用 manifest 正文边界反查数量，不能只信任 `itemCount` 元数据；该校验发现并修正了中文/ASCII 标点的计数偏差。
+- 自由粘贴通过内容哈希生成临时 source revision，默认不写 Catalog；显式保存才生成 `custom` 记录与不可变托管正文。
+- 非 Mastery 生成器使用纯确定性 PRNG 与内置池；手机号、日期、金额等格式生成也保留 seed 和算法版本，避免只在 UI 层随机。
+- Mastery Provider 只依赖窄 `MasteryEntrySource`，已覆盖 0/1/5/20+ 条目和加权 seed 复现；WP3 再实现计分、衰减与持久化事实来源。
+- 2026-07-23 继续实施时复核：WP3 是当前依赖链上的下一工作包，范围包括 Session Engine、文本策略、Analytics、Mastery、Coordinator 完整编排，以及 Preferences/Result/History/Daily/Mastery stores。
+- 既定设计与实施计划已经用户批准；本轮无需重新设计，直接在保留 WP1/WP2 未提交成果的前提下按 TDD 推进。
+- 工作区未发现仓库级 `AGENTS.md`；适用约束来自已批准设计、实施计划和当前技能。
+- WP3 设计要求状态机支持 ready/running/blockedOnError/paused/completed/abandoned；restart 复用同一 Snapshot 与 seed。输入尝试逐目标单元记录，删除只进入修正计数，不产生 InputAttempt。
+- 现有 WP1 只定义了 Session/Analytics/Mastery schema 与 `PracticeSessionRuntimePort`；尚无生产 Session Engine、文本规范化、统计聚合或投影实现，适合从公开 `domain/*` 入口按窄行为测试增量建立。
+- Result 持久化的强约束是“独立不可变文件先提交，投影后更新”；History/Daily/Mastery 都带 source watermark，可增量补算，也必须能从全部 Result 全量重建。
+- Coordinator 当前只编排 prepare/start/pause/resume/restart/finish，输入与修正尚未成为 Application 命令。WP3 要跑通内存 Editor Port 完整会话，需要补充窄的 input/correction 命令与事件，而不是让 Editor 直接调用 Domain。
+- `contentPreparation.ts` 已用 `Intl.Segmenter` 构建 Unicode 字素目标，并把换行/Tab/空格编码为独立 TargetUnit；Session Engine 应消费 Snapshot 的 TargetUnit，避免重新解释源文本。
+- `buildPracticeSnapshot` 已递归冻结并保存 contentProfile/Plan/seed；这足以让 Result 构建和 restart 保持历史解释稳定。测试中的旧手写 Snapshot fixture 需要补齐 contentProfile，而不是放宽生产契约。
+- 本地可用的固定 Node 路径为 `C:\Users\Purvar\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`，后续直接运行仓库内 Vitest/TypeScript，避免依赖 sandbox PATH。
+- WP3 最终以 `PracticeSessionEngine` + `PracticeSessionRuntime` 分层：Engine 只判定不可变 Snapshot/Session，Runtime 负责 lifecycle 与 Result 构建，Coordinator 只通过 Store/Editor/Event Port 编排。
+- ResultStore 使用全局 ID hard-link claim 与按月事实文件，ProjectedResultCommitter 严格先提交事实再刷新派生投影；History/Daily/Mastery watermark 连续时增量合并，损坏或不连续时从 Result 全量重建。
+- Result 同时保存错误对、中文/英文/代码词上下文和 grapheme/word/codeToken Mastery observations，使所有长期投影都不需要原始按键流或可变 Snapshot。
+- WP3 退出条件已满足；旧 typing 注册仍按计划旁路保留，下一依赖工作包是 WP4 workspace 会话、pending Result、lease 与原生编辑器适配。
+- 2026-07-24 恢复实施确认：WP4 是当前唯一未完成的下一依赖工作包，设计矩阵要求在切换旧栈之前完成真实练习文档、workspace 恢复、pending Result 重试和双实例 lease。
+- 设计定位显示 WP4 关键边界集中在第 7 节原生编辑器模型、第 12 节存储/lease、第 13 节生命周期和第 14 节配置；Reader Decoration 必须显式排除 `moyuplus-practice:`。
+- 当前 `src/typing` 仅有旧 `TypingPracticeController` 与 WP1–WP3 的 domain/application/storage/source 实现，尚无 `adapters/editor`、workspace store 或 editor registration，适合从公开 adapter contract 测试开始。
+- `PracticeCheckpoint` 契约已经存在，包含完整 session、逐行 accepted text、blocked text、稳定文档版本和 savedAt；workspace Store 可直接持久化该公开 schema，不需要引入第二份检查点模型。
+- `PracticeResultCommitPort` 只暴露 `commit(result)`，足以让 WP4 pending 重试保持对 WP3 的单向依赖：先保留 workspace pending 文件，成功提交全局事实后再清理。
+- 首个实现切片选择 `WorkspaceSessionStore` + `PendingResultStore`：它们是 WP4 恢复链基础、可用纯文件系统 contract 完整 RED/GREEN，也避免在 FileSystemProvider shim 尚未具备前把多个适配器耦合到一次改动。
+- 现有 `AtomicFileWriter` 已提供临时文件、flush 与同目录 rename，可复用于 workspace Snapshot/Checkpoint/PendingResult；ResultStore 的输入校验与不可变 JSON 风格可作为恢复 Store 的一致性参考。
+- 测试中已有 `buildPracticeSnapshot` 和真实 Runtime 可生成完整 Snapshot/Session，workspace contract 测试应优先复用公开构建器，避免手写易漂移 schema。
+- pending Result 删除前需要再次读取并比较当前文件；否则全局 commit 等待期间同 session 的新 pending 事实可能被旧重试误删。当前实现仅删除与本次提交序列化内容一致的文件。
+- workspace session ID 同时参与目录名，Store 边界使用窄白名单拒绝路径穿越；Snapshot/Checkpoint/Result 都在读取和写入时验证 schemaVersion。
+- Session lease 的事实文件是 `storageUri/typing/lease.v1.json`；所有 acquire/heartbeat/release 通过短时独占更新锁串行化，因此两个扩展实例并发 acquire 最多一个得到写权。
+- lease 活性边界采用 `now - updatedAt <= timeoutMs`；同 owner 同 session 重入保持现有 lease，超时后的另一 owner acquire 明确返回 `takenOver: true`，供后续恢复 UI 使用。
+- 练习文档锚点采用不可见 Word Joiner `U+2060`；每个逻辑行必须恰好以一个保留锚点结尾，解析结果只返回用户实际输入，锚点永不进入 TargetUnit 或输入尝试。
+- `PracticeFileSystemProvider` 只接受 `moyuplus-practice:` URI，文件内容仅保存在内存 Map；workspace Checkpoint 恢复通过 `acceptedTextByLine → anchored document` 完成，不读取或写入项目路径。
+- DocumentChange Adapter 不能依赖浏览器 composition 事件：逐字模式立即把本次变化的 Unicode 字素转成 input 命令；committedBatch 模式必须保存最后已判定检查点、合并短窗口内替换，稳定后只对受控区域最终差异逐字素判定。
+- 删除本身不产生 InputAttempt；Backspace 由命令路由精确计数，Delete/Undo/Redo/selectionDelete 分别进入 correction command。结构性修改、锚点破坏和暂停期输入需要回滚且不计尝试。
+- 受控文档差异只允许当前活动行尾部增长或缩短；同事务中其他行变化、锚点无效、多光标或中间位置替换都返回明确 rollback 原因，不进入 Application。
+- 稳定上屏 Buffer 的 Checkpoint 只在稳定结果已分类为 input 后前移；短窗口内每次替换取消旧 timer 并保留最终文本，pause 会清空未提交队列而不前移 Checkpoint。
+- 现有 Reader `ImmersiveDecorationPresenter` 已证明 host 注入模式可在不扩张 VS Code shim 的情况下测试真实 presenter 生命周期；Typing Decoration 可复用该结构，同时必须在 host/editor 入口检查 scheme。
+- 复核 Checkpoint 后发现 `blockedText` 与 `acceptedTextByLine` 分离；当前 FileSystemProvider 恢复仅使用 accepted 行，会丢失未修正错误显示。恢复 API 后续必须同时接收 Snapshot，以 `session.targetIndex` 定位 active line 并把 blockedText 放回锚点前。
+- blockedText 恢复已补齐：Provider 拒绝 Snapshot ID 或 display line 数不匹配的 Checkpoint；有效恢复把 blockedText 追加到当前 TargetUnit 所属逻辑行，保留用户可 Backspace 修正的错误文本。
+- Typing Decoration 只接收 `moyuplus-practice` editor；实际输入 Range 与锚点 attachment 分用四种 DecorationType，current 固定使用 `before`、remaining 固定使用 `after`，避免同一锚点 attachment 顺序不确定。
+- Presenter 从 `visibleRanges` 扩展有限缓冲行，不为整份 Snapshot 构造 options；自动换行模式隐藏 lineBreak 标记，Enter 推进模式才把 `↵` 作为剩余/当前结构目标显示。
+- Session Engine 的 correction 只在 Backspace 时减少 `blockedInputCount`；Delete/Undo/Redo 只计数。原生编辑器命令路由因此必须由 Editor Adapter 同步维护文档 Checkpoint，不能假设 Coordinator 会直接修改锚点文档内容。
+- 旧 `ShortcutRouter` 是全局 Enter/Tab 行为且依赖旧 Controller；WP4 新路由必须限定 `moyuplus-practice` scheme，并保留非练习编辑器走原生命令的窄回退，正式替换留到 WP6。
+- `ResilientPracticeResultCommitter` 作为 WP3 Result Port 外围适配器：全局事实/投影提交异常时，只有 workspace pending 原子保存成功后才吞掉异常；pending 自身写失败仍向上抛出，避免静默丢成绩。
+- 激活重试按 session ID 稳定排序扫描 `typing/sessions/*/pending-result.v1.json`，逐项隔离失败；返回 committed/failed session ID，便于 WP5 展示“成绩尚未保存”状态。
+- 新 Command Router 不复用旧全局 Router：活动状态只接受 running/blockedOnError；paused/completed 等状态在 practice scheme 内返回 blocked，绝不能回退到原生命令而破坏锚点。
+- Backspace 精确产生一次 `correct(kind=backspace,count=1)`；Enter/Tab 直接产生结构目标 input command。非 practice scheme 分别回退 `deleteLeft`、`type({text:'\\n'})`、`tab`。
+- `registerPracticeEditor` 已封装 `moyuplus-practice` FileSystemProvider 与三个命令 disposable，但刻意不由 `extension.ts` 激活；WP4 可以完成 Adapter/Extension Host contract，而不会让新旧 typing listener 同时监听现有资源。
+- `WorkspacePracticeEditorAdapter` 已成为 workspace 恢复路径唯一协调点：open 先落 Snapshot/Checkpoint 再打开内存 URI；render 先落新 Checkpoint 再重建文档/Decoration；close/complete 强制宿主 save，避免脏文档提示。
+- 文档事件只需 stage 当前完整 anchored text 和稳定 document version；render 根据最新 Session 的 `blockedInputCount` 从当前行末按 Unicode 字素切出 blockedText，Checkpoint 不依赖私有输入法 API。
+- manifest 已建立独立语言级编辑器边界；禁用补全/内联建议/format-on-type 不再依赖用户全局开关，也不会影响普通项目文件。字体、字号和 Decoration 主题桥仍留在 WP5 配置入口。
+- Reader `ImmersiveDecorationPresenter` 现在在 active editor 入口显式拒绝 `moyuplus-practice` scheme，并保持 armed 而非 visible；因此 Reader 翻页不会消费位置，也不会与 Typing Decoration 争用同一文档。
+- `SessionLeaseHeartbeat` 使用可注入 scheduler，默认 5 秒；stop 只释放当前 owner/session，心跳失败立即停止继续调度，避免已失去 lease 的窗口继续表现为可写。
+- 当前 WP4 新模块仍为旁路公开实现：package 只贡献语言隔离，`extension.ts` 尚未注册新 FSP/listener；因此可以安全运行全量旧栈回归，而不会产生双监听同一练习资源。
+- 2026-07-24 本轮验证基线为 80 个 Vitest 文件 354/354，extension/webview build 与严格 TypeScript 通过；WP4 尚不能标 complete，因为真实 VS Code `onDidChangeTextDocument`/save/close 宿主、命令 keybinding 接线、Extension Host 自动化和微软拼音人工冒烟尚未完成。
+- VS Code `onDidSaveTextDocument` 表示一次 save 已完成；listener 只应 flush 尚未稳定的输入，不能再次调用 `document.save()`，否则可能形成重复 save 链。稳定输入后的后台 save 由 `WorkspacePracticeEditorAdapter.render()` 负责。
+- `onDidCloseTextDocument` 发生在编辑器关闭之后，不能承担“关闭前强制保存”。受控完成/关闭仍先走 adapter save；真实 close 事件只丢弃未确认的 IME pending 批次、持久化最后稳定 Checkpoint 并 detach。
+- `WorkspacePracticeEditorAdapter.describeDocument()` 以 Checkpoint 重建最后稳定 anchored text，而不是读取已被用户修改的 Provider 当前值；因此文档 diff 始终以最后已判定事实为基线。
+- 新 lifecycle 通过窄工厂绑定 Workspace Editor 与 `PracticeApplicationCoordinator.input/correct`，registration 只负责把 VS Code 文档事件归一化，不把领域判定塞回宿主层。
+- Extension Host 测试必须作为独立 `run()` bundle，不能使用 Vitest 的 `.test.ts` 命名；runner 直接 spawn `Code.exe`，以临时 user-data/extensions 目录隔离用户环境。
+- 真实 VS Code editor 关闭与 `onDidCloseTextDocument` 的文档释放时机不同；Extension Host 自动化断言 editor 不再可见，事件委托与 Checkpoint detach 由 adapter/registration contract 单独确定性验证。
+- WP4 新 FSP、listener、lifecycle 与命令仍保持旁路，不在 `extension.ts` 激活；这既允许真实 Extension Host 单独验证，也避免在工作包 6 正式切换前与旧 typing stack 双监听。
+- Delete/Undo/Redo 不能只依赖普通 document diff，否则一次受控原生命令会同时被 command router 和 document listener 计数；最终边界由 router 产生具名 correction，并在原生 edit 期间用 lifecycle `runExtensionEdit` 忽略对应文档事件。
+- 微软拼音人工冒烟不能依赖尚未到 WP6 的正式 activation；独立 Extension Host manual runner 可在不双监听旧 stack 的前提下复用真实 FSP、文档事件和 committedBatch lifecycle，作为 WP4 的可执行人工验收入口。
+- 人工 IME harness 不能沿用 30ms 自动化默认窗口：真人候选选择会明显更慢，过早 flush 后临时拼音会污染累积状态。手工入口使用 1.5 秒窗口，并以当前完整 anchored document 而不是 command 文本累加作为验收事实。
+- 手工 runner 必须显式提供 `reportError`；稳定 timer 中的异步错误默认不会进入主 `run()` Promise，必须桥接为可见状态栏/非模态错误通知和 rejection，否则用户只会看到“没有反应”。
+- `--extensionTestsPath` 模式下 VS Code 会让 `DialogService` 拒绝测试扩展发起的模态对话框；人工 harness 的说明、成功和失败反馈不能使用 `{ modal: true }`，应把主反馈放在编辑器 Decoration 与状态栏，通知仅作补充。
+- 2026-07-24 用户在 Windows 微软拼音下完成固定长句输入并看到“微软拼音冒烟通过”；这补齐了 WP4 唯一剩余人工证据，确认 1.5 秒稳定窗口、anchored document 判定和真实 Extension Host 输入链可共同工作。
+- WP5 Webview 不应从 `typing/adapters/view/index.ts` barrel 导入协议；该入口同时导出依赖 `vscode`/Node 的 Provider 与 HTML 生成器，会污染 browser bundle。浏览器只允许导入纯 `typingViewProtocol.ts`。
+- Typing View 使用独立 Activity Bar 容器并可与旧 typing stack 旁路共存；当前 shell query 只返回导航/会话摘要，后续页面数据必须继续通过 Application 查询适配器提供，不能让 Webview 直接构造或写入工作包 2–4 Store。
+- 当前 `extension.ts` 的 Typing shell query 尚未读取真实 Session/PendingResult：它固定返回全部页面可用、`activeSessionStatus: null`、`pendingResultCount: 0`。恢复实施时必须用 Application 查询适配器替换这组占位数据，不能在 Webview 内补业务读取。
+- `TypingViewApplicationQuery` 只依赖结构化的只读 `catalog.list()` 端口；Webview snapshot 不暴露 `upsert`/delete/Result Store 等写能力。内置条目的计数与估时复用领域内容准备流水线，并在查询适配器构造时缓存。
+- 页面内容使用 `materials | unavailable` 判别联合，validator 同时校验 `activePage` 与 content page 一致；未完成页面不能复用一个看似成功的空数组快照。
+- extension activation 以 `globalStorageUri.fsPath` 作为新 Typing 全局事实目录；测试上下文缺失该字段时只使用非生产 fallback，不改变真实 VS Code 存储位置。
+- materials HTML 由纯渲染函数生成并对所有宿主文本转义；素材 ID 在写入 data attribute 前先 URI 编码，避免引号或空白形成属性注入。Webview 仍只消费宿主快照，不直接导入 Node、VS Code 或 Store。
+- 当前查询适配器仅完成 materials 事实接线；`activeSessionStatus`/`pendingResultCount` 的可注入端口在 extension 中仍使用默认值，其他页面明确返回 `unavailable`。下一切片必须通过命令端口完成选择/导入/粘贴并刷新，而不是让前端直接写 Catalog。
+
+## 2026-07-24 WP5 materials 命令断点恢复
+
+- 当前 `TypingViewApplicationQuery` 已是只读 catalog 投影；`TypingViewProvider` 仅处理 handshake、retry 与 navigate，协议尚无素材动作消息。
+- materials HTML 已包含 `data-action="paste|importTxt|importEpub"` 和编码后的 `data-material-id`，但 `typingApp.ts` 只绑定页面导航，所以按钮目前没有业务效果。
+- 素材写入能力已存在于 `CustomMaterialWriter`、`TxtMaterialImporter`、`EpubMaterialImporter`；自由粘贴默认应保留为 `adHoc` recipe，只有显式保存才进入 catalog。
+- 既有设计要求 Webview 只保存临时 UI 状态，业务状态来自 Application；因此动作不会把 Store 暴露给 Webview，而是通过 Provider 注入的命令端口执行。
+- 本轮采用的刷新语义：选择素材/提交自由粘贴后预选来源并打开 `setup`；TXT/EPUB 导入完成或取消后保持 `materials`，成功写入后重新读取 catalog。
+- `PracticeSetupDraft` 是 setup 预选来源的 Application 权威；内置素材映射为 `builtIn` recipe，catalog 中的自定义/TXT/EPUB 等条目统一映射为 `custom` recipe。
+- 自由粘贴先走领域清理、profile 推断、空内容与 200,000 字素校验；成功后只保存规范化 `adHoc` recipe，不创建素材记录。校验失败会报告错误并保留当前草稿/页面。
+- TXT 与 EPUB importer 现在允许省略 `contentProfile`，在规范化正文后按 Han/Latin 自动推断 chinese/english/mixed ad-hoc profile；显式 profile 仍保持原行为。
+- TXT View 导入默认尝试 UTF-8，只有 `TxtDecodeError` 才请求 GBK/GB18030 重试；选择取消、文件选择失败和终端导入错误均不会产生未处理的 Webview Promise rejection。
+- Provider 以命令返回的 applied 结果决定是否跳转；失败/取消不会把用户带到空 setup，导入完成后权威 catalog 快照会重新进入 Webview。
+
+## 2026-07-24 WP5 setup 查询与表单发现
+
+- setup 快照不需要也不应包含 `ContentRecipe`：宿主只投影标题、profile、计数、可选范围和当前策略，避免 `adHoc.text` 通过 Webview 协议复制。
+- `PracticeSetupDraft` 需要把来源、`SourceRange` 和完整 `PracticePlan` 作为一个 Application 事实保存；重新选择来源会自然清空上一次配置，避免计划引用旧 recipe。
+- setup 默认值来自两层：Content Provider inspect 决定来源 profile/范围和合理的完成约束，全局 `PracticePreferencesStore` 只覆盖判定、文本、推进和显示策略。表单覆盖只写当前草稿。
+- `sourceRange` 完成约束只适用于 article/chapter/selection；`whole` 内容在 Webview 表单选择“完成所选范围”时规范化为 `free`，避免生成领域联合中不存在的 whole completion。
+- Content Provider 的 inspect 仍留在宿主/Application 查询边界；Webview 只按范围数组索引提交选项，不能构造任意素材 ID、章节路径或读取 Catalog。
+- setup 协议增加新的双向线格式后升级到 `TYPING_VIEW_PROTOCOL_VERSION = 2`，使旧 Webview 实例不会把不完整的 v1 snapshot 当成有效配置。
+
+## 2026-07-24 WP5 prepare/start 恢复检查点
+
+- 当前明确断点是：把 setup 草稿中的 `PracticePlan + SourceRange` 接入 prepare/start，先处理活动会话冲突，再提供 live 页面事实与暂停/重启/结束命令。
+- 当前工作树包含此前 WP1–WP5 的大量未提交与未跟踪改动，均按既有实施内容保留；本轮不重置、不清理、不覆盖。
+- 已批准设计和详细实施计划覆盖本切片，无需重新发散视觉或架构；继续严格 RED → GREEN → REFACTOR。
+- 设计第 11.4 节明确规定已有活动会话时只能选择“返回当前练习 / 结束当前练习并新建 / 取消”，不得静默覆盖；因此 `configureSetup` 之后不能直接无条件调用 Coordinator。
+- Coordinator 已具备 `prepare/start/pause/resume/restart/finish` 编排；新工作应在 View/Application adapter 组合这些公开命令，不把冲突规则塞入领域 Runtime 或 Webview。
+- 当前 `TypingViewProvider` 的命令端口仅覆盖素材与 setup 配置；协议与 Provider 都还没有 start/conflict/live 控制消息，适合作为下一组预期 RED。
+- `PracticeSessionStorePort` 当前只有按 ID 的 `get/save`，没有“列出活动会话”能力；活动冲突应由一个窄的 workspace active-session/lease 查询端口提供，不能让 View 扫描存储目录。
+- `WorkspacePracticeEditorAdapter` 已完整实现 `PracticeEditorPort.open/render/complete`，但真实 `extension.ts` 目前只装配了素材 Catalog、偏好、setup 草稿和 View，尚未装配新 Coordinator/Runtime/Workspace Editor；真实 start 接线需要复用 WP3/WP4 公开构造器并保持旧栈旁路。
+- setup 配置消息当前只保存草稿并留在 setup；下一协议行为需要独立的“开始练习”请求，而不是把 configure 隐式升级为 start，避免表单调整时触发会话。
+- `SessionLeaseStore` 已提供 `read/acquire/heartbeat/release`，并能报告另一窗口的活动 `sessionId`；`WorkspaceSessionStore.getCheckpoint(sessionId)` 可恢复对应状态。冲突查询可以组合这两个公开 adapter，而无需扩张领域 Session Store 的列表接口。
+- Coordinator 的 `start` 当前内部生成 session ID 并先打开编辑器，暂不能在打开前用该 ID 原子获取 lease；本切片先把冲突决策和 View/Application 命令边界做成可注入端口，真实多窗口原子接线需在装配时解决“预分配 session ID / 启动前 acquire”顺序，不能假装已完成。
+- 当前真实扩展已装配同一 Extension Host 内的 Coordinator、Runtime、原生 editor adapter 和 View 命令，因此单窗口 start/pause/conflict-return 已端到端通过；多窗口 lease 仍未进入 start 的原子路径，WP5 的“活动会话冲突”不能据此标记全部完成。
+- live 指标只从 `PracticeSessionState + PracticeSnapshot + monotonicNow` 投影：进度、尝试、正确/错误、准确率、原始/有效 CPM 与活动时间均不由 Webview 自行累计；控制消息不含 sessionId，由宿主读取当前活动会话。
+
+## 2026-07-24 WP5 多窗口 lease 原子装配发现
+
+- 最小正确顺序必须由 Coordinator 保证：读取 Snapshot → 预分配 session ID → 原子 acquire lease → Domain runtime start → 保存 Session → 打开 editor；仅在 acquire 成功后才允许任何可写 Session 副作用。
+- 租约竞争不是异常，而是 Application 事实：`practiceStartBlocked` 携带 workspace 检查点投影出的活动 session ID/status，View 命令据此保持 setup 并显示冲突，不把跨窗口竞争伪装为启动成功。
+- `WorkspacePracticeSessionLease` 组合 `SessionLeaseStore` 与 `WorkspaceSessionStore`，使 Application Port 不依赖文件系统细节；租约文件刚写入但检查点尚未出现时安全降级为 `ready`。
+- heartbeat 生命周期属于 adapter：acquire 后启动，完成/自动完成后释放；restart 通过 owner-only `transition(current,next)` 在同一把更新锁内换绑，避免 release + reacquire 暴露竞争窗口。
+- 启动链路在 runtime/save/editor 失败时释放新租约；Application 事件发布位于成功边界之外，避免仅因观察者失败而释放已经打开的可写会话。
+- 真实 extension owner ID 使用 `process.pid + randomUUID`，同一进程内的测试/多实例也不会被误判为同一 owner；dispose 仅做尽力释放，正确性仍依赖 heartbeat 超时与接管。
+- 当前接管语义仅完成 Store 层超时 takeover；超时后在另一个窗口恢复原 Session 检查点的专用交互尚未实现，不能把多窗口恢复矩阵标记完成。
+
+## 2026-07-24 WP5 Result / History / Mastery 恢复发现
+
+- 当前详细计划的明确下一断点是 `result/history/mastery` 三个只读事实页；Reader Bridge、配置入口和超时 lease 旧检查点恢复 UI 仍在其后。
+- 设计要求 View 层只能调用工作包 3 的 Application/Query 接口，不得临时创建或直接写 Result、History、Daily、Mastery Store。
+- Result 是唯一长期事实来源；History/Daily/Mastery 都是可从 Result 重建的派生投影。页面必须显式呈现空态/不可用态，不能用壳层占位伪装完成。
+- History 默认每页 50 条；Result 页需要摘要、10 秒桶曲线、错误排行和历史比较；Mastery 页需要错字/错词排行与强化入口，但本切片先守住只读事实边界。
+- 现有生产能力位于 `ResultStore.ts` 与 `ProjectionStores.ts`，现有 View 查询/协议/Provider/渲染分别位于 `TypingViewApplicationQuery.ts`、`typingViewProtocol.ts`、`TypingViewProvider.ts`、`typingViewHtml.ts` 和浏览器 typing 模块。
+- 当前工作树包含 WP1–WP5 大量既有未提交与未跟踪内容，均视为用户资产保留；本轮只做断点所需增量。
+- `ResultStore` 已公开只读 `list/get`；`HistoryProjectionStore`、`DailyProjectionStore`、`MasteryProjectionStore` 已公开 `read()`，并会在投影缺失、损坏或版本不匹配时从不可变 Result 重建。
+- 因此 View 查询适配器只需依赖窄只读 Port：最新 Result、History/Daily 投影和 Mastery 投影。它不需要文件路径、写入器、`refresh/rebuild` 或任何 Store 变更能力。
+- Result 页可用最新 Result 的 metrics、speedBuckets、mistakes 和同 benchmark 历史最佳生成只读 DTO；History 页按 `endedAt` 倒序分页，并携带 Daily 汇总；Mastery 页按现有投影顺序/权重投影错误条目。
+- 线格式已升级到 v4：Result DTO 只包含摘要、速度桶、错误排行和 benchmark 最佳；History 固定首屏 50 条并附最近 14 天 Daily 汇总；Mastery 最多投影前 100 个高分条目。文件路径、正文、Store 写接口和完整输入均不会进入 Webview。
+- 扩展装配改为一个共享 `ResultStore`：Coordinator 通过 `ProjectedResultCommitter` 先提交事实再刷新 History/Daily/Mastery；Query 读取同一事实 Store 与三个投影 Store，避免双实例语义漂移。
+- Result/History/Mastery 本轮只完成只读事实与真实空态；“再练一次/强化本次错字/保存为素材”、历史翻页命令和 Mastery 强化入口仍属于后续交互切片，不应从当前只读页面反推为已完成。
+- 下一断点按详细计划选择超时 lease 接管后的旧检查点恢复 UI；完成后再进入 Reader Bridge、配置入口以及三条 feature-gate 端到端和可访问性验收。
+
+## 2026-07-24 WP5 超时 Lease 旧检查点恢复发现
+
+- 恢复候选必须来自仍存在但已经过期的 lease，并同时具备匹配的 Snapshot 与 Checkpoint；扫描 session 目录或让 Webview 传 session ID 都会破坏权威边界。
+- 查询与执行之间存在竞态。恢复按钮只能条件认领同一个过期 session；若 lease 已换成另一个 session，即使新 lease 也过期，也不得覆盖它。
+- 崩溃前的 `performance.now()` 不能跨 Extension Host 复用。恢复服务会把 `startedAtMonotonic`、pause intervals 与 `pausedAtMonotonic` 整体平移到当前时间轴，并先落为 paused，从而保留已练习时长且排除离线时间。
+- “暂不恢复”只是当前 Host 的提示抑制，不删除 Snapshot、Checkpoint 或 lease；数据仍可在下次激活中恢复。
+- 协议 v5 的恢复摘要只包含状态、保存时间和完成进度；session ID、正文、文件路径和 Store 写能力均不进入 Webview。
+- 真实 activation 已验证：过期 lease → materials 顶部恢复提示 → 原子 claim → 原生练习文档打开 → live paused 权威快照。
+- 下一断点为 Reader Bridge；配置入口和三条 feature-gate 端到端/可访问性验收仍在其后。
+
+## 2026-07-27 WP5 Reader Bridge 发现
+
+- Reader Book 不需要复制进 Content Catalog。`ReaderBookSourceProvider` 可以直接组合 `BookLibraryStore + AdapterRegistry`，只读取 Book Adapter 已消毒的 `immersiveProjection.text`，并按整本/章节生成 `PreparedContent`。
+- Provider 的确定性 revision 必须包含 book ID、章节 ID、章节 source revision 与规范化正文；这样来源内容变化会生成新事实标识，历史 Result 不会误认成同一版本。
+- `ReadingLocator` 不能原样进入 Typing 草稿或 Webview。桥接入口只保留 `sectionId`，转换为 `suggestedSectionId + chapter SourceRange`；CFI、offset、progression 和阅读进度均留在 Reader 边界。
+- setup 查询已具备范围权威校验：推荐章节仍存在时作为默认范围；章节失效时安全回退到 Provider 返回的第一个有效范围，不会把旧 locator 当作强绑定。
+- `TypingViewProvider.openPage` 必须把外部请求页保留到首次 resolve/handshake。若 resolve 或 `typingReady` 强制重置 materials，从未打开过 Typing View 的书架入口会出现只在冷启动时失败的竞态。
+- 来源可用性门禁应位于桥接入口、写草稿之前。失效时只向 Reader 既有重新定位命令回传 book ID；Typing 显示错误但不获得书架 Store 写能力。
+- 真实 activation 的书架 `startTypingPractice` 动作现调用新 Entry Point，并使用当前可见位置或持久化位置作为可选章节建议；旧 `START_TYPING_PRACTICE_COMMAND_ID` 仍保留给后续 WP6 薄别名迁移，但书架不再走旧 Controller。
+- 最终证据：Reader Bridge 新增测试 7 项全部通过；真实 extension activation 书架路径通过。全量 Vitest 为 96 文件中 95 文件、449 项通过，唯一既有 `catalog.lock` 瞬时 `EPERM` 独立复验 6/6；TypeScript、四目标 build 和 `git diff --check` 通过。
+
+## 2026-07-27 WP5 语言与默认偏好配置入口恢复发现
+
+- 设计第 11.7 节明确区分两条写路径：setup 覆盖只属于当前 `PracticePlan`；只有显式“设为默认”才修改全局 `PracticePreferencesStore`。
+- 练习编辑器字体、字号、行高和 letter spacing 必须通过 `[moyuplus-practice]` 语言级 VS Code 配置调整；主题色、背景、下划线和当前字符框继续由 DecorationTypes 管理，不能用 CSS 注入原生编辑器。
+- 当前 setup 查询已经会读取 `PracticePreferencesStore` 作为新草稿默认值，但还没有显式保存默认偏好的 View 命令，也尚未发现真实语言覆盖写桥的完成证据。
+- 本切片先完成窄 Application/View 命令与语言配置桥，不把 setup 表单的普通“应用”行为改成全局写入。
+- `package.json` 已提供 `[moyuplus-practice]` 的补全/格式化关闭默认值，但 `VSCodeWorkspacePracticeEditorHost.open()` 当前只打开并显示文档，没有显式调用 `setTextDocumentLanguage`；因此语言级覆盖是否生效缺少宿主保证。
+- 现有统一设置页的 typing 分区仍是旧版“向当前编辑器文件写入”的实验性文案和全局 Enter/Tab 路由项，不应把这套旧入口扩展成新架构事实。当前切片采用新版 Typing setup 的两个显式入口：保存当前策略为全局默认、打开 VS Code 的 `@lang:moyuplus-practice` 原生语言设置。
+- 原生设置入口只负责导航到 VS Code 权威配置 UI；具体字体、字号、行高和字距继续由 VS Code 写入语言覆盖，MoyuPlus 不复制第二份外观 Store。
+- `TypingViewPracticeCommands.saveSetupAsDefault` 先把严格 setup 配置写回当前 Application 草稿，再从权威草稿提取四类策略保存；这样按钮使用的范围仍经过草稿校验，同时 completion/content recipe 不进入全局偏好文件。
+- v6 的 `openPracticeEditorSettings` 不接受 languageId、配置键或任意查询字符串；Webview 只能请求宿主拥有的固定目标，避免把通用命令执行能力暴露给浏览器层。
+- 真实 extension activation 的默认保存路径与 Query 读取的是同一个 `PracticePreferencesStore` 实例；保存后新 setup 会自然读取新默认，而当前已经配置的草稿保持本次覆盖。
+- 原生 VS Code Extension Host 已验证新的 `setTextDocumentLanguage` 路径可以正常激活、打开并关闭隔离练习编辑器；沙箱内失败来自 GUI/注册表权限，不是扩展逻辑。
+- 复核七页面协议后确认 `recent` 仍明确投影为 `unavailable`，因此配置入口完成后不能把 WP5 标记 complete；下一切片必须先补齐 recent 只读事实，再进入三条端到端和可访问性矩阵。
+
+## 2026-07-27 WP5 Recent 只读事实页发现
+
+- Recent 的可靠事实源是不可变 `ResultStore`，不是 History/Daily 投影；直接按 `endedAt` 降序、result ID 稳定破同序并限制 20 条即可获得确定性的最近记录。
+- Webview 所需摘要可以收窄为 result/material/source revision/profile/outcome/timing/accuracy/effective CPM，不需要正文、文件路径或任何 Store 写接口。
+- 当前 `PracticeResult` 没有 ReplayDescriptor、来源标题和 SourceRange；在 schema 补齐前，Recent 应保持只读摘要，不能通过 material ID 猜测重放范围或伪造“再次练习”能力。
+- 协议升级至 v7，并对 Recent 条目数量、ID、时间与数值进行严格校验；真实空 Result Store 返回明确空状态，不再使用 `unavailable`。
+- 聚焦 Query/协议/渲染回归为 3 文件 28/28；真实 activation 的 Recent 空事实路径通过。
+- 最终门禁为 Vitest 97 文件 455/455、严格 TypeScript、extension/Reader/Settings/Typing 四目标构建和真实 Extension Host 退出码 0。
+- 七页面事实壳现已闭合；WP5 下一断点转为三条 feature-gate 端到端与窄侧栏、主题、高对比、键盘及 ARIA 可访问性矩阵。
+
+## 2026-07-27 WP5 Feature Gate 与可访问性验收发现
+
+- 详细计划当前唯一进行中的工作包是 WP5；WP1–WP4 已完成，WP6/7 仍依赖本轮 feature gate 与可访问性退出证据。
+- 七页面已经连接真实事实或明确空状态；本轮不得用占位状态替代真实 Application/Store/Editor 链路。
+- 审计范围限定为既有设计、`.impeccable.md`、VS Code 主题令牌、窄容器、键盘导航与 ARIA/语义要求，不新增视觉方向。
+- 若只读审计发现缺口，必须先用自动化测试稳定复现，再做最小生产修复。
+- 仓库当前没有 Typing View 专用 Playwright harness/spec；现有 layout 基础设施只覆盖 Reader、Settings、Git Log 与网络隐私。WP5 的窄侧栏、主题/高对比、键盘与 ARIA 退出证据尚未闭合。
+- 真实 Extension Host 当前有原生练习 editor 生命周期与 IME harness；三条素材入口的主要事实集中在 `extension.test.ts`，需进一步区分“宿主集成”与“真实 Extension Host 端到端”覆盖。
+- 隐藏实时指标当前没有传输/渲染边界：`TypingViewLiveContent.metrics` 必填，Query 无条件投影，Renderer 无条件展示。最小正确线格式是协议 v8 允许 `metrics: null`，并由权威 Snapshot 的 `plan.displayPolicy.showLiveMetrics` 决定。
+- 真实 Chromium 证明 Webview 当前有两个 `main` landmark，且 nav 点击后的 host snapshot 全量重绘会把焦点退回 document/body。
+- forced-colors 下当前页只有 VS Code 颜色背景，没有 outline/border 等非颜色当前态指示。
+- 合法上限内的长 Recent material ID 在 220px 侧栏没有产生水平溢出；该项审计风险经真实 Chromium 验证为假阳性，无需生产修复。
+- 审计最终分级：Critical 0；High 2（隐藏 live 事实、导航刷新丢焦点，均已修复）；Medium 2（双 main/整页 live region、高对比当前态，均已修复）；Low 1（粗指针动作触达区域，已修复）。
+- Anti-pattern verdict：通过。界面使用 VS Code 原生令牌、紧凑列表与渐进披露，无品牌渐变、阴影卡片、玻璃拟态、装饰性动画或 AI 模板化 hero 指标。
+- 正面保留项：严格 CSP、无网络资源、宿主文本转义、原生 label/fieldset/button、状态文本不只依赖颜色、空状态具备下一步引导。
+- 三条 feature gate 的权威边界一致：Webview 只发送严格命令；Application 草稿验证来源/范围；Coordinator 创建 Snapshot/Session；Editor Port 打开内存 `moyuplus-practice:` 文档，不写项目文件。
+- WP5 全部退出证据已闭合并正式标记 complete；WP6 的关键安全边界是“旧状态只形成恢复提示，不形成 Result”，以及“旧公共命令仅为新 Application 的薄别名，不得导入旧 Controller”。
+- 旧 `moyuplus.typingPracticeSession.v1` 当前仍由 `WorkspaceSessionStore` 读取并驱动旧 Controller；activation 同时注册新 `moyuplus-practice:` editor/View 和旧任意文件 Inline Completion/状态栏，因此 WP6 必须先切断旧注册，再由兼容适配器接管保留命令 ID。
+- 旧 session 的 `fileId` 指向旧 TXT library ID；Reader v2 Book ID 可能由迁移重新生成。可靠映射路径是旧 `TXT_LIBRARY_KEY` 记录的 URI → `BookLibraryStore.getByUri()`，不能假设 ID 相同。
+- `LegacyResumeHint` 只应携带映射后的来源引用、physical lineIndex 与空白偏好；它不是 PracticeResult、Snapshot 或可自动恢复的 Session。用户在 setup 确认后才会创建新 Snapshot。
+- 一次性消费必须是失败安全的：先写/校验新 hint，再清除旧 session；任一步失败都不得丢失旧状态。无活动 session 或无法映射来源时也应写完成 marker，避免每次 activation 重试无意义迁移，但应记录明确状态。
+- `LegacyTypingMigration` 现先写并严格回读 `LegacyResumeHint`，再写并回读完成 marker，最后清除旧 session；若旧 session 清除本身失败，下一次 activation 会在已验证 marker 分支重试清理，不重复覆盖首次 hint。
+- 无法通过 URI 映射 Reader v2 TXT Book 时，hint 明确记录 `available:false` 且不携带猜测的 `bookId`；旧标题只用于可识别提示，不授予来源读取能力。
+- 保留的 start/stop/toggle/reset 命令可完全投影到 `TypingViewProvider.openPage + TypingViewPracticeCommands.controlPractice`；旧 next/jump/trim/menu 没有新领域等价物，只保留一轮明确弃用提示，不再推进 physical line 或修改旧偏好。
+- 正式 activation 已不再构造旧 Controller，也不注册全局 `pattern: '**'` Inline Completion、状态栏和旧活动 context；新系统的文件系统 provider、原生编辑器与 Typing View 成为唯一生产装配。
+- 旧全局 Tab Router 不能继续读取旧 session 或生成 ghost text；保留命令 ID 时最窄兼容行为是回退 VS Code 原生 Tab，新练习的 Tab/Enter 继续由 `resourceScheme == moyuplus-practice` 专用命令处理。
+- 恢复提示跨 Webview 的最小事实集不需要任何 ID：Host 可按当前 workspaceState 重新读取权威 hint，页面只展示标题、可用性、物理行附近位置和旧空白规则；确认消息因此无需携带 book/source 标识。
+- 旧空白规则只有 `ignoreAllSpaces` 与“双侧 trim”可无损映射到新版 `ignore` / `trimLineEdges`；单侧 trim 和 skip-empty 没有一一对应的新策略，必须在提示中展示并让用户在 setup 复核，不能静默扩大忽略范围。
+- 恢复确认前必须重新扫描 Book URI 可用性；marker 中的 `available:true` 只代表迁移时成功映射 Reader v2 Book，不代表源文件此刻仍存在。扫描失败时保留 hint 并走书架重新定位，不可先消费。
+- 旧行为集成测试继续断言“写真实编辑器文件、全局 ghost text、状态栏、physical line 菜单”会把删除目标固化成契约；WP6 应以迁移/别名/唯一装配/新 setup 确认测试替换它，而旧 Controller 的纯单元测试可留到 WP7 随生产文件一起删除。
+- 迁移 marker 是清理重试的权威检查点：若 hint/marker 已验证而旧 key 删除失败，下次 activation 应只删除旧 key，不能重新生成或覆盖 hint；若 marker 未提交成功，则旧 session 必须继续存在以允许完整重试。
+- WP6 最终静态核对中，旧标识只存在于 `src/typing/TypingPracticeController.ts`、`typingPracticeCommands.ts`、`typingSourceCatalog.ts` 及对应纯单元测试；`extension.ts`、ShortcutRouter、package UI 和新 registration 均无旧业务依赖。物理删除严格留给 WP7。
+- WP6 完整证据为 Vitest 101 文件 470/470、TypeScript、四目标 build、Chromium 47/47、真实 Extension Host 退出码 0 与 `git diff --check`；新 typing 已是唯一生产注册。
+
+## 2026-07-27 WP7 删除基线发现
+
+- WP6 的生产装配切断已经成立，但旧实现文件仍会继续被 TypeScript 编译并构成可执行代码面；WP7 必须物理删除，而不能只依赖“未导入”。
+- 删除守卫证实旧集成测试已经消失，其余旧 Controller/SourceCatalog/WorkspaceSessionStore/领域模型和三个专属测试仍存在。
+- 全局 `moyuplus.routeTab`、`enableTabRouter`、`moyuplus.typing.tabMode` 与 `nextPracticeLine` 仍分散在 ShortcutRouter、统一设置协议/权威列表和设置 Webview 中；它们属于旧任意文件路由，不是新版 `moyuplus-practice:` 专用编辑器命令。
+- 新版编辑器注册中的 `routeTab` 方法和资源 scheme 专用 Tab 命令是当前架构的一部分，删除守卫应只约束旧全局快捷键/设置边界，不能误删新编辑器的精确路由。
+- 旧栈物理删除后，生产源码不再包含旧 Controller/SourceCatalog/session store；兼容命令只剩不导入旧业务的薄别名或弃用提示。
+- 性能基线揭示 `PracticeSessionEngine.input()` 深拷贝累积 attempt 历史，使 50k 历史下 p95 达约 405.569ms；活动 Session 属于运行时可变状态，Snapshot 才是不可变事实，因此输入/修正改为权威 Session 原位追加，恢复 O(1) 热路径。
+- 精确 200,000 字素、1,000 行快照的 Decoration 只访问可见范围及缓冲行，自动预算通过；真实 Extension Host 51 次文档变化采样得到 p95 3.179ms、最大 6.090ms。
+- Chromium 首轮 46/47 的唯一失败来自设置 harness 仍发送已删除的 3 个旧配置；更新夹具后聚焦 1/1、最终全量 47/47。
+- 设计第 18 节把 IME、主题、多窗口和大素材列为真实人工门槛。当前只有微软拼音已有人工作证；自动化不能冒充第三方输入法或双窗口真实操作，因此 WP7 必须保持进行中。

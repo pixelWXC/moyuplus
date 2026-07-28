@@ -1,5 +1,4 @@
 const ROUTE_ENTER_COMMAND_ID = 'moyuplus.routeEnter';
-const ROUTE_TAB_COMMAND_ID = 'moyuplus.routeTab';
 const TOGGLE_TYPING_PRACTICE_COMMAND_ID = 'moyuplus.toggleTypingPractice';
 const TOGGLE_GIT_LOG_COMMAND_ID = 'moyuplus.gitLog.toggle';
 
@@ -16,7 +15,7 @@ export const OPEN_READER_SETTINGS_COMMAND_ID = 'moyuplus.reader.openSettings';
 export const STOP_IMMERSIVE_READING_COMMAND_ID = 'moyuplus.immersive.stop';
 
 export type ShortcutRisk = 'low' | 'high';
-export type ShortcutEnablement = 'enter' | 'tab';
+export type ShortcutEnablement = 'enter';
 
 export interface ShortcutSettingItem {
   commandId: string;
@@ -30,7 +29,6 @@ export interface ShortcutSettingItem {
 
 export interface ShortcutSettingsStateInput {
   enableEnterRouter: boolean;
-  enableTabRouter: boolean;
 }
 
 export function createShortcutSettingsState(input: ShortcutSettingsStateInput): ShortcutSettingItem[] {
@@ -51,20 +49,11 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
     {
       commandId: ROUTE_ENTER_COMMAND_ID,
       label: '编辑器：Enter 组合动作',
-      description: '插入真实换行，并按设置推进练习行或阅读器页面。',
+      description: '插入真实换行，并可按设置推进阅读器页面。',
       enabled: input.enableEnterRouter,
       configurableEnablement: 'enter',
       risk: 'high',
       conflictWarning: 'Enter 是高频编辑按键；仅在明确需要组合动作时启用。'
-    },
-    {
-      commandId: ROUTE_TAB_COMMAND_ID,
-      label: '编辑器：Tab 练习补全',
-      description: '练习开启且补全菜单与 snippet 不活跃时补全当前练习行。',
-      enabled: input.enableTabRouter,
-      configurableEnablement: 'tab',
-      risk: 'high',
-      conflictWarning: 'Tab 可能与补全或 snippet 冲突；路由带有限定条件且默认关闭。'
     }
   ];
 }

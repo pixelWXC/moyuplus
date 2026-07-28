@@ -2,6 +2,33 @@ export interface Disposable {
   dispose(): void;
 }
 
+export const FileType = {
+  Unknown: 0,
+  File: 1,
+  Directory: 2,
+  SymbolicLink: 64
+} as const;
+
+export const FileChangeType = {
+  Changed: 1,
+  Created: 2,
+  Deleted: 3
+} as const;
+
+export class FileSystemError extends Error {
+  static FileNotFound(uri?: Uri): FileSystemError {
+    return new FileSystemError(`File not found: ${uri?.toString() ?? ''}`);
+  }
+
+  static FileExists(uri?: Uri): FileSystemError {
+    return new FileSystemError(`File exists: ${uri?.toString() ?? ''}`);
+  }
+
+  static NoPermissions(message?: string): FileSystemError {
+    return new FileSystemError(message ?? 'No permissions.');
+  }
+}
+
 type CommandCallback = (...args: unknown[]) => unknown;
 type QuickPickItem = { label: string; [key: string]: unknown };
 type MessageCallback = (message: unknown) => unknown;
@@ -67,6 +94,7 @@ export interface TextLine {
 
 export interface TextDocument {
   readonly uri?: Uri;
+  languageId?: string;
   lineAt(line: number): TextLine;
 }
 
@@ -96,6 +124,10 @@ export class Range {
     this.start = new Position(startLine, startCharacter);
     this.end = new Position(endLine, endCharacter);
   }
+}
+
+export class ThemeColor {
+  constructor(readonly id: string) {}
 }
 
 export class Selection {
@@ -136,6 +168,7 @@ const registeredCommands = new Map<string, CommandCallback>();
 const registeredWebviewViewProviders = new Map<string, WebviewViewProvider>();
 const registeredCustomEditorProviders = new Map<string, CustomReadonlyEditorProvider>();
 const registeredInlineCompletionProviders: Array<{ selector: unknown; provider: InlineCompletionProvider }> = [];
+const registeredFileSystemProviders = new Map<string, unknown>();
 const executedBuiltinCommandCalls: Array<{ commandId: string; args: unknown[] }> = [];
 const failedBuiltinCommands = new Map<string, Error[]>();
 const contextValues = new Map<string, unknown>();
@@ -245,6 +278,16 @@ export const window = {
     return item;
   },
 
+  createTextEditorDecorationType(): Disposable {
+    return { dispose() {} };
+  },
+
+  async showTextDocument(document: TextDocument): Promise<TextEditor> {
+    const editor = createHostTextEditor(document);
+    window.activeTextEditor = editor;
+    return editor;
+  },
+
   registerWebviewViewProvider(viewId: string, provider: WebviewViewProvider): Disposable {
     registeredWebviewViewProviders.set(viewId, provider);
 
@@ -290,13 +333,63 @@ export const window = {
 
 export const workspace = {
   workspaceFolders: undefined as { name?: string; uri: Uri }[] | undefined,
+  fileContents: new Map<string, Uint8Array>(),
   configurationValues: {} as Record<string, unknown>,
   configurationDefaults: {} as Record<string, unknown>,
   configurationCallbacks: [] as Array<(event: { affectsConfiguration(key: string): boolean }) => unknown>,
   fs: {
+    async readFile(uri: Uri): Promise<Uint8Array> {
+      const bytes = workspace.fileContents.get(uri.toString());
+      if (!bytes) throw FileSystemError.FileNotFound(uri);
+      return new Uint8Array(bytes);
+    },
     async stat(_uri: Uri): Promise<{ type: number; ctime: number; mtime: number; size: number }> {
       return { type: 1, ctime: 0, mtime: 0, size: 0 };
     }
+  },
+
+  async openTextDocument(uri: Uri): Promise<TextDocument> {
+    const provider = registeredFileSystemProviders.get(uri.scheme) as {
+      readFile?(uri: Uri): Uint8Array;
+    } | undefined;
+    if (!provider?.readFile) throw FileSystemError.FileNotFound(uri);
+    return createHostTextDocument(
+      uri,
+      new TextDecoder().decode(provider.readFile(uri))
+    );
+  },
+
+  onDidChangeTextDocument(): Disposable {
+    return { dispose() {} };
+  },
+
+  onDidSaveTextDocument(): Disposable {
+    return { dispose() {} };
+  },
+
+  onDidCloseTextDocument(): Disposable {
+    return { dispose() {} };
+  },
+
+  registerFileSystemProvider(
+    scheme: string,
+    provider: unknown,
+    _options?: { isCaseSensitive?: boolean; isReadonly?: boolean }
+  ): Disposable {
+    registeredFileSystemProviders.set(scheme, provider);
+    return {
+      dispose(): void {
+        registeredFileSystemProviders.delete(scheme);
+      }
+    };
+  },
+
+  registeredFileSystemProviderSchemes(): string[] {
+    return [...registeredFileSystemProviders.keys()];
+  },
+
+  registeredFileSystemProvider(scheme: string): unknown {
+    return registeredFileSystemProviders.get(scheme);
   },
 
   getConfiguration(section?: string, _scope?: Uri): {
@@ -360,6 +453,14 @@ export const ViewColumn = {
 } as const;
 
 export const languages = {
+  async setTextDocumentLanguage(
+    document: TextDocument,
+    languageId: string
+  ): Promise<TextDocument> {
+    document.languageId = languageId;
+    return document;
+  },
+
   registerInlineCompletionItemProvider(selector: unknown, provider: InlineCompletionProvider): Disposable {
     registeredInlineCompletionProviders.push({ selector, provider });
 
@@ -397,6 +498,7 @@ export function resetVSCodeShim(): void {
   registeredWebviewViewProviders.clear();
   registeredCustomEditorProviders.clear();
   registeredInlineCompletionProviders.length = 0;
+  registeredFileSystemProviders.clear();
   executedBuiltinCommandCalls.length = 0;
   failedBuiltinCommands.clear();
   contextValues.clear();
@@ -411,6 +513,7 @@ export function resetVSCodeShim(): void {
   window.nextWarningMessageResult = undefined;
   window.createdWebviewPanels.length = 0;
   workspace.workspaceFolders = undefined;
+  workspace.fileContents.clear();
   workspace.configurationValues = {};
   workspace.configurationDefaults = {};
   workspace.configurationCallbacks.length = 0;
@@ -604,6 +707,48 @@ class TestTextEditor implements TextEditor {
     callback(editBuilder);
     return true;
   }
+}
+
+function createHostTextDocument(uri: Uri, initialText: string): TextDocument {
+  let text = initialText;
+  return {
+    uri,
+    get lineCount() {
+      return text.split('\n').length;
+    },
+    get version() {
+      return 1;
+    },
+    lineAt(line: number): TextLine {
+      return { text: text.split('\n')[line] ?? '' };
+    },
+    getText(): string {
+      return text;
+    },
+    async save(): Promise<boolean> {
+      return true;
+    },
+    __replaceText(value: string): void {
+      text = value;
+    }
+  } as TextDocument;
+}
+
+function createHostTextEditor(document: TextDocument): TextEditor {
+  const editor = {
+    document,
+    selection: new Selection(new Position(0, 0)),
+    selections: [new Selection(new Position(0, 0))],
+    visibleRanges: [new Range(0, 0, Math.max(0, Number(
+      (document as TextDocument & { lineCount?: number }).lineCount ?? 1
+    ) - 1), 0)],
+    async edit(): Promise<boolean> {
+      return true;
+    },
+    setDecorations(): void {},
+    revealRange(): void {}
+  };
+  return editor as unknown as TextEditor;
 }
 
 class TestTextEditorEdit implements TextEditorEdit {

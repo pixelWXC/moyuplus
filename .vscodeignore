@@ -3,7 +3,10 @@
 .vscode/
 .superpowers/
 .impeccable.md
-docs/
+docs/**
+!docs/typing-practice-settings.md
+!docs/typing-practice-migration.md
+!docs/typing-practice-verification.md
 scripts/
 src/
 src/test/

@@ -63,6 +63,7 @@ describe('ImmersiveDecorationPresenter', () => {
     expect(second.clearCalls).toBeGreaterThan(0);
     expect(harness.disposedTypes).toBe(1);
   });
+
 });
 
 function createHost() {
@@ -76,7 +77,9 @@ function createHost() {
     createdTypes: 0,
     disposedTypes: 0,
     host: undefined as unknown as ImmersiveDecorationHost,
-    editor(lines: string[], activeLine: number) { return new TestEditor(lines, activeLine); },
+    editor(lines: string[], activeLine: number, scheme = 'file') {
+      return new TestEditor(lines, activeLine, scheme);
+    },
     activate(editor: TestEditor | undefined) { this.current = editor; activeCallbacks.forEach(callback => callback(editor)); },
     move(editor: TestEditor) { selectionCallbacks.forEach(callback => callback({ textEditor: editor })); },
     async settle(ms = 0) { await new Promise(resolve => setTimeout(resolve, ms)); }
@@ -106,13 +109,25 @@ function disposable<T>(values: T[], value: T) {
 
 class TestEditor {
   readonly selection: { active: { line: number } };
-  readonly document: { lineCount: number; lineAt(line: number): { text: string } };
+  readonly document: {
+    uri: { scheme: string };
+    lineCount: number;
+    lineAt(line: number): { text: string };
+  };
   readonly applied: Array<Array<{ text: string }>> = [];
   clearCalls = 0;
 
-  constructor(private readonly lines: string[], activeLine: number) {
+  constructor(
+    private readonly lines: string[],
+    activeLine: number,
+    scheme: string
+  ) {
     this.selection = { active: { line: activeLine } };
-    this.document = { lineCount: lines.length, lineAt: line => ({ text: lines[line] ?? '' }) };
+    this.document = {
+      uri: { scheme },
+      lineCount: lines.length,
+      lineAt: line => ({ text: lines[line] ?? '' })
+    };
   }
 
   setDecorations(_type: unknown, options: Array<{ renderOptions?: { after?: { contentText?: string } } }>): void {

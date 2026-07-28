@@ -1,4 +1,8 @@
 node_modules/
+.pnpm-store/
+.superpowers/
+__pycache__/
+*.py[cod]
 out/
 .vscode-test/
 *.vsix

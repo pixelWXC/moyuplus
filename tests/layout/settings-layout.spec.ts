@@ -47,9 +47,9 @@ test('switches to the native top selector at 680px without hiding settings', asy
 test('marks every typing setting experimental and explains workspace overrides', async ({ page }) => {
   await page.evaluate(() => window.settingsHarness.select('typing'));
   await expect(page.getByRole('heading', { name: '打字练习（实验性）' })).toBeVisible();
-  await expect(page.locator('.configuration-setting')).toHaveCount(6);
+  await expect(page.locator('.configuration-setting')).toHaveCount(3);
   await expect(page.locator('.configuration-setting .setting-field')).toHaveText([
-    /实验性/, /实验性/, /实验性/, /实验性/, /实验性/, /实验性/
+    /实验性/, /实验性/, /实验性/
   ]);
   await expect(page.getByText('当前工作区存在覆盖')).toBeVisible();
   await expect(page.getByText(/alpha：覆盖 关闭，实际 关闭/)).toBeVisible();

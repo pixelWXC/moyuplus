@@ -6,7 +6,11 @@ import type { ImmersiveReaderPresenter, PresenterPageMove, ReaderPresenterActiva
 
 interface DisposableLike { dispose(): void }
 interface DecorationTypeLike extends DisposableLike {}
-interface DocumentLike { lineCount: number; lineAt(line: number): { text: string } }
+interface DocumentLike {
+  uri?: { scheme: string };
+  lineCount: number;
+  lineAt(line: number): { text: string };
+}
 interface EditorLike {
   document: DocumentLike;
   selection: { active: { line: number } };
