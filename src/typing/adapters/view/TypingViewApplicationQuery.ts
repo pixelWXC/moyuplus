@@ -4,7 +4,8 @@ import {
   type ContentProfile,
   type ContentRecipe,
   type PracticePlan,
-  type PracticeMaterialRecord
+  type PracticeMaterialRecord,
+  type SourceRange
 } from '../../domain/content';
 import type { PracticePreferences } from '../../domain/policies';
 import type { PracticeSetupDraftSnapshot } from '../../application';
@@ -90,6 +91,17 @@ export interface TypingViewApplicationQueryOptions {
   };
   inspectContent?: (recipe: ContentRecipe) => PromiseLike<ContentDescriptor>;
   practicePreferences?: () => PromiseLike<PracticePreferences>;
+  continuations?: {
+    get(
+      recipe: ContentRecipe,
+      range: SourceRange
+    ): PromiseLike<{
+      sourceRevision: string;
+      targetIndex: number;
+      totalUnits: number;
+      updatedAt: number;
+    } | undefined>;
+  };
   sessionConflict?: () => {
     sessionId: string;
     status: TypingViewSessionConflictContent['status'];
@@ -102,6 +114,12 @@ export interface TypingViewApplicationQueryOptions {
   recoverablePractice?: () => PromiseLike<
     TypingViewRecoverySnapshot | undefined
   >;
+  pendingMaterialRemovals?: () => PromiseLike<readonly {
+    materialId: string;
+    title: string;
+    deleteAfter: number;
+    waitingForPractice: boolean;
+  }[]>;
   legacyResumeHint?: () =>
     | TypingViewLegacyResumeHint
     | undefined
@@ -249,7 +267,10 @@ export class TypingViewApplicationQuery {
       };
     }
 
-    const records = await this.options.catalog.list();
+    const [records, pendingRemovals] = await Promise.all([
+      this.options.catalog.list(),
+      this.options.pendingMaterialRemovals?.() ?? []
+    ]);
     return {
       activePage: page,
       availablePages: [...TYPING_VIEW_PAGES],
@@ -264,6 +285,7 @@ export class TypingViewApplicationQuery {
             right.updatedAt - left.updatedAt || left.title.localeCompare(right.title)
           ))
           .map(projectCatalogMaterial),
+        pendingRemovals: pendingRemovals.map(item => structuredClone(item)),
         actions: {
           paste: true,
           importTxt: true,
@@ -439,6 +461,34 @@ export class TypingViewApplicationQuery {
       completion: completionForRange(selectedRange)
     });
     const preferences = await this.options.practicePreferences?.();
+    const continuations = (
+      await Promise.all(descriptor.ranges.map(async range => {
+        const continuation = await this.options.continuations?.get(
+          draft.contentRecipe,
+          range
+        );
+        const revisionMatchesDescriptor = draft.contentRecipe.kind === 'readerBook'
+          || continuation?.sourceRevision === descriptor.sourceRevision;
+        return continuation && revisionMatchesDescriptor
+          ? {
+            range: structuredClone(range),
+            sourceRevision: continuation.sourceRevision,
+            targetIndex: continuation.targetIndex,
+            totalUnits: continuation.totalUnits,
+            updatedAt: continuation.updatedAt
+          }
+          : undefined;
+      }))
+    ).filter(value => value !== undefined);
+    const selectedContinuation = continuations.find(item =>
+      sameRange(item.range, selectedRange)
+    );
+    const startPosition = draft.startPosition
+      ?? (
+        selectedContinuation
+          ? { kind: 'continuation' as const }
+          : { kind: 'beginning' as const }
+      );
     const plan: PracticePlan = draft.plan ?? {
       ...defaultPlan,
       ...(preferences
@@ -462,6 +512,8 @@ export class TypingViewApplicationQuery {
         range: structuredClone(range)
       })),
       selectedRange: structuredClone(selectedRange),
+      startPosition: structuredClone(startPosition),
+      continuations,
       plan: {
         completion: structuredClone(plan.completion),
         evaluation: structuredClone(plan.evaluation),

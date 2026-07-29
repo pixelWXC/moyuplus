@@ -7,5 +7,6 @@ export * from './PracticePanelSnapshotProjector';
 export * from './PracticeSetupDraft';
 export * from './PracticeSessionRuntime';
 export * from './PracticeSessionRecovery';
+export * from './MaterialRemovalCoordinator';
 export * from './TypingViewMaterialCommands';
 export * from './TypingViewPracticeCommands';

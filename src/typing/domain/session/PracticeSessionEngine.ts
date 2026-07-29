@@ -15,6 +15,7 @@ export interface StartPracticeSessionInput {
   snapshot: PracticeSnapshot;
   wallTime: number;
   monotonicTime: number;
+  targetIndex?: number;
 }
 
 export interface ApplyPracticeInput {
@@ -35,6 +36,14 @@ export interface ApplyPracticeCorrection {
 
 export class PracticeSessionEngine {
   start(input: StartPracticeSessionInput): PracticeSessionState {
+    const targetIndex = input.targetIndex ?? 0;
+    if (
+      !Number.isSafeInteger(targetIndex)
+      || targetIndex < 0
+      || targetIndex >= input.snapshot.targetUnits.length
+    ) {
+      throw new Error('Practice start position is outside the selected range.');
+    }
     return {
       schemaVersion: TYPING_SCHEMA_VERSION,
       id: input.sessionId,
@@ -43,7 +52,8 @@ export class PracticeSessionEngine {
       status: 'running',
       revision: 0,
       transactionReceipts: {},
-      targetIndex: 0,
+      targetIndex,
+      ...(targetIndex > 0 ? { startTargetIndex: targetIndex } : {}),
       blockedInputCount: 0,
       inputAttempts: [],
       currentCorrectStreak: 0,
@@ -114,7 +124,10 @@ export class PracticeSessionEngine {
     // violates the input-path budget. Immutable PracticeSnapshot data remains
     // separate and is never mutated by the engine.
     const session = input.session;
-    const targetLimit = completionTarget(input.snapshot);
+    const targetLimit = completionTarget(
+      input.snapshot,
+      session.startTargetIndex
+    );
     advanceIgnoredTargets(session, input.snapshot);
     for (const actual of segmentPracticeGraphemes(input.text)) {
       advanceIgnoredTargets(session, input.snapshot);
@@ -211,13 +224,17 @@ export class PracticeSessionEngine {
   }
 }
 
-export function completionTarget(snapshot: PracticeSnapshot): number {
+export function completionTarget(
+  snapshot: PracticeSnapshot,
+  startTargetIndex = 0
+): number {
   if (snapshot.plan.completion.kind !== 'length') {
     return snapshot.targetUnits.length;
   }
   return Math.min(
     snapshot.targetUnits.length,
-    Math.max(0, Math.trunc(snapshot.plan.completion.targetUnits))
+    Math.max(0, Math.trunc(startTargetIndex))
+      + Math.max(0, Math.trunc(snapshot.plan.completion.targetUnits))
   );
 }
 

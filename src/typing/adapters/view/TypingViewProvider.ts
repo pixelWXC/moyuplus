@@ -6,6 +6,7 @@ import {
   type TypingViewPage,
   type TypingViewMaterialOrigin,
   type TypingViewSetupPlan,
+  type TypingViewStartPosition,
   type TypingViewSourceRange,
   type TypingViewShellSnapshot,
   type TypingViewToHostMessage
@@ -21,20 +22,25 @@ export interface TypingViewCommandPort {
     materialId: string;
     materialOrigin: TypingViewMaterialOrigin;
   }): PromiseLike<void | boolean>;
+  removeMaterial(materialId: string): PromiseLike<void | boolean>;
+  undoRemoveMaterial(materialId: string): PromiseLike<void | boolean>;
   usePastedText(text: string): PromiseLike<void | boolean>;
   importTxt(): PromiseLike<void | boolean>;
   importEpub(): PromiseLike<void | boolean>;
   configureSetup(input: {
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   }): void | boolean | PromiseLike<void | boolean>;
   saveSetupAsDefault(input: {
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   }): PromiseLike<void>;
   openPracticeEditorSettings(): PromiseLike<void>;
   startPractice(input: {
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   }): PromiseLike<TypingViewPage>;
   resolveSessionConflict(
@@ -52,6 +58,8 @@ export interface TypingViewCommandPort {
 
 const NOOP_COMMANDS: TypingViewCommandPort = {
   selectMaterial: async () => undefined,
+  removeMaterial: async () => undefined,
+  undoRemoveMaterial: async () => undefined,
   usePastedText: async () => undefined,
   importTxt: async () => undefined,
   importEpub: async () => undefined,
@@ -137,6 +145,15 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     }
   }
 
+  async refreshCurrent(): Promise<void> {
+    if (this.disposed) return;
+    const view = this.view;
+    const instanceId = this.instanceId;
+    if (view && instanceId) {
+      await this.refresh(view, instanceId, this.activePage);
+    }
+  }
+
   private async handleMessage(
     value: unknown,
     view: vscode.WebviewView
@@ -186,6 +203,7 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     if (message.type === 'startPractice') {
       page = await this.commands.startPractice({
         selectedRange: message.selectedRange,
+        startPosition: message.startPosition,
         plan: message.plan
       });
       applied = true;
@@ -215,12 +233,14 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     } else if (message.type === 'configureSetup') {
       applied = await this.commands.configureSetup({
         selectedRange: message.selectedRange,
+        startPosition: message.startPosition,
         plan: message.plan
       });
       page = 'setup';
     } else if (message.type === 'saveSetupAsDefault') {
       await this.commands.saveSetupAsDefault({
         selectedRange: message.selectedRange,
+        startPosition: message.startPosition,
         plan: message.plan
       });
       applied = true;
@@ -229,6 +249,12 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
       await this.commands.openPracticeEditorSettings();
       applied = true;
       page = this.activePage;
+    } else if (message.type === 'removeMaterial') {
+      applied = await this.commands.removeMaterial(message.materialId);
+      page = 'materials';
+    } else if (message.type === 'undoRemoveMaterial') {
+      applied = await this.commands.undoRemoveMaterial(message.materialId);
+      page = 'materials';
     } else if (message.type === 'selectMaterial') {
       applied = await this.commands.selectMaterial({
         materialId: message.materialId,

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { PracticeSnapshot } from '../../domain/content';
 import type { PracticeCheckpoint } from '../../domain/session';
@@ -15,22 +15,36 @@ const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export interface WorkspaceSessionStoreOptions {
   atomicWriter?: AtomicFileWriterPort;
+  now?: () => number;
+}
+
+export interface ActivePracticeSessionReference {
+  schemaVersion: 1;
+  sessionId: string;
+  updatedAt: number;
 }
 
 export class WorkspaceSessionStore {
   private readonly sessionsDirectory: string;
+  private readonly activeSessionFile: string;
   private readonly writer: AtomicFileWriterPort;
+  private readonly now: () => number;
 
   constructor(
     workspaceStorageDirectory: string,
     options: WorkspaceSessionStoreOptions = {}
   ) {
-    this.sessionsDirectory = path.join(
+    const typingDirectory = path.join(
       path.resolve(workspaceStorageDirectory),
-      'typing',
-      'sessions'
+      'typing'
+    );
+    this.sessionsDirectory = path.join(typingDirectory, 'sessions');
+    this.activeSessionFile = path.join(
+      typingDirectory,
+      'active-session.v1.json'
     );
     this.writer = options.atomicWriter ?? new AtomicFileWriter();
+    this.now = options.now ?? Date.now;
   }
 
   async saveSnapshot(sessionId: string, snapshot: PracticeSnapshot): Promise<void> {
@@ -71,6 +85,39 @@ export class WorkspaceSessionStore {
     return structuredClone(value);
   }
 
+  async saveActiveSession(sessionId: string): Promise<void> {
+    validateSessionId(sessionId);
+    const reference: ActivePracticeSessionReference = {
+      schemaVersion: 1,
+      sessionId,
+      updatedAt: this.now()
+    };
+    await this.writer.write(this.activeSessionFile, serialize(reference));
+  }
+
+  async getActiveSession(): Promise<
+    ActivePracticeSessionReference | undefined
+  > {
+    const value = await readJson<unknown>(this.activeSessionFile);
+    if (value === undefined) return undefined;
+    validateActiveSessionReference(value);
+    return structuredClone(value);
+  }
+
+  async getActiveSessionId(): Promise<string | undefined> {
+    return (await this.getActiveSession())?.sessionId;
+  }
+
+  async clearActiveSession(sessionId: string): Promise<boolean> {
+    validateSessionId(sessionId);
+    const active = await this.getActiveSession();
+    if (!active || active.sessionId !== sessionId) return false;
+    await unlink(this.activeSessionFile).catch(error => {
+      if (!isNotFound(error)) throw error;
+    });
+    return true;
+  }
+
   private snapshotFile(sessionId: string): string {
     return path.join(this.sessionsDirectory, sessionId, 'snapshot.v1.json');
   }
@@ -105,6 +152,25 @@ function validateCheckpoint(checkpoint: PracticeCheckpoint): void {
   }
   if (!Number.isFinite(checkpoint.savedAt)) {
     throw new Error('Practice checkpoint savedAt must be a valid timestamp.');
+  }
+}
+
+function validateActiveSessionReference(
+  value: unknown
+): asserts value is ActivePracticeSessionReference {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Invalid active practice session reference.');
+  }
+  const reference = value as Partial<ActivePracticeSessionReference>;
+  if (reference.schemaVersion !== 1) {
+    throw new Error('Unsupported active practice session schema version.');
+  }
+  if (typeof reference.sessionId !== 'string') {
+    throw new Error('Active practice session requires a session id.');
+  }
+  validateSessionId(reference.sessionId);
+  if (!Number.isFinite(reference.updatedAt)) {
+    throw new Error('Active practice session updatedAt must be a valid timestamp.');
   }
 }
 

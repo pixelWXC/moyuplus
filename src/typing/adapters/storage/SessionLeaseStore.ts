@@ -7,6 +7,7 @@ import {
 import { MaterialLock } from './MaterialLock';
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+export const DEFAULT_SESSION_LEASE_TIMEOUT_MS = 15_000;
 
 export interface SessionLease {
   schemaVersion: 1;
@@ -39,6 +40,7 @@ export interface SessionLeaseStoreOptions {
   acquireTimeoutMs?: number;
   retryDelayMs?: number;
   atomicWriter?: AtomicFileWriterPort;
+  ownerIsAlive?: (ownerId: string) => boolean;
 }
 
 export class SessionLeaseStore {
@@ -46,6 +48,7 @@ export class SessionLeaseStore {
   private readonly ownerId: string;
   private readonly now: () => number;
   private readonly timeoutMs: number;
+  private readonly ownerIsAlive: (ownerId: string) => boolean;
   private readonly writer: AtomicFileWriterPort;
   private readonly updateLock: MaterialLock;
 
@@ -61,11 +64,12 @@ export class SessionLeaseStore {
     this.leaseFile = path.join(typingDirectory, 'lease.v1.json');
     this.ownerId = options.ownerId;
     this.now = options.now ?? Date.now;
-    this.timeoutMs = options.timeoutMs ?? 15_000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_SESSION_LEASE_TIMEOUT_MS;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) {
       throw new Error('Session lease timeout must be a positive duration.');
     }
     this.writer = options.atomicWriter ?? new AtomicFileWriter();
+    this.ownerIsAlive = options.ownerIsAlive ?? (() => true);
     this.updateLock = new MaterialLock(
       path.join(typingDirectory, '.lease-coordination'),
       {
@@ -122,6 +126,30 @@ export class SessionLeaseStore {
         !current
         || current.sessionId !== sessionId
         || this.isActive(current)
+      ) {
+        return false;
+      }
+      await this.write({
+        schemaVersion: 1,
+        sessionId,
+        ownerId: this.ownerId,
+        heartbeat: 0,
+        updatedAt: this.now()
+      });
+      return true;
+    });
+  }
+
+  async claimRecoverable(sessionId: string): Promise<boolean> {
+    validateId(sessionId, 'session');
+    return this.updateLock.runExclusive(async () => {
+      const current = await this.read();
+      if (
+        current
+        && (
+          current.sessionId !== sessionId
+          || this.isActive(current)
+        )
       ) {
         return false;
       }
@@ -225,7 +253,8 @@ export class SessionLeaseStore {
   }
 
   private isActive(lease: SessionLease): boolean {
-    return this.now() - lease.updatedAt <= this.timeoutMs;
+    return this.ownerIsAlive(lease.ownerId)
+      && this.now() - lease.updatedAt <= this.timeoutMs;
   }
 
   private async write(lease: SessionLease): Promise<void> {

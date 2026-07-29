@@ -75,6 +75,7 @@ export interface PracticeSessionRuntimePort {
     snapshot: PracticeSnapshot;
     wallTime: number;
     monotonicTime: number;
+    targetIndex?: number;
   }): PracticeSessionState;
   pause(session: PracticeSessionState, monotonicTime: number): PracticeSessionState;
   resume(session: PracticeSessionState, monotonicTime: number): PracticeSessionState;

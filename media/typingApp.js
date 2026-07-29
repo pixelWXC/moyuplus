@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/typing/adapters/view/typingViewProtocol.ts
-  var TYPING_VIEW_PROTOCOL_VERSION = 11;
+  var TYPING_VIEW_PROTOCOL_VERSION = 13;
   var TYPING_VIEW_PAGES = [
     "materials",
     "recent",
@@ -108,14 +108,49 @@
       return activePage !== "materials" && hasOnlyKeys(value, ["kind", "page"]) && value.page === activePage;
     }
     if (activePage === "materials") {
-      return value.kind === "materials" && hasOnlyKeys(value, ["kind", "library", "actions"]) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
+      return value.kind === "materials" && hasOnlyKeys(
+        value,
+        value.pendingRemovals === void 0 ? ["kind", "library", "actions"] : ["kind", "library", "pendingRemovals", "actions"]
+      ) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && (value.pendingRemovals === void 0 || Array.isArray(value.pendingRemovals) && value.pendingRemovals.every(isTypingViewPendingMaterialRemoval)) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
     }
     if (activePage !== "setup" || value.kind !== "setup") return false;
     const selectedRange = value.selectedRange;
-    if (!hasOnlyKeys(value, ["kind", "source", "ranges", "selectedRange", "plan"]) || !isRecord(value.source) || !hasOnlyKeys(value.source, ["title", "profileKey", "counts"]) || !isNonEmptyString(value.source.title) || !isNonEmptyString(value.source.profileKey) || !isTypingViewMaterialCounts(value.source.counts) || !Array.isArray(value.ranges) || value.ranges.length === 0 || !value.ranges.every(isTypingViewSetupRange) || !isTypingViewSourceRange(selectedRange) || !isTypingViewSetupPlan(value.plan)) {
+    if (!hasOnlyKeys(value, [
+      "kind",
+      "source",
+      "ranges",
+      "selectedRange",
+      "plan",
+      ...value.startPosition === void 0 ? [] : ["startPosition"],
+      ...value.continuations === void 0 ? [] : ["continuations"]
+    ]) || !isRecord(value.source) || !hasOnlyKeys(value.source, ["title", "profileKey", "counts"]) || !isNonEmptyString(value.source.title) || !isNonEmptyString(value.source.profileKey) || !isTypingViewMaterialCounts(value.source.counts) || !Array.isArray(value.ranges) || value.ranges.length === 0 || !value.ranges.every(isTypingViewSetupRange) || !isTypingViewSourceRange(selectedRange) || value.startPosition !== void 0 && !isTypingViewStartPosition(value.startPosition) || value.continuations !== void 0 && (!Array.isArray(value.continuations) || !value.continuations.every(isTypingViewContinuation)) || !isTypingViewSetupPlan(value.plan)) {
       return false;
     }
     return value.ranges.some((item) => isRecord(item) && sameRange(item.range, selectedRange));
+  }
+  function isTypingViewContinuation(value) {
+    return isRecord(value) && hasOnlyKeys(value, [
+      "range",
+      "sourceRevision",
+      "targetIndex",
+      "totalUnits",
+      "updatedAt"
+    ]) && isTypingViewSourceRange(value.range) && isNonEmptyString(value.sourceRevision) && isPositiveSafeInteger(value.targetIndex) && isPositiveSafeInteger(value.totalUnits) && value.targetIndex < value.totalUnits && isNonNegativeFinite(value.updatedAt);
+  }
+  function isTypingViewStartPosition(value) {
+    if (!isRecord(value)) return false;
+    if (value.kind === "beginning" || value.kind === "continuation") {
+      return hasOnlyKeys(value, ["kind"]);
+    }
+    return value.kind === "percentage" && hasOnlyKeys(value, ["kind", "percent"]) && typeof value.percent === "number" && Number.isSafeInteger(value.percent) && value.percent >= 0 && value.percent <= 99;
+  }
+  function isTypingViewPendingMaterialRemoval(value) {
+    return isRecord(value) && hasOnlyKeys(value, [
+      "materialId",
+      "title",
+      "deleteAfter",
+      "waitingForPractice"
+    ]) && isSafeMaterialId(value.materialId) && isNonEmptyString(value.title) && isNonNegativeFinite(value.deleteAfter) && typeof value.waitingForPractice === "boolean";
   }
   function isTypingViewRecentItem(value) {
     if (!isRecord(value)) return false;
@@ -464,6 +499,7 @@
     }
     return `
     <section class="materials-page" aria-label="\u7EC3\u4E60\u7D20\u6750">
+      ${renderPendingMaterialRemovals(content.pendingRemovals ?? [])}
       ${renderMaterialActions(content.actions)}
       ${renderMaterialSection(
       "\u6211\u7684\u7D20\u6750",
@@ -471,6 +507,24 @@
       "\u7C98\u8D34\u4E00\u6BB5\u6587\u5B57\uFF0C\u6216\u5BFC\u5165 TXT / EPUB\uFF0C\u521B\u5EFA\u7B2C\u4E00\u4EFD\u81EA\u5DF1\u7684\u7EC3\u4E60\u7D20\u6750\u3002"
     )}
     </section>`;
+  }
+  function renderPendingMaterialRemovals(removals) {
+    if (removals.length === 0) return "";
+    return removals.map((removal) => {
+      const message = removal.waitingForPractice ? "\u5F53\u524D\u7EC3\u4E60\u4ECD\u5728\u4F7F\u7528\u8FD9\u4EFD\u7D20\u6750\uFF0C\u5C06\u5728\u7EC3\u4E60\u7ED3\u675F\u540E\u6C38\u4E45\u5220\u9664\u5185\u90E8\u526F\u672C\u3002" : `\u5C06\u5728 ${Math.max(1, Math.ceil((removal.deleteAfter - Date.now()) / 1e3))} \u79D2\u540E\u6C38\u4E45\u5220\u9664\u5185\u90E8\u526F\u672C\u3002`;
+      return `
+      <aside class="removal-notice" role="status">
+        <div>
+          <strong>\u5DF2\u79FB\u9664\u201C${escapeHtml(removal.title)}\u201D</strong>
+          <span>${message}</span>
+        </div>
+        <button
+          class="material-action"
+          type="button"
+          data-undo-material-id="${escapeHtml(encodeURIComponent(removal.materialId))}"
+        >\u64A4\u9500</button>
+      </aside>`;
+    }).join("");
   }
   function renderRecent(content) {
     if (content.items.length === 0) {
@@ -597,6 +651,11 @@
     const completion = content.plan.completion;
     const selectedRangeSupportsCompletion = content.selectedRange.kind === "article" || content.selectedRange.kind === "chapter" || content.selectedRange.kind === "selection";
     const completionKind = completion.kind === "sourceRange" && !selectedRangeSupportsCompletion ? "free" : completion.kind;
+    const selectedContinuation = content.continuations?.find(
+      (item) => sameRange2(item.range, content.selectedRange)
+    );
+    const startPosition = content.startPosition ?? (selectedContinuation ? { kind: "continuation" } : { kind: "beginning" });
+    const startPercent = startPosition.kind === "percentage" ? startPosition.percent : 50;
     return `
     <section class="setup-page" aria-label="\u672C\u6B21\u7EC3\u4E60\u8BBE\u7F6E">
       <div class="setup-source">
@@ -621,6 +680,29 @@
             </select>
           </label>
           <p class="setup-field-help" id="setup-range-help">\u8FD9\u91CC\u53EA\u51B3\u5B9A\u672C\u6B21\u8981\u7EC3\u4E60\u7684\u5185\u5BB9\uFF1B\u7ED3\u675F\u65B9\u5F0F\u5728\u4E0B\u4E00\u9879\u8BBE\u7F6E\u3002</p>
+        </fieldset>
+        <fieldset>
+          <legend>\u5F00\u59CB\u4F4D\u7F6E</legend>
+          <label>
+            \u4ECE\u54EA\u91CC\u5F00\u59CB
+            <select name="startKind" aria-describedby="setup-start-help">
+              ${option("beginning", "\u4ECE\u5934\u5F00\u59CB", startPosition.kind)}
+              <option
+                value="continuation"
+                data-start-continuation
+                ${startPosition.kind === "continuation" ? "selected" : ""}
+                ${selectedContinuation ? "" : "disabled"}
+              >\u4ECE\u4E0A\u6B21\u4E2D\u65AD\u5904\u7EE7\u7EED</option>
+              ${option("percentage", "\u6307\u5B9A\u6587\u7AE0\u8FDB\u5EA6", startPosition.kind)}
+            </select>
+          </label>
+          <p class="setup-field-help setup-resume-fact" id="setup-start-help" data-start-help>
+            ${selectedContinuation ? `\u4E0A\u6B21\u505C\u5728 ${formatProgressPosition(selectedContinuation.targetIndex, selectedContinuation.totalUnits)}\u3002` : "\u5F53\u524D\u8303\u56F4\u8FD8\u6CA1\u6709\u53EF\u7EE7\u7EED\u7684\u7EC3\u4E60\u4F4D\u7F6E\u3002"}
+          </p>
+          <label data-start-setting="percentage"${startPosition.kind === "percentage" ? "" : " hidden"}>
+            \u6587\u7AE0\u8FDB\u5EA6\uFF080\u201399%\uFF09
+            <input name="startPercent" type="number" min="0" max="99" step="1" value="${startPercent}">
+          </label>
         </fieldset>
         <fieldset>
           <legend>\u7ED3\u675F\u65B9\u5F0F</legend>
@@ -773,17 +855,26 @@
     const sourceNotice = material.sourceNotice ? `<p class="source-notice">${escapeHtml(material.sourceNotice.license)} \xB7 ${escapeHtml(material.sourceNotice.attribution)}</p>` : "";
     return `
     <li class="material-row">
-      <button
-        class="material-select"
-        type="button"
-        data-material-id="${escapeHtml(encodeURIComponent(material.id))}"
-        data-material-origin="${material.origin}"
-      >
-        <span class="material-title">${escapeHtml(material.title)}</span>
-        <span class="material-profile">${escapeHtml(profile)}</span>
-        <span class="material-meta">${material.counts.printableUnits} \u4E2A\u53EF\u6253\u5370\u5355\u5143 \xB7 ${formatEstimate(material.estimatedSeconds)}</span>
-        <span class="material-origin">${originLabels[material.origin]}</span>
-      </button>
+      <div class="material-row-main">
+        <button
+          class="material-select"
+          type="button"
+          data-material-id="${escapeHtml(encodeURIComponent(material.id))}"
+          data-material-origin="${material.origin}"
+        >
+          <span class="material-title">${escapeHtml(material.title)}</span>
+          <span class="material-profile">${escapeHtml(profile)}</span>
+          <span class="material-meta">${material.counts.printableUnits} \u4E2A\u53EF\u6253\u5370\u5355\u5143 \xB7 ${formatEstimate(material.estimatedSeconds)}</span>
+          <span class="material-origin">${originLabels[material.origin]}</span>
+        </button>
+        <button
+          class="material-remove"
+          type="button"
+          data-remove-material-id="${escapeHtml(encodeURIComponent(material.id))}"
+          aria-label="\u79FB\u9664\u7D20\u6750\uFF1A${escapeHtml(material.title)}"
+          title="\u79FB\u9664\u7D20\u6750"
+        >\u79FB\u9664</button>
+      </div>
       ${tags}
       ${sourceNotice}
     </li>`;
@@ -791,6 +882,10 @@
   function formatEstimate(seconds) {
     if (seconds < 60) return `\u7EA6 ${seconds} \u79D2`;
     return `\u7EA6 ${Math.ceil(seconds / 60)} \u5206\u949F`;
+  }
+  function formatProgressPosition(targetIndex, totalUnits) {
+    const percent = Math.round(targetIndex / totalUnits * 100);
+    return `\u7B2C ${targetIndex.toLocaleString("zh-CN")} \u4E2A\u5B57\u7B26\uFF08\u7EA6 ${percent}%\uFF09`;
   }
   function option(value, label, selectedValue) {
     return `<option value="${value}"${value === selectedValue ? " selected" : ""}>${label}</option>`;
@@ -850,6 +945,12 @@
     const punctuationMode = values.punctuationMode === "equivalent" ? "equivalent" : values.punctuationMode === "strict" ? "strict" : content.plan.textPolicy.punctuation.mode;
     return {
       selectedRange: structuredClone(selectedRange),
+      startPosition: startPositionFor(
+        content,
+        selectedRange,
+        values.startKind,
+        values.startPercent
+      ),
       plan: {
         completion: completionFor(
           completionKind,
@@ -883,6 +984,19 @@
         }
       }
     };
+  }
+  function startPositionFor(content, range, kind, percent) {
+    if (kind === "continuation" && content.continuations?.some((item) => sameRange3(item.range, range))) {
+      return { kind: "continuation" };
+    }
+    if (kind === "percentage") {
+      const parsed = Number(percent);
+      return {
+        kind: "percentage",
+        percent: Number.isSafeInteger(parsed) ? Math.max(0, Math.min(99, parsed)) : 50
+      };
+    }
+    return { kind: "beginning" };
   }
   function completionFor(kind, range, values, fallback) {
     if (kind === "timed") {
@@ -922,6 +1036,9 @@
   }
   function whitespaceMode(value, fallback) {
     return value === "strict" || value === "collapse" || value === "ignore" || value === "trimLineEdges" ? value : fallback;
+  }
+  function sameRange3(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
   }
 
   // src/webview/typingApp.ts
@@ -1071,6 +1188,26 @@
         });
       });
     });
+    app.querySelectorAll("[data-remove-material-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const materialId = decodeMaterialId(button.dataset.removeMaterialId);
+        if (!materialId) return;
+        postRequest({
+          type: "removeMaterial",
+          materialId
+        });
+      });
+    });
+    app.querySelectorAll("[data-undo-material-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const materialId = decodeMaterialId(button.dataset.undoMaterialId);
+        if (!materialId) return;
+        postRequest({
+          type: "undoRemoveMaterial",
+          materialId
+        });
+      });
+    });
     app.querySelector('[data-action="paste"]')?.addEventListener("click", () => {
       pasteComposerOpen = !pasteComposerOpen;
       render();
@@ -1121,6 +1258,16 @@
       const completionSettings = Array.from(
         setupForm.querySelectorAll("[data-completion-setting]")
       );
+      const startSelect = setupForm.elements.namedItem(
+        "startKind"
+      );
+      const continuationOption = startSelect?.querySelector(
+        "[data-start-continuation]"
+      );
+      const startHelp = setupForm.querySelector("[data-start-help]");
+      const startSettings = Array.from(
+        setupForm.querySelectorAll("[data-start-setting]")
+      );
       const syncCompletionControls = () => {
         if (!rangeSelect || !completionSelect) return;
         const rangeKind = rangeSelect.selectedOptions[0]?.dataset.rangeKind;
@@ -1144,14 +1291,44 @@
           completionHelp.textContent = completionKind === "sourceRange" ? "\u8F93\u5165\u5230\u4E0A\u65B9\u6240\u9009\u8303\u56F4\u7684\u672B\u5C3E\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : completionKind === "timed" ? "\u5230\u8FBE\u8BBE\u5B9A\u65F6\u957F\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : completionKind === "length" ? "\u5B8C\u6210\u8BBE\u5B9A\u6570\u91CF\u7684\u53EF\u6253\u5370\u5355\u5143\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : "\u4E0D\u8BBE\u65F6\u95F4\u548C\u5355\u5143\u6570\u9650\u5236\uFF0C\u9700\u8981\u65F6\u53EF\u5728\u7EC3\u4E60\u9875\u624B\u52A8\u7ED3\u675F\u3002";
         }
       };
-      rangeSelect?.addEventListener("change", syncCompletionControls);
+      const syncStartControls = () => {
+        if (!rangeSelect || !startSelect) return;
+        const range = setupContent.ranges[Number(rangeSelect.value)]?.range;
+        const continuation = setupContent.continuations?.find(
+          (item) => sameRange4(item.range, range)
+        );
+        if (continuationOption) {
+          continuationOption.disabled = !continuation;
+        }
+        if (!continuation && startSelect.value === "continuation") {
+          startSelect.value = "beginning";
+        }
+        if (startHelp) {
+          startHelp.textContent = continuation ? `\u4E0A\u6B21\u505C\u5728\u7B2C ${continuation.targetIndex.toLocaleString("zh-CN")} \u4E2A\u5B57\u7B26\uFF08\u7EA6 ${Math.round(continuation.targetIndex / continuation.totalUnits * 100)}%\uFF09\u3002` : "\u5F53\u524D\u8303\u56F4\u8FD8\u6CA1\u6709\u53EF\u7EE7\u7EED\u7684\u7EC3\u4E60\u4F4D\u7F6E\u3002";
+        }
+        for (const setting of startSettings) {
+          const visible = setting.dataset.startSetting === startSelect.value;
+          setting.hidden = !visible;
+          setting.querySelectorAll("input").forEach((input) => {
+            input.disabled = !visible;
+          });
+        }
+      };
+      rangeSelect?.addEventListener("change", () => {
+        syncCompletionControls();
+        syncStartControls();
+      });
       completionSelect?.addEventListener("change", syncCompletionControls);
+      startSelect?.addEventListener("change", syncStartControls);
       syncCompletionControls();
+      syncStartControls();
       const currentConfiguration = () => {
         if (!setupForm.reportValidity()) return;
         const data = new FormData(setupForm);
         return createTypingSetupConfiguration(setupContent, {
           range: String(data.get("range")),
+          startKind: String(data.get("startKind")),
+          startPercent: String(data.get("startPercent")),
           completionKind: String(data.get("completionKind")),
           completionSeconds: String(data.get("completionSeconds")),
           completionUnits: String(data.get("completionUnits")),
@@ -1243,6 +1420,17 @@
       clientRevision: ++clientRevision,
       ...request
     });
+  }
+  function decodeMaterialId(value) {
+    if (!value) return void 0;
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return void 0;
+    }
+  }
+  function sameRange4(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
   }
 })();
 //# sourceMappingURL=typingApp.js.map

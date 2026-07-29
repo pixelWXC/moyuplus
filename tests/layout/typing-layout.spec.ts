@@ -60,7 +60,7 @@ test('expands Typing actions to 44px for coarse pointers', async ({ browser }) =
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches))
       .toBe(true);
     const targets = await page.locator(
-      '.page-tab, .material-action, .material-select'
+      '.page-tab, .material-action, .material-select, .material-remove'
     ).evaluateAll(elements =>
       elements.map(element => ({
         className: element.className,
@@ -95,8 +95,9 @@ test('renders all seven pages and exposes labelled native setup controls', async
 
   await page.getByRole('button', { name: '设置', exact: true }).click();
   for (const [name, label] of [
-    ['range', /^范围/],
-    ['completionKind', /^类型/],
+    ['range', /^练习哪一部分/],
+    ['startKind', /^从哪里开始/],
+    ['completionKind', /^什么时候结束/],
     ['errorPolicy', /^错误处理/],
     ['punctuationMode', /^标点/],
     ['whitespaceMode', /^空白/],

@@ -301,6 +301,36 @@ h1 {
 .session-conflict .material-actions {
   margin: var(--space-3) 0 0;
 }
+.removal-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--vscode-inputValidation-infoBorder, var(--typing-border));
+  background: var(--vscode-textBlockQuote-background);
+}
+.removal-notice > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.removal-notice strong {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.removal-notice span {
+  color: var(--typing-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.removal-notice .material-action {
+  flex: 0 0 auto;
+}
 .paste-composer {
   display: grid;
   gap: var(--space-2);
@@ -383,6 +413,11 @@ h1 {
 .material-row:hover {
   background: var(--typing-hover);
 }
+.material-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
 .material-select {
   position: relative;
   display: grid;
@@ -396,6 +431,24 @@ h1 {
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+.material-remove {
+  align-self: stretch;
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid transparent;
+  color: var(--typing-muted);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+.material-remove:hover {
+  border-left-color: var(--typing-border);
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, var(--typing-hover));
+}
+.material-remove:focus-visible {
+  outline-offset: -1px;
 }
 .material-select:focus-visible {
   outline-offset: -1px;
@@ -773,6 +826,7 @@ h1 {
   .page-tab,
   .material-action,
   .material-select,
+  .material-remove,
   .setup-form select,
   .setup-form input[type=number],
   .setup-form .setup-checkbox {
@@ -786,6 +840,7 @@ h1 {
   }
   .session-state,
   .recovery-banner,
+  .removal-notice,
   .session-conflict,
   .material-action,
   .setup-form select,

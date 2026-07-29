@@ -94,6 +94,7 @@ describe('TypingViewApplicationQuery', () => {
           },
           estimatedSeconds: 18
         }],
+        pendingRemovals: [],
         actions: {
           paste: true,
           importTxt: true,
@@ -157,7 +158,25 @@ describe('TypingViewApplicationQuery', () => {
           showLiveMetrics: false,
           showWhitespace: false
         }
-      })
+      }),
+      continuations: {
+        get: async (recipe, range) => {
+          expect(recipe).toEqual({
+            kind: 'custom',
+            materialId: 'material-1'
+          });
+          expect(range).toEqual({
+            kind: 'article',
+            articleId: 'material-1'
+          });
+          return {
+            sourceRevision: 'entry-v1',
+            targetIndex: 48,
+            totalUnits: 120,
+            updatedAt: 2_000
+          };
+        }
+      }
     });
 
     await expect(query.shellSnapshot('setup')).resolves.toEqual(
@@ -186,6 +205,19 @@ describe('TypingViewApplicationQuery', () => {
             kind: 'article',
             articleId: 'material-1'
           },
+          startPosition: {
+            kind: 'continuation'
+          },
+          continuations: [{
+            range: {
+              kind: 'article',
+              articleId: 'material-1'
+            },
+            sourceRevision: 'entry-v1',
+            targetIndex: 48,
+            totalUnits: 120,
+            updatedAt: 2_000
+          }],
           plan: {
             completion: {
               kind: 'sourceRange',

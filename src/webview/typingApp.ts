@@ -5,6 +5,7 @@ import {
   type TypingViewMaterialOrigin,
   type TypingViewPage,
   type TypingViewSetupPlan,
+  type TypingViewStartPosition,
   type TypingViewSourceRange
 } from '../typing/adapters/view/typingViewProtocol';
 import {
@@ -199,6 +200,30 @@ function render(): void {
     });
   });
 
+  app.querySelectorAll<HTMLButtonElement>('[data-remove-material-id]')
+    .forEach(button => {
+      button.addEventListener('click', () => {
+        const materialId = decodeMaterialId(button.dataset.removeMaterialId);
+        if (!materialId) return;
+        postRequest({
+          type: 'removeMaterial',
+          materialId
+        });
+      });
+    });
+
+  app.querySelectorAll<HTMLButtonElement>('[data-undo-material-id]')
+    .forEach(button => {
+      button.addEventListener('click', () => {
+        const materialId = decodeMaterialId(button.dataset.undoMaterialId);
+        if (!materialId) return;
+        postRequest({
+          type: 'undoRemoveMaterial',
+          materialId
+        });
+      });
+    });
+
   app.querySelector<HTMLButtonElement>('[data-action="paste"]')
     ?.addEventListener('click', () => {
       pasteComposerOpen = !pasteComposerOpen;
@@ -255,6 +280,16 @@ function render(): void {
     const completionSettings = Array.from(
       setupForm.querySelectorAll<HTMLElement>('[data-completion-setting]')
     );
+    const startSelect = setupForm.elements.namedItem(
+      'startKind'
+    ) as HTMLSelectElement | null;
+    const continuationOption = startSelect?.querySelector<HTMLOptionElement>(
+      '[data-start-continuation]'
+    );
+    const startHelp = setupForm.querySelector<HTMLElement>('[data-start-help]');
+    const startSettings = Array.from(
+      setupForm.querySelectorAll<HTMLElement>('[data-start-setting]')
+    );
     const syncCompletionControls = () => {
       if (!rangeSelect || !completionSelect) return;
       const rangeKind = rangeSelect.selectedOptions[0]?.dataset.rangeKind;
@@ -287,15 +322,47 @@ function render(): void {
               : '不设时间和单元数限制，需要时可在练习页手动结束。';
       }
     };
-    rangeSelect?.addEventListener('change', syncCompletionControls);
+    const syncStartControls = () => {
+      if (!rangeSelect || !startSelect) return;
+      const range = setupContent.ranges[Number(rangeSelect.value)]?.range;
+      const continuation = setupContent.continuations?.find(item =>
+        sameRange(item.range, range)
+      );
+      if (continuationOption) {
+        continuationOption.disabled = !continuation;
+      }
+      if (!continuation && startSelect.value === 'continuation') {
+        startSelect.value = 'beginning';
+      }
+      if (startHelp) {
+        startHelp.textContent = continuation
+          ? `上次停在第 ${continuation.targetIndex.toLocaleString('zh-CN')} 个字符（约 ${Math.round(continuation.targetIndex / continuation.totalUnits * 100)}%）。`
+          : '当前范围还没有可继续的练习位置。';
+      }
+      for (const setting of startSettings) {
+        const visible = setting.dataset.startSetting === startSelect.value;
+        setting.hidden = !visible;
+        setting.querySelectorAll<HTMLInputElement>('input').forEach(input => {
+          input.disabled = !visible;
+        });
+      }
+    };
+    rangeSelect?.addEventListener('change', () => {
+      syncCompletionControls();
+      syncStartControls();
+    });
     completionSelect?.addEventListener('change', syncCompletionControls);
+    startSelect?.addEventListener('change', syncStartControls);
     syncCompletionControls();
+    syncStartControls();
 
     const currentConfiguration = () => {
       if (!setupForm.reportValidity()) return;
       const data = new FormData(setupForm);
       return createTypingSetupConfiguration(setupContent, {
         range: String(data.get('range')),
+        startKind: String(data.get('startKind')),
+        startPercent: String(data.get('startPercent')),
         completionKind: String(data.get('completionKind')),
         completionSeconds: String(data.get('completionSeconds')),
         completionUnits: String(data.get('completionUnits')),
@@ -410,6 +477,10 @@ function postRequest(
       materialOrigin: TypingViewMaterialOrigin;
     }
     | {
+      type: 'removeMaterial' | 'undoRemoveMaterial';
+      materialId: string;
+    }
+    | {
       type: 'usePastedText';
       text: string;
     }
@@ -420,11 +491,13 @@ function postRequest(
     | {
       type: 'configureSetup';
       selectedRange: TypingViewSourceRange;
+      startPosition?: TypingViewStartPosition;
       plan: TypingViewSetupPlan;
     }
     | {
       type: 'saveSetupAsDefault';
       selectedRange: TypingViewSourceRange;
+      startPosition?: TypingViewStartPosition;
       plan: TypingViewSetupPlan;
     }
     | {
@@ -433,6 +506,7 @@ function postRequest(
     | {
       type: 'startPractice';
       selectedRange: TypingViewSourceRange;
+      startPosition?: TypingViewStartPosition;
       plan: TypingViewSetupPlan;
     }
     | {
@@ -460,4 +534,17 @@ function postRequest(
     clientRevision: ++clientRevision,
     ...request
   });
+}
+
+function decodeMaterialId(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function sameRange(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

@@ -11,6 +11,7 @@ import type { PracticeSetupConfiguration } from './PracticeSetupDraft';
 import type {
   EpubMaterialChapterSummary
 } from '../adapters/sources/EpubMaterialImporter';
+import type { MaterialRemovalCoordinator } from './MaterialRemovalCoordinator';
 
 interface TxtImportRequest {
   bytes: Uint8Array;
@@ -52,6 +53,7 @@ export interface TypingViewMaterialCommandsOptions {
   ): PromiseLike<readonly string[] | undefined>;
   selectTxtEncoding(error: Error): PromiseLike<TxtEncoding | undefined>;
   reportError(error: Error): PromiseLike<void>;
+  removals?: Pick<MaterialRemovalCoordinator, 'remove' | 'undo'>;
 }
 
 export class TypingViewMaterialCommands {
@@ -65,6 +67,26 @@ export class TypingViewMaterialCommands {
       { kind: 'custom', materialId: input.materialId }
     );
     return true;
+  }
+
+  async removeMaterial(materialId: string): Promise<boolean> {
+    if (!this.options.removals) return false;
+    try {
+      return await this.options.removals.remove(materialId);
+    } catch (error) {
+      await this.options.reportError(asError(error, 'Material removal failed.'));
+      return false;
+    }
+  }
+
+  async undoRemoveMaterial(materialId: string): Promise<boolean> {
+    if (!this.options.removals) return false;
+    try {
+      return await this.options.removals.undo(materialId);
+    } catch (error) {
+      await this.options.reportError(asError(error, 'Material restore failed.'));
+      return false;
+    }
   }
 
   configureSetup(configuration: PracticeSetupConfiguration): boolean {

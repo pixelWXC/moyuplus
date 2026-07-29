@@ -43,7 +43,10 @@ export class PracticeApplicationCoordinator {
         attemptId: this.ports.ids.next('attempt'),
         snapshot,
         wallTime: this.ports.clock.wallNow(),
-        monotonicTime: this.ports.clock.monotonicNow()
+        monotonicTime: this.ports.clock.monotonicNow(),
+        ...(command.targetIndex === undefined
+          ? {}
+          : { targetIndex: command.targetIndex })
       });
       await this.ports.sessions.save(session);
       await this.ports.panel.open(snapshot, session);

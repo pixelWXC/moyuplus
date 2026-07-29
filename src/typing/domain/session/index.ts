@@ -63,6 +63,7 @@ export interface PracticeSessionState {
   revision: number;
   transactionReceipts: Record<string, PracticeTransactionReceipt>;
   targetIndex: number;
+  startTargetIndex?: number;
   blockedInputCount: number;
   inputAttempts: InputAttempt[];
   currentCorrectStreak: number;

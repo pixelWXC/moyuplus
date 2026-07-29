@@ -18,6 +18,9 @@ describe('Typing View material commands', () => {
         kind: 'article',
         articleId: 'material-1'
       },
+      startPosition: {
+        kind: 'beginning'
+      },
       plan: {
         completion: {
           kind: 'timed',
@@ -55,6 +58,9 @@ describe('Typing View material commands', () => {
       selectedRange: {
         kind: 'article',
         articleId: 'material-1'
+      },
+      startPosition: {
+        kind: 'beginning'
       },
       plan: {
         contentRecipe: {
@@ -163,6 +169,29 @@ describe('Typing View material commands', () => {
     expect(draft.snapshot()).toEqual({
       contentRecipe: { kind: 'custom', materialId: 'keep-me' }
     });
+  });
+
+  it('routes reversible material removal through the application coordinator', async () => {
+    const removals = {
+      remove: vi.fn(async () => true),
+      undo: vi.fn(async () => true)
+    };
+    const commands = new TypingViewMaterialCommands({
+      draft: new PracticeSetupDraft(),
+      txtImporter: { import: async () => undefined },
+      epubImporter: emptyEpubImporter(),
+      selectTxtFile: async () => undefined,
+      selectEpubFile: async () => undefined,
+      selectEpubChapters: async () => undefined,
+      selectTxtEncoding: async () => undefined,
+      reportError: async () => undefined,
+      removals
+    });
+
+    await expect(commands.removeMaterial('material-1')).resolves.toBe(true);
+    await expect(commands.undoRemoveMaterial('material-1')).resolves.toBe(true);
+    expect(removals.remove).toHaveBeenCalledWith('material-1');
+    expect(removals.undo).toHaveBeenCalledWith('material-1');
   });
 
   it('reports file selection failures instead of rejecting the Webview message handler', async () => {

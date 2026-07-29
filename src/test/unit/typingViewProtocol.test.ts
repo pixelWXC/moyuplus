@@ -15,7 +15,7 @@ const envelope = {
 describe('Typing View protocol', () => {
   it('owns a distinct view id, protocol version and complete page set', () => {
     expect(TYPING_VIEW_ID).toBe('moyuplus.typingView');
-    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(11);
+    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(13);
     expect(TYPING_VIEW_PAGES).toEqual([
       'materials',
       'recent',
@@ -114,6 +114,15 @@ describe('Typing View protocol', () => {
         format
       })).toBe(true);
     }
+    for (const type of ['removeMaterial', 'undoRemoveMaterial']) {
+      expect(isTypingViewToHostMessage({
+        ...envelope,
+        type,
+        requestId: `${type}-1`,
+        clientRevision: 4,
+        materialId: 'custom-1'
+      })).toBe(true);
+    }
 
     expect(isTypingViewToHostMessage({
       ...envelope,
@@ -152,6 +161,13 @@ describe('Typing View protocol', () => {
       clientRevision: 4,
       format: 'txt',
       sourceUri: 'file:///secret.txt'
+    })).toBe(false);
+    expect(isTypingViewToHostMessage({
+      ...envelope,
+      type: 'removeMaterial',
+      requestId: 'unsafe-remove',
+      clientRevision: 5,
+      materialId: '../materials'
     })).toBe(false);
   });
 
@@ -266,6 +282,10 @@ describe('Typing View protocol', () => {
       selectedRange: {
         kind: 'whole'
       },
+      startPosition: {
+        kind: 'percentage',
+        percent: 50
+      },
       plan: {
         completion: { kind: 'free' },
         evaluation: {
@@ -290,6 +310,13 @@ describe('Typing View protocol', () => {
       }
     } as const;
     expect(isTypingViewToHostMessage(start)).toBe(true);
+    expect(isTypingViewToHostMessage({
+      ...start,
+      startPosition: {
+        kind: 'percentage',
+        percent: 100
+      }
+    })).toBe(false);
     for (const resolution of ['returnCurrent', 'finishAndStart', 'cancel']) {
       expect(isTypingViewToHostMessage({
         ...envelope,
@@ -460,6 +487,12 @@ describe('Typing View protocol', () => {
         content: {
           kind: 'materials',
           library: [],
+          pendingRemovals: [{
+            materialId: 'custom-1',
+            title: '待删除素材',
+            deleteAfter: 10_000,
+            waitingForPractice: false
+          }],
           actions: {
             paste: true,
             importTxt: true,

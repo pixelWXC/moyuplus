@@ -83,6 +83,9 @@ describe('Typing setup form', () => {
         kind: 'chapter',
         chapterId: 'chapter-2'
       },
+      startPosition: {
+        kind: 'beginning'
+      },
       plan: {
         completion: {
           kind: 'timed',
@@ -131,6 +134,37 @@ describe('Typing setup form', () => {
       completionKind: 'sourceRange'
     })?.plan.completion).toEqual({
       kind: 'free'
+    });
+  });
+
+  it('selects an available continuation or an explicit percentage start', () => {
+    const resumable: TypingViewSetupContent = {
+      ...setupContent,
+      continuations: [{
+        range: {
+          kind: 'chapter',
+          chapterId: 'chapter-2'
+        },
+        sourceRevision: 'chapter-v1',
+        targetIndex: 80,
+        totalUnits: 200,
+        updatedAt: 2_000
+      }]
+    };
+
+    expect(createTypingSetupConfiguration(resumable, {
+      range: '1',
+      startKind: 'continuation'
+    })?.startPosition).toEqual({
+      kind: 'continuation'
+    });
+    expect(createTypingSetupConfiguration(resumable, {
+      range: '0',
+      startKind: 'percentage',
+      startPercent: '63'
+    })?.startPosition).toEqual({
+      kind: 'percentage',
+      percent: 63
     });
   });
 });

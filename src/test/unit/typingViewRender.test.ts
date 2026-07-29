@@ -39,6 +39,12 @@ describe('Typing View page rendering', () => {
         },
         estimatedSeconds: 25
       }],
+      pendingRemovals: [{
+        materialId: 'removed-1',
+        title: '旧素材',
+        deleteAfter: Date.now() + 10_000,
+        waitingForPractice: false
+      }],
       actions: {
         paste: true,
         importTxt: true,
@@ -57,6 +63,9 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('我的素材 <span class="section-count">1</span>');
     expect(html).not.toContain('内置素材');
     expect(html).toContain('data-material-id="mine-1"');
+    expect(html).toContain('data-remove-material-id="mine-1"');
+    expect(html).toContain('data-undo-material-id="removed-1"');
+    expect(html).toContain('已移除“旧素材”');
     expect(html).toContain('TXT 导入');
   });
 
@@ -125,6 +134,19 @@ describe('Typing View page rendering', () => {
         kind: 'article',
         articleId: 'article-1'
       },
+      startPosition: {
+        kind: 'continuation'
+      },
+      continuations: [{
+        range: {
+          kind: 'article',
+          articleId: 'article-1'
+        },
+        sourceRevision: 'article-v1',
+        targetIndex: 48,
+        totalUnits: 120,
+        updatedAt: 2_000
+      }],
       plan: {
         completion: {
           kind: 'timed',
@@ -159,6 +181,10 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('118 个可打印单元');
     expect(html).toContain('name="range"');
     expect(html).toContain('name="completionKind"');
+    expect(html).toContain('name="startKind"');
+    expect(html).toContain('value="continuation"');
+    expect(html).toContain('第 48 个字符');
+    expect(html).toContain('name="startPercent"');
     expect(html).toContain('value="timed" selected');
     expect(html).toContain('本次练习范围');
     expect(html).toContain('练完本次范围');

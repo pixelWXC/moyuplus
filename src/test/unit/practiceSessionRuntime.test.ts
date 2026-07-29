@@ -7,6 +7,45 @@ import {
 } from '../../typing';
 
 describe('PracticeSessionRuntime', () => {
+  it('starts a new session at an explicitly selected material position', () => {
+    const contentProfile = { kind: 'english', category: 'adHoc' } as const;
+    const plan = createDefaultPracticePlan({
+      contentRecipe: { kind: 'adHoc', text: 'abc' },
+      contentProfile
+    });
+    const snapshot = buildPracticeSnapshot({
+      id: 'snapshot-positioned',
+      createdAt: 1_000,
+      plan,
+      prepared: preparePracticeContent('abc', {
+        sourceRevision: 'positioned-v1',
+        contentProfile,
+        range: { kind: 'whole' }
+      })
+    });
+    const runtime = new PracticeSessionRuntime();
+
+    const positioned = runtime.start({
+      sessionId: 'session-positioned',
+      attemptId: 'attempt-positioned',
+      snapshot,
+      wallTime: 1_000,
+      monotonicTime: 500,
+      targetIndex: 1
+    });
+
+    expect(positioned.targetIndex).toBe(1);
+    expect(positioned.startTargetIndex).toBe(1);
+    expect(() => runtime.start({
+      sessionId: 'session-invalid-position',
+      attemptId: 'attempt-invalid-position',
+      snapshot,
+      wallTime: 1_000,
+      monotonicTime: 500,
+      targetIndex: snapshot.targetUnits.length
+    })).toThrow('outside the selected range');
+  });
+
   it('restarts with the same immutable snapshot and records the previous attempt', () => {
     const contentProfile = { kind: 'randomChinese', category: 'frequentHanzi' } as const;
     const plan = createDefaultPracticePlan({

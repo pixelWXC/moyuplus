@@ -126,6 +126,7 @@ export function renderTypingPageContent(content: TypingViewPageContent): string 
   }
   return `
     <section class="materials-page" aria-label="练习素材">
+      ${renderPendingMaterialRemovals(content.pendingRemovals ?? [])}
       ${renderMaterialActions(content.actions)}
       ${renderMaterialSection(
         '我的素材',
@@ -133,6 +134,34 @@ export function renderTypingPageContent(content: TypingViewPageContent): string 
         '粘贴一段文字，或导入 TXT / EPUB，创建第一份自己的练习素材。'
       )}
     </section>`;
+}
+
+function renderPendingMaterialRemovals(
+  removals: readonly {
+    materialId: string;
+    title: string;
+    deleteAfter: number;
+    waitingForPractice: boolean;
+  }[]
+): string {
+  if (removals.length === 0) return '';
+  return removals.map(removal => {
+    const message = removal.waitingForPractice
+      ? '当前练习仍在使用这份素材，将在练习结束后永久删除内部副本。'
+      : `将在 ${Math.max(1, Math.ceil((removal.deleteAfter - Date.now()) / 1000))} 秒后永久删除内部副本。`;
+    return `
+      <aside class="removal-notice" role="status">
+        <div>
+          <strong>已移除“${escapeHtml(removal.title)}”</strong>
+          <span>${message}</span>
+        </div>
+        <button
+          class="material-action"
+          type="button"
+          data-undo-material-id="${escapeHtml(encodeURIComponent(removal.materialId))}"
+        >撤销</button>
+      </aside>`;
+  }).join('');
 }
 
 function renderRecent(
@@ -286,6 +315,18 @@ function renderSetup(
     && !selectedRangeSupportsCompletion
     ? 'free'
     : completion.kind;
+  const selectedContinuation = content.continuations?.find(item =>
+    sameRange(item.range, content.selectedRange)
+  );
+  const startPosition = content.startPosition
+    ?? (
+      selectedContinuation
+        ? { kind: 'continuation' as const }
+        : { kind: 'beginning' as const }
+    );
+  const startPercent = startPosition.kind === 'percentage'
+    ? startPosition.percent
+    : 50;
   return `
     <section class="setup-page" aria-label="本次练习设置">
       <div class="setup-source">
@@ -309,6 +350,31 @@ function renderSetup(
             </select>
           </label>
           <p class="setup-field-help" id="setup-range-help">这里只决定本次要练习的内容；结束方式在下一项设置。</p>
+        </fieldset>
+        <fieldset>
+          <legend>开始位置</legend>
+          <label>
+            从哪里开始
+            <select name="startKind" aria-describedby="setup-start-help">
+              ${option('beginning', '从头开始', startPosition.kind)}
+              <option
+                value="continuation"
+                data-start-continuation
+                ${startPosition.kind === 'continuation' ? 'selected' : ''}
+                ${selectedContinuation ? '' : 'disabled'}
+              >从上次中断处继续</option>
+              ${option('percentage', '指定文章进度', startPosition.kind)}
+            </select>
+          </label>
+          <p class="setup-field-help setup-resume-fact" id="setup-start-help" data-start-help>
+            ${selectedContinuation
+              ? `上次停在 ${formatProgressPosition(selectedContinuation.targetIndex, selectedContinuation.totalUnits)}。`
+              : '当前范围还没有可继续的练习位置。'}
+          </p>
+          <label data-start-setting="percentage"${startPosition.kind === 'percentage' ? '' : ' hidden'}>
+            文章进度（0–99%）
+            <input name="startPercent" type="number" min="0" max="99" step="1" value="${startPercent}">
+          </label>
         </fieldset>
         <fieldset>
           <legend>结束方式</legend>
@@ -501,17 +567,26 @@ function renderMaterial(material: TypingViewMaterialSummary): string {
     : '';
   return `
     <li class="material-row">
-      <button
-        class="material-select"
-        type="button"
-        data-material-id="${escapeHtml(encodeURIComponent(material.id))}"
-        data-material-origin="${material.origin}"
-      >
-        <span class="material-title">${escapeHtml(material.title)}</span>
-        <span class="material-profile">${escapeHtml(profile)}</span>
-        <span class="material-meta">${material.counts.printableUnits} 个可打印单元 · ${formatEstimate(material.estimatedSeconds)}</span>
-        <span class="material-origin">${originLabels[material.origin]}</span>
-      </button>
+      <div class="material-row-main">
+        <button
+          class="material-select"
+          type="button"
+          data-material-id="${escapeHtml(encodeURIComponent(material.id))}"
+          data-material-origin="${material.origin}"
+        >
+          <span class="material-title">${escapeHtml(material.title)}</span>
+          <span class="material-profile">${escapeHtml(profile)}</span>
+          <span class="material-meta">${material.counts.printableUnits} 个可打印单元 · ${formatEstimate(material.estimatedSeconds)}</span>
+          <span class="material-origin">${originLabels[material.origin]}</span>
+        </button>
+        <button
+          class="material-remove"
+          type="button"
+          data-remove-material-id="${escapeHtml(encodeURIComponent(material.id))}"
+          aria-label="移除素材：${escapeHtml(material.title)}"
+          title="移除素材"
+        >移除</button>
+      </div>
       ${tags}
       ${sourceNotice}
     </li>`;
@@ -520,6 +595,14 @@ function renderMaterial(material: TypingViewMaterialSummary): string {
 function formatEstimate(seconds: number): string {
   if (seconds < 60) return `约 ${seconds} 秒`;
   return `约 ${Math.ceil(seconds / 60)} 分钟`;
+}
+
+function formatProgressPosition(
+  targetIndex: number,
+  totalUnits: number
+): string {
+  const percent = Math.round(targetIndex / totalUnits * 100);
+  return `第 ${targetIndex.toLocaleString('zh-CN')} 个字符（约 ${percent}%）`;
 }
 
 function option(value: string, label: string, selectedValue: string): string {

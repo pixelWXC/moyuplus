@@ -12,6 +12,7 @@ import {
 } from '../../typing';
 import {
   PendingResultStore,
+  PracticeContinuationStore,
   ResilientPracticeResultCommitter,
   SessionLeaseHeartbeat,
   SessionLeaseStore,
@@ -44,6 +45,98 @@ describe('WorkspaceSessionStore', () => {
       'checkpoint.v1.json'
     ), 'utf8'));
     expect(persisted).toEqual(checkpoint);
+  });
+
+  it('keeps an unfinished-session pointer after reopening and clears only the matching session', async () => {
+    const root = await temporaryRoot();
+    const store = new WorkspaceSessionStore(root, { now: () => 2_500 });
+
+    await store.saveActiveSession('session-workspace');
+
+    const reopened = new WorkspaceSessionStore(root);
+    await expect(reopened.getActiveSession()).resolves.toEqual({
+      schemaVersion: 1,
+      sessionId: 'session-workspace',
+      updatedAt: 2_500
+    });
+    await expect(
+      reopened.clearActiveSession('session-other')
+    ).resolves.toBe(false);
+    await expect(reopened.getActiveSessionId())
+      .resolves.toBe('session-workspace');
+    await expect(
+      reopened.clearActiveSession('session-workspace')
+    ).resolves.toBe(true);
+    await expect(reopened.getActiveSession()).resolves.toBeUndefined();
+  });
+});
+
+describe('PracticeContinuationStore', () => {
+  afterEach(cleanTemporaryRoots);
+
+  it('persists the last material position after ending and removes it only at the end', async () => {
+    const root = await temporaryRoot();
+    const { snapshot, checkpoint } = createArtifacts();
+    const customSnapshot = {
+      ...snapshot,
+      materialId: 'material-long-text',
+      plan: {
+        ...snapshot.plan,
+        contentRecipe: {
+          kind: 'custom' as const,
+          materialId: 'material-long-text'
+        }
+      }
+    };
+    const store = new PracticeContinuationStore(root, {
+      now: () => 3_000
+    });
+
+    await store.update(customSnapshot, checkpoint.session);
+
+    await expect(new PracticeContinuationStore(root).get(
+      customSnapshot.plan.contentRecipe,
+      customSnapshot.selectedRange
+    )).resolves.toEqual({
+      schemaVersion: 1,
+      contentRecipe: customSnapshot.plan.contentRecipe,
+      sourceRevision: customSnapshot.sourceRevision,
+      selectedRange: customSnapshot.selectedRange,
+      targetIndex: 1,
+      totalUnits: 2,
+      updatedAt: 3_000
+    });
+
+    await store.update(customSnapshot, {
+      ...checkpoint.session,
+      targetIndex: customSnapshot.targetUnits.length
+    });
+    await expect(store.get(
+      customSnapshot.plan.contentRecipe,
+      customSnapshot.selectedRange
+    )).resolves.toBeUndefined();
+  });
+
+  it('clears every range continuation when a material is permanently deleted', async () => {
+    const root = await temporaryRoot();
+    const { snapshot, checkpoint } = createArtifacts();
+    const recipe = {
+      kind: 'custom' as const,
+      materialId: 'material-long-text'
+    };
+    const store = new PracticeContinuationStore(root);
+    const customSnapshot = {
+      ...snapshot,
+      materialId: recipe.materialId,
+      plan: { ...snapshot.plan, contentRecipe: recipe }
+    };
+    await store.update(customSnapshot, checkpoint.session);
+
+    await store.clearSource(recipe);
+
+    await expect(
+      store.get(recipe, customSnapshot.selectedRange)
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -146,6 +239,32 @@ describe('SessionLeaseStore', () => {
     await expect(winner.release('session-workspace')).resolves.toBe(false);
     await expect(loser.release('session-workspace')).resolves.toBe(true);
     await expect(loser.read()).resolves.toBeUndefined();
+  });
+
+  it('treats a lease from a dead extension host as recoverable without waiting for timeout', async () => {
+    const root = await temporaryRoot();
+    const owner = new SessionLeaseStore(root, {
+      ownerId: 'extension-host-123-owner',
+      now: () => 1_000,
+      timeoutMs: 5_000,
+      retryDelayMs: 1
+    });
+    await owner.acquire('session-workspace');
+    const recovery = new SessionLeaseStore(root, {
+      ownerId: 'extension-host-456-recovery',
+      now: () => 1_001,
+      timeoutMs: 5_000,
+      retryDelayMs: 1,
+      ownerIsAlive: ownerId => ownerId !== 'extension-host-123-owner'
+    });
+
+    await expect(recovery.inspect()).resolves.toMatchObject({
+      active: false,
+      lease: { sessionId: 'session-workspace' }
+    });
+    await expect(
+      recovery.claimRecoverable('session-workspace')
+    ).resolves.toBe(true);
   });
 
   it('heartbeats while active and releases the owner lease on controlled shutdown', async () => {
@@ -302,6 +421,41 @@ describe('SessionLeaseStore', () => {
       recovery.claimRecovery(checkpoint.session.id)
     ).resolves.toBe(true);
     await recovery.release(checkpoint.session.id);
+  });
+
+  it('recovers an indexed unfinished session after a controlled shutdown removed its lease', async () => {
+    const root = await temporaryRoot();
+    const workspace = new WorkspaceSessionStore(root);
+    const { checkpoint, snapshot } = createArtifacts();
+    await workspace.saveSnapshot(checkpoint.session.id, snapshot);
+    await workspace.saveCheckpoint(checkpoint);
+    await workspace.saveActiveSession(checkpoint.session.id);
+    const recovery = new WorkspacePracticeSessionLease(
+      new SessionLeaseStore(root, {
+        ownerId: 'window-reopened',
+        retryDelayMs: 1
+      }),
+      workspace
+    );
+
+    await expect(recovery.recoveryCandidate()).resolves.toEqual({
+      checkpoint,
+      snapshot
+    });
+    await expect(
+      recovery.claimRecovery(checkpoint.session.id)
+    ).resolves.toBe(true);
+    await expect(workspace.getActiveSessionId())
+      .resolves.toBe(checkpoint.session.id);
+    await recovery.release(checkpoint.session.id);
+    await expect(
+      new SessionLeaseStore(root, {
+        ownerId: 'window-inspector',
+        retryDelayMs: 1
+      }).read()
+    ).resolves.toBeUndefined();
+    await expect(workspace.getActiveSessionId())
+      .resolves.toBe(checkpoint.session.id);
   });
 
   it('does not overwrite a different stale session during a delayed recovery claim', async () => {

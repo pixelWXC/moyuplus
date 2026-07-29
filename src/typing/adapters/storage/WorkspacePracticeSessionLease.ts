@@ -33,7 +33,10 @@ implements PracticeSessionLeasePort {
     private readonly store: SessionLeaseStore,
     private readonly workspace: Pick<
       WorkspaceSessionStore,
-      'getCheckpoint' | 'getSnapshot'
+      | 'getActiveSessionId'
+      | 'getCheckpoint'
+      | 'getSnapshot'
+      | 'saveActiveSession'
     >,
     private readonly options: WorkspacePracticeSessionLeaseOptions = {}
   ) {}
@@ -62,9 +65,13 @@ implements PracticeSessionLeasePort {
   async recoveryCandidate(): Promise<
     PracticeSessionRecoveryCandidate | undefined
   > {
-    const inspection = await this.store.inspect();
-    if (!inspection || inspection.active) return undefined;
-    const sessionId = inspection.lease.sessionId;
+    const [activeSessionId, inspection] = await Promise.all([
+      this.workspace.getActiveSessionId(),
+      this.store.inspect()
+    ]);
+    if (inspection?.active) return undefined;
+    const sessionId = activeSessionId ?? inspection?.lease.sessionId;
+    if (!sessionId) return undefined;
     const [checkpoint, snapshot] = await Promise.all([
       this.workspace.getCheckpoint(sessionId),
       this.workspace.getSnapshot(sessionId)
@@ -81,8 +88,9 @@ implements PracticeSessionLeasePort {
   }
 
   async claimRecovery(sessionId: string): Promise<boolean> {
-    if (!await this.store.claimExpired(sessionId)) return false;
+    if (!await this.store.claimRecoverable(sessionId)) return false;
     await this.stopHeartbeat();
+    await this.workspace.saveActiveSession(sessionId);
     this.startHeartbeat(sessionId);
     return true;
   }
@@ -93,6 +101,7 @@ implements PracticeSessionLeasePort {
   ): Promise<void> {
     await this.store.transition(currentSessionId, nextSessionId);
     await this.stopHeartbeat();
+    await this.workspace.saveActiveSession(nextSessionId);
     this.startHeartbeat(nextSessionId);
   }
 

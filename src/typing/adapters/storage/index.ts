@@ -4,6 +4,7 @@ export * from './MaterialLock';
 export * from './ResultStore';
 export * from './ProjectionStores';
 export * from './PracticePreferencesStore';
+export * from './PracticeContinuationStore';
 export * from './PracticeTransactionJournalStore';
 export * from './ProjectedResultCommitter';
 export * from './WorkspaceSessionStore';

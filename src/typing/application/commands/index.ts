@@ -17,6 +17,7 @@ export interface PreparePracticeCommand {
 export interface StartPracticeCommand {
   type: 'start';
   snapshotId: string;
+  targetIndex?: number;
 }
 
 export interface PausePracticeCommand {

@@ -1,11 +1,14 @@
 import type {
   TypingViewSetupContent,
   TypingViewSetupPlan,
+  TypingViewStartPosition,
   TypingViewSourceRange
 } from '../typing/adapters/view/typingViewProtocol';
 
 export interface TypingSetupFormValues {
   range?: string;
+  startKind?: string;
+  startPercent?: string;
   completionKind?: string;
   completionSeconds?: string;
   completionUnits?: string;
@@ -21,6 +24,7 @@ export interface TypingSetupFormValues {
 
 export interface TypingSetupConfiguration {
   selectedRange: TypingViewSourceRange;
+  startPosition: TypingViewStartPosition;
   plan: TypingViewSetupPlan;
 }
 
@@ -41,6 +45,12 @@ export function createTypingSetupConfiguration(
 
   return {
     selectedRange: structuredClone(selectedRange),
+    startPosition: startPositionFor(
+      content,
+      selectedRange,
+      values.startKind,
+      values.startPercent
+    ),
     plan: {
       completion: completionFor(
         completionKind,
@@ -91,6 +101,30 @@ export function createTypingSetupConfiguration(
       }
     }
   };
+}
+
+function startPositionFor(
+  content: TypingViewSetupContent,
+  range: TypingViewSourceRange,
+  kind: string | undefined,
+  percent: string | undefined
+): TypingViewStartPosition {
+  if (
+    kind === 'continuation'
+    && content.continuations?.some(item => sameRange(item.range, range))
+  ) {
+    return { kind: 'continuation' };
+  }
+  if (kind === 'percentage') {
+    const parsed = Number(percent);
+    return {
+      kind: 'percentage',
+      percent: Number.isSafeInteger(parsed)
+        ? Math.max(0, Math.min(99, parsed))
+        : 50
+    };
+  }
+  return { kind: 'beginning' };
 }
 
 function completionFor(
@@ -146,4 +180,11 @@ function whitespaceMode(
     || value === 'trimLineEdges'
     ? value
     : fallback;
+}
+
+function sameRange(
+  left: TypingViewSourceRange,
+  right: TypingViewSourceRange
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

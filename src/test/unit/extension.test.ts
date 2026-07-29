@@ -57,6 +57,7 @@ import {
   type PracticeCheckpoint
 } from '../../typing';
 import {
+  PracticeContinuationStore,
   SessionLeaseStore,
   WorkspaceSessionStore as TypingWorkspaceSessionStore
 } from '../../typing/adapters/storage';
@@ -474,6 +475,7 @@ describe('extension activation', () => {
   it('starts the configured Typing View draft through the real application coordinator', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-start-'));
     temporaryRoots.push(root);
+    const workspaceStorage = path.join(root, 'workspace-storage');
     await activate({
       globalState: new MemoryMemento(),
       workspaceState: new MemoryMemento(),
@@ -481,7 +483,7 @@ describe('extension activation', () => {
         fsPath: path.join(root, 'global-storage')
       } as Uri,
       storageUri: {
-        fsPath: path.join(root, 'workspace-storage')
+        fsPath: workspaceStorage
       } as Uri,
       extensionUri: Uri.file('D:/moyuplus-test-extension'),
       subscriptions: [] as Disposable[]
@@ -529,6 +531,9 @@ describe('extension activation', () => {
     expect(window.createdWebviewPanels.some(
       panel => panel.viewType === TYPING_PRACTICE_PANEL_VIEW_TYPE
     )).toBe(true);
+    const workspaceSessions = new TypingWorkspaceSessionStore(workspaceStorage);
+    await expect(workspaceSessions.getActiveSessionId())
+      .resolves.toMatch(/^session-/);
 
     await view.webview.receiveMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
@@ -585,9 +590,20 @@ describe('extension activation', () => {
         activeSessionStatus: 'paused'
       })
     }));
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-start',
+      type: 'controlPractice',
+      requestId: 'finish-live-session',
+      clientRevision: 6,
+      action: 'finish'
+    });
+    await expect(workspaceSessions.getActiveSessionId())
+      .resolves.toBeUndefined();
   });
 
-  it('offers and restores an expired workspace checkpoint through the real Typing View', async () => {
+  it('offers and restores an indexed workspace checkpoint after its lease was released', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-recovery-'));
     temporaryRoots.push(root);
     const workspaceStorage = path.join(root, 'workspace-storage');
@@ -625,11 +641,7 @@ describe('extension activation', () => {
     const workspaceSessions = new TypingWorkspaceSessionStore(workspaceStorage);
     await workspaceSessions.saveSnapshot(session.id, snapshot);
     await workspaceSessions.saveCheckpoint(checkpoint);
-    await new SessionLeaseStore(workspaceStorage, {
-      ownerId: 'expired-window',
-      now: () => 1_000,
-      retryDelayMs: 1
-    }).acquire(session.id);
+    await workspaceSessions.saveActiveSession(session.id);
 
     await activate({
       globalState: new MemoryMemento(),
@@ -692,6 +704,7 @@ describe('extension activation', () => {
   it('imports a TXT through the Typing View command port and refreshes the material catalog', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-view-'));
     temporaryRoots.push(root);
+    const globalStorage = path.join(root, 'global-storage');
     const source = Uri.file(path.join(root, '练习.txt'));
     workspace.fileContents.set(source.toString(), Buffer.from('中文和 English', 'utf8'));
     window.openDialogResult = [source];
@@ -700,7 +713,7 @@ describe('extension activation', () => {
       globalState: new MemoryMemento(),
       workspaceState: new MemoryMemento(),
       globalStorageUri: {
-        fsPath: path.join(root, 'global-storage')
+        fsPath: globalStorage
       } as Uri,
       extensionUri: Uri.file('D:/moyuplus-test-extension'),
       subscriptions: [] as Disposable[]
@@ -733,6 +746,149 @@ describe('extension activation', () => {
               origin: 'txtImport',
               profileKey: 'mixed.adHoc'
             })
+          ]
+        })
+      })
+    }));
+    const imported = view.webview.postedMessages.at(-1)?.snapshot?.content;
+    const materialId = imported?.kind === 'materials'
+      ? imported.library[0]?.id
+      : undefined;
+    expect(materialId).toBeTruthy();
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'removeMaterial',
+      requestId: 'remove-imported-txt',
+      clientRevision: 2,
+      materialId
+    });
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshot: expect.objectContaining({
+        content: expect.objectContaining({
+          kind: 'materials',
+          library: [],
+          pendingRemovals: [
+            expect.objectContaining({
+              materialId,
+              waitingForPractice: false
+            })
+          ]
+        })
+      })
+    }));
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'undoRemoveMaterial',
+      requestId: 'undo-remove-imported-txt',
+      clientRevision: 3,
+      materialId
+    });
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshot: expect.objectContaining({
+        content: expect.objectContaining({
+          kind: 'materials',
+          library: [
+            expect.objectContaining({ id: materialId })
+          ],
+          pendingRemovals: []
+        })
+      })
+    }));
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'selectMaterial',
+      requestId: 'select-imported-txt',
+      clientRevision: 4,
+      materialId,
+      materialOrigin: 'txtImport'
+    });
+    const setup = view.webview.postedMessages.at(-1)?.snapshot?.content;
+    expect(setup?.kind).toBe('setup');
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'startPractice',
+      requestId: 'start-imported-txt',
+      clientRevision: 5,
+      selectedRange: setup?.selectedRange,
+      startPosition: { kind: 'beginning' },
+      plan: setup?.plan
+    });
+
+    const workspaceSessions = new TypingWorkspaceSessionStore(
+      path.join(globalStorage, 'workspace-default')
+    );
+    const sessionId = await workspaceSessions.getActiveSessionId();
+    expect(sessionId).toBeTruthy();
+    const practiceSnapshot = await workspaceSessions.getSnapshot(sessionId!);
+    const firstTarget = practiceSnapshot?.targetUnits[0]?.value;
+    expect(firstTarget).toBeTruthy();
+    const practicePanel = window.createdWebviewPanels.find(
+      panel => panel.viewType === TYPING_PRACTICE_PANEL_VIEW_TYPE
+    );
+    await practicePanel?.webview.receiveMessage({
+      protocolVersion: 1,
+      type: 'practice/ready',
+      sessionId,
+      panelInstanceId: 'panel-imported-txt',
+      sequence: 1
+    });
+    await practicePanel?.webview.receiveMessage({
+      protocolVersion: 1,
+      type: 'practice/submit',
+      sessionId,
+      panelInstanceId: 'panel-imported-txt',
+      sequence: 1,
+      transactionId: 'input-imported-txt-1',
+      baseRevision: 0,
+      inputKind: 'direct',
+      text: firstTarget
+    });
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'controlPractice',
+      requestId: 'finish-imported-txt',
+      clientRevision: 6,
+      action: 'finish'
+    });
+
+    await expect(new PracticeContinuationStore(globalStorage).get(
+      { kind: 'custom', materialId: materialId! },
+      { kind: 'whole' }
+    )).resolves.toMatchObject({
+      targetIndex: 1
+    });
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'navigate',
+      requestId: 'return-to-materials',
+      clientRevision: 7,
+      page: 'materials'
+    });
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-import',
+      type: 'selectMaterial',
+      requestId: 'reselect-imported-txt',
+      clientRevision: 8,
+      materialId,
+      materialOrigin: 'txtImport'
+    });
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshot: expect.objectContaining({
+        content: expect.objectContaining({
+          kind: 'setup',
+          startPosition: { kind: 'continuation' },
+          continuations: [
+            expect.objectContaining({ targetIndex: 1 })
           ]
         })
       })

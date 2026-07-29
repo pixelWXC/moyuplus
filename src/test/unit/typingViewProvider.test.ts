@@ -154,6 +154,8 @@ describe('TypingViewProvider', () => {
     };
     const commands = {
       selectMaterial: vi.fn(async () => undefined),
+      removeMaterial: vi.fn(async () => true),
+      undoRemoveMaterial: vi.fn(async () => true),
       usePastedText: vi.fn(async () => undefined),
       importTxt: vi.fn(async () => undefined),
       importEpub: vi.fn(async () => undefined)
@@ -200,6 +202,22 @@ describe('TypingViewProvider', () => {
       clientRevision: 4,
       format: 'epub'
     });
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'removeMaterial',
+      requestId: 'remove-1',
+      clientRevision: 5,
+      materialId: 'custom-1'
+    });
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'undoRemoveMaterial',
+      requestId: 'undo-remove-1',
+      clientRevision: 6,
+      materialId: 'custom-1'
+    });
 
     expect(commands.selectMaterial).toHaveBeenCalledWith({
       materialId: 'custom-1',
@@ -208,15 +226,19 @@ describe('TypingViewProvider', () => {
     expect(commands.usePastedText).toHaveBeenCalledWith('自由练习内容');
     expect(commands.importTxt).toHaveBeenCalledTimes(1);
     expect(commands.importEpub).toHaveBeenCalledTimes(1);
+    expect(commands.removeMaterial).toHaveBeenCalledWith('custom-1');
+    expect(commands.undoRemoveMaterial).toHaveBeenCalledWith('custom-1');
     expect(query.shellSnapshot.mock.calls).toEqual([
       ['materials'],
       ['setup'],
       ['setup'],
       ['materials'],
+      ['materials'],
+      ['materials'],
       ['materials']
     ]);
     expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
-      snapshotRevision: 5,
+      snapshotRevision: 7,
       snapshot: snapshot('materials')
     }));
   });

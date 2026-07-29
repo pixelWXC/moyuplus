@@ -1,6 +1,11 @@
 import type {
   PracticeSessionStatus
 } from '../domain/session';
+import type {
+  ContentRecipe,
+  PracticeSnapshot,
+  SourceRange
+} from '../domain/content';
 import type { PracticePreferences } from '../domain/policies';
 import type {
   PracticeSetupConfiguration
@@ -34,6 +39,16 @@ export interface TypingViewPracticeCommandsOptions {
   active: TypingViewActivePracticePort;
   preferences: {
     save(preferences: PracticePreferences): PromiseLike<void>;
+  };
+  continuations?: {
+    get(
+      recipe: ContentRecipe,
+      range: SourceRange
+    ): PromiseLike<{
+      sourceRevision: string;
+      targetIndex: number;
+      totalUnits: number;
+    } | undefined>;
   };
 }
 
@@ -178,9 +193,14 @@ export class TypingViewPracticeCommands {
     if (prepared.type !== 'practicePrepared') {
       throw new Error('Practice prepare command returned an unexpected event.');
     }
+    const targetIndex = await this.resolveStartTarget(
+      draft,
+      prepared.snapshot
+    );
     const started = await this.options.coordinator.start({
       type: 'start',
-      snapshotId: prepared.snapshot.id
+      snapshotId: prepared.snapshot.id,
+      ...(targetIndex > 0 ? { targetIndex } : {})
     });
     if (started.type === 'practiceStartBlocked') {
       this.conflict = structuredClone(started.activeSession);
@@ -188,4 +208,49 @@ export class TypingViewPracticeCommands {
     }
     return 'live';
   }
+
+  private async resolveStartTarget(
+    draft: NonNullable<ReturnType<PracticeSetupDraft['snapshot']>>,
+    snapshot: PracticeSnapshot
+  ): Promise<number> {
+    const position = draft.startPosition ?? { kind: 'beginning' };
+    if (position.kind === 'beginning') return 0;
+    if (position.kind === 'percentage') {
+      const percent = Math.max(0, Math.min(99, Math.trunc(position.percent)));
+      const approximate = Math.floor(
+        snapshot.targetUnits.length * percent / 100
+      );
+      return printableTargetAt(snapshot, approximate);
+    }
+    const continuation = await this.options.continuations?.get(
+      draft.contentRecipe,
+      draft.selectedRange!
+    );
+    if (
+      !continuation
+      || continuation.sourceRevision !== snapshot.sourceRevision
+      || continuation.targetIndex <= 0
+      || continuation.targetIndex >= snapshot.targetUnits.length
+    ) {
+      return 0;
+    }
+    return continuation.targetIndex;
+  }
+}
+
+function printableTargetAt(
+  snapshot: PracticeSnapshot,
+  targetIndex: number
+): number {
+  let clamped = Math.max(
+    0,
+    Math.min(snapshot.targetUnits.length - 1, targetIndex)
+  );
+  while (
+    clamped < snapshot.targetUnits.length - 1
+    && snapshot.targetUnits[clamped]?.kind !== 'grapheme'
+  ) {
+    clamped += 1;
+  }
+  return clamped;
 }

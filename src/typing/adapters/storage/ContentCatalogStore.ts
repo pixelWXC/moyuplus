@@ -1,5 +1,7 @@
 import {
-  readFile
+  readFile,
+  readdir,
+  rm
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { PracticeMaterialRecord } from '../../domain/content';
@@ -29,6 +31,11 @@ export interface ContentCatalogStoreOptions extends MaterialLockOptions {
 
 export interface ListMaterialOptions {
   includeDeleted?: boolean;
+}
+
+export interface DeletedMaterialRecord {
+  record: PracticeMaterialRecord;
+  deletedAt: number;
 }
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -67,6 +74,18 @@ export class ContentCatalogStore {
       entry.record.id === materialId && entry.deletedAt === undefined
     ));
     return stored ? structuredClone(stored.record) : undefined;
+  }
+
+  async listDeleted(): Promise<DeletedMaterialRecord[]> {
+    const catalog = await this.loadCatalog();
+    return catalog.materials
+      .filter((entry): entry is StoredMaterial & { deletedAt: number } => (
+        entry.deletedAt !== undefined
+      ))
+      .map(entry => ({
+        record: structuredClone(entry.record),
+        deletedAt: entry.deletedAt
+      }));
   }
 
   async upsert(record: PracticeMaterialRecord, normalizedBody?: string): Promise<void> {
@@ -122,6 +141,81 @@ export class ContentCatalogStore {
     });
   }
 
+  async purgeDeletedBefore(
+    cutoff: number,
+    protectedMaterialIds: ReadonlySet<string> = new Set()
+  ): Promise<PracticeMaterialRecord[]> {
+    if (!Number.isFinite(cutoff)) {
+      throw new Error('Material purge cutoff must be a valid timestamp.');
+    }
+    return this.lock.runExclusive(async () => {
+      const catalog = await this.loadCatalog();
+      const removed = catalog.materials.filter(entry => (
+        entry.deletedAt !== undefined
+        && entry.deletedAt <= cutoff
+        && !protectedMaterialIds.has(entry.record.id)
+      ));
+      if (removed.length === 0) return [];
+      const removedIds = new Set(removed.map(entry => entry.record.id));
+      catalog.materials = catalog.materials.filter(
+        entry => !removedIds.has(entry.record.id)
+      );
+      catalog.revision += 1;
+      await this.saveCatalog(catalog);
+      const records = removed.map(entry => structuredClone(entry.record));
+      await Promise.all(records.map(record => (
+        rm(this.materialDirectory(record.id), { recursive: true, force: true })
+      )));
+      return records;
+    });
+  }
+
+  async cleanupOrphanedBodies(): Promise<string[]> {
+    return this.lock.runExclusive(async () => {
+      const catalog = await this.loadCatalog();
+      const retainedRevisions = new Map(
+        catalog.materials.map(entry => [
+          entry.record.id,
+          entry.record.revision
+        ])
+      );
+      let entries;
+      try {
+        entries = await readdir(this.bodiesDirectory, { withFileTypes: true });
+      } catch (error) {
+        if (isNotFound(error)) return [];
+        throw error;
+      }
+      const orphanedIds = entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+        .filter(id => SAFE_SEGMENT.test(id) && !retainedRevisions.has(id));
+      await Promise.all(orphanedIds.map(id => (
+        rm(this.materialDirectory(id), { recursive: true, force: true })
+      )));
+      await Promise.all(entries
+        .filter(entry => (
+          entry.isDirectory()
+          && SAFE_SEGMENT.test(entry.name)
+          && retainedRevisions.has(entry.name)
+        ))
+        .map(async entry => {
+          const directory = this.materialDirectory(entry.name);
+          const expectedFile = `${retainedRevisions.get(entry.name)}.txt`;
+          const files = await readdir(directory, { withFileTypes: true });
+          await Promise.all(files
+            .filter(file => (
+              file.isFile()
+              && file.name.endsWith('.txt')
+              && SAFE_SEGMENT.test(file.name.slice(0, -4))
+              && file.name !== expectedFile
+            ))
+            .map(file => rm(path.join(directory, file.name), { force: true })));
+        }));
+      return orphanedIds;
+    });
+  }
+
   private async loadCatalog(): Promise<ContentCatalogFile> {
     let raw: string;
     try {
@@ -168,7 +262,12 @@ export class ContentCatalogStore {
   }
 
   private bodyFile(materialId: string, revision: string): string {
-    return path.join(this.bodiesDirectory, materialId, `${revision}.txt`);
+    return path.join(this.materialDirectory(materialId), `${revision}.txt`);
+  }
+
+  private materialDirectory(materialId: string): string {
+    validateSegment(materialId, 'material id');
+    return path.join(this.bodiesDirectory, materialId);
   }
 }
 

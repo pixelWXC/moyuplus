@@ -128,6 +128,55 @@ describe('ContentCatalogStore', () => {
     expect(await store.get(record.id)).toEqual(record);
   });
 
+  it('permanently purges expired deleted materials unless an active practice protects them', async () => {
+    const root = await temporaryRoot();
+    const store = new ContentCatalogStore(root, {
+      ownerId: 'window-a',
+      now: () => 5_000
+    });
+    const record = material('material-a', 'r1');
+    await store.upsert(record, '正文');
+    await store.softDelete(record.id);
+
+    await expect(store.purgeDeletedBefore(
+      5_000,
+      new Set([record.id])
+    )).resolves.toEqual([]);
+    await expect(store.readBody(record.id, record.revision)).resolves.toBe('正文');
+
+    await expect(store.purgeDeletedBefore(5_000)).resolves.toEqual([record]);
+    await expect(store.listDeleted()).resolves.toEqual([]);
+    await expect(store.readBody(record.id, record.revision)).rejects.toMatchObject({
+      code: 'ENOENT'
+    });
+  });
+
+  it('cleans orphaned managed-body directories without touching catalogued materials', async () => {
+    const root = await temporaryRoot();
+    const store = new ContentCatalogStore(root, { ownerId: 'window-a' });
+    await store.upsert(material('retained', 'r1'), '保留');
+    const orphan = path.join(root, 'materials', 'bodies', 'orphaned');
+    await mkdir(orphan, { recursive: true });
+    await writeFile(path.join(orphan, 'r1.txt'), '孤立正文', 'utf8');
+    const staleRevision = path.join(
+      root,
+      'materials',
+      'bodies',
+      'retained',
+      'old-revision.txt'
+    );
+    await writeFile(staleRevision, '旧版本', 'utf8');
+
+    await expect(store.cleanupOrphanedBodies()).resolves.toEqual(['orphaned']);
+    await expect(store.readBody('retained', 'r1')).resolves.toBe('保留');
+    await expect(readFile(path.join(orphan, 'r1.txt'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT'
+    });
+    await expect(readFile(staleRevision, 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT'
+    });
+  });
+
   it('rejects identifiers that could escape the managed material directory', async () => {
     const root = await temporaryRoot();
     const store = new ContentCatalogStore(root, { ownerId: 'window-a' });

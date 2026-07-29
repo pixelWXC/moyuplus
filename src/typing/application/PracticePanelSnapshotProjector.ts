@@ -77,7 +77,10 @@ export class PracticePanelSnapshotProjector {
     if (session.snapshotId !== snapshot.id) {
       throw new Error('Practice panel snapshot does not match the session.');
     }
-    const totalUnits = completionTarget(snapshot);
+    const totalUnits = completionTarget(
+      snapshot,
+      session.startTargetIndex
+    );
     const targetIndex = Math.min(session.targetIndex, totalUnits);
     const start = Math.max(0, targetIndex - this.before);
     const end = Math.min(totalUnits, targetIndex + this.after + 1);

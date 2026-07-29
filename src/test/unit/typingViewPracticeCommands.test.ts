@@ -39,7 +39,11 @@ const setup = {
 function createHarness(activeSession: {
   id: string;
   status: 'running' | 'blockedOnError' | 'paused';
-} | undefined = undefined) {
+} | undefined = undefined, continuation?: {
+  sourceRevision: string;
+  targetIndex: number;
+  totalUnits: number;
+}) {
   const draft = new PracticeSetupDraft();
   draft.selectContent({
     kind: 'adHoc',
@@ -83,6 +87,9 @@ function createHarness(activeSession: {
   const preferences = {
     save: vi.fn(async () => undefined)
   };
+  const continuations = {
+    get: vi.fn(async () => continuation)
+  };
   return {
     draft,
     coordinator,
@@ -92,7 +99,8 @@ function createHarness(activeSession: {
       draft,
       coordinator,
       active,
-      preferences
+      preferences,
+      continuations
     })
   };
 }
@@ -136,6 +144,55 @@ describe('TypingViewPracticeCommands', () => {
     expect(harness.coordinator.prepare).not.toHaveBeenCalled();
     expect(harness.coordinator.start).not.toHaveBeenCalled();
     expect(harness.draft.snapshot()?.selectedRange).toEqual({ kind: 'whole' });
+  });
+
+  it('starts at the saved interruption or a user-selected percentage', async () => {
+    const snapshot = {
+      id: 'snapshot-positioned',
+      sourceRevision: 'source-v1',
+      targetUnits: Array.from({ length: 100 }, (_, index) => ({
+        index,
+        kind: 'grapheme'
+      })),
+      displayLines: [
+        { targetStart: 0, targetEnd: 50 },
+        { targetStart: 50, targetEnd: 100 }
+      ]
+    };
+    const resumed = createHarness(undefined, {
+      sourceRevision: 'source-v1',
+      targetIndex: 37,
+      totalUnits: 100
+    });
+    resumed.coordinator.prepare.mockResolvedValueOnce({
+      type: 'practicePrepared',
+      snapshot
+    } as never);
+
+    await resumed.commands.startPractice({
+      ...setup,
+      startPosition: { kind: 'continuation' }
+    });
+    expect(resumed.coordinator.start).toHaveBeenCalledWith({
+      type: 'start',
+      snapshotId: 'snapshot-positioned',
+      targetIndex: 37
+    });
+
+    const positioned = createHarness();
+    positioned.coordinator.prepare.mockResolvedValueOnce({
+      type: 'practicePrepared',
+      snapshot
+    } as never);
+    await positioned.commands.startPractice({
+      ...setup,
+      startPosition: { kind: 'percentage', percent: 55 }
+    });
+    expect(positioned.coordinator.start).toHaveBeenCalledWith({
+      type: 'start',
+      snapshotId: 'snapshot-positioned',
+      targetIndex: 55
+    });
   });
 
   it('does not replace an active session until the user resolves the conflict', async () => {

@@ -135,7 +135,10 @@ export class PracticeTransactionEngine {
       throw new Error('Practice submit text must not be empty.');
     }
 
-    const targetLimit = completionTarget(input.snapshot);
+    const targetLimit = completionTarget(
+      input.snapshot,
+      input.session.startTargetIndex
+    );
     const attemptAdditions: InputAttempt[] = [];
     let targetIndex = advanceIgnoredTargetIndex(input.snapshot, input.session.targetIndex);
     let status: PracticeSessionStatus = 'running';

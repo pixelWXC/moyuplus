@@ -51,7 +51,10 @@ export function buildPracticeResult(input: BuildPracticeResultInput): PracticeRe
     totalAttempts: attempts.length,
     correctAttempts: correctAttempts.length,
     errorAttempts: attempts.length - correctAttempts.length,
-    completedUnits: input.session.targetIndex,
+    completedUnits: Math.max(
+      0,
+      input.session.targetIndex - (input.session.startTargetIndex ?? 0)
+    ),
     printableAttempts,
     completedPrintableUnits,
     completedHanzi,

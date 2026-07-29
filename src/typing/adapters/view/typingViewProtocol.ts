@@ -1,5 +1,5 @@
 export const TYPING_VIEW_ID = 'moyuplus.typingView';
-export const TYPING_VIEW_PROTOCOL_VERSION = 11 as const;
+export const TYPING_VIEW_PROTOCOL_VERSION = 13 as const;
 
 export const TYPING_VIEW_PAGES = [
   'materials',
@@ -63,11 +63,23 @@ export interface TypingViewMaterialSummary {
   };
 }
 
+export interface TypingViewPendingMaterialRemoval {
+  materialId: string;
+  title: string;
+  deleteAfter: number;
+  waitingForPractice: boolean;
+}
+
 export type TypingViewSourceRange =
   | { kind: 'whole' }
   | { kind: 'article'; articleId?: string }
   | { kind: 'chapter'; chapterId: string }
   | { kind: 'selection'; start: number; end: number };
+
+export type TypingViewStartPosition =
+  | { kind: 'beginning' }
+  | { kind: 'continuation' }
+  | { kind: 'percentage'; percent: number };
 
 export type TypingViewCompletionConstraint =
   | { kind: 'timed'; seconds: number }
@@ -112,6 +124,14 @@ export interface TypingViewSetupContent {
     range: TypingViewSourceRange;
   }[];
   selectedRange: TypingViewSourceRange;
+  startPosition?: TypingViewStartPosition;
+  continuations?: readonly {
+    range: TypingViewSourceRange;
+    sourceRevision: string;
+    targetIndex: number;
+    totalUnits: number;
+    updatedAt: number;
+  }[];
   plan: TypingViewSetupPlan;
 }
 
@@ -263,6 +283,7 @@ export type TypingViewPageContent =
   | {
     kind: 'materials';
     library: readonly TypingViewMaterialSummary[];
+    pendingRemovals?: readonly TypingViewPendingMaterialRemoval[];
     actions: {
       paste: boolean;
       importTxt: boolean;
@@ -314,6 +335,14 @@ export type TypingViewToHostMessage =
     materialOrigin: TypingViewMaterialOrigin;
   })
   | (TypingViewRequestEnvelope & {
+    type: 'removeMaterial';
+    materialId: string;
+  })
+  | (TypingViewRequestEnvelope & {
+    type: 'undoRemoveMaterial';
+    materialId: string;
+  })
+  | (TypingViewRequestEnvelope & {
     type: 'usePastedText';
     text: string;
   })
@@ -324,11 +353,13 @@ export type TypingViewToHostMessage =
   | (TypingViewRequestEnvelope & {
     type: 'configureSetup';
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   })
   | (TypingViewRequestEnvelope & {
     type: 'saveSetupAsDefault';
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   })
   | (TypingViewRequestEnvelope & {
@@ -337,6 +368,7 @@ export type TypingViewToHostMessage =
   | (TypingViewRequestEnvelope & {
     type: 'startPractice';
     selectedRange: TypingViewSourceRange;
+    startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   })
   | (TypingViewRequestEnvelope & {
@@ -406,6 +438,15 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
       && isSafeMaterialId(value.materialId)
       && isTypingViewMaterialOrigin(value.materialOrigin);
   }
+  if (
+    value.type === 'removeMaterial'
+    || value.type === 'undoRemoveMaterial'
+  ) {
+    return hasOnlyKeys(value, [
+      ...requestKeys,
+      'materialId'
+    ]) && isSafeMaterialId(value.materialId);
+  }
   if (value.type === 'usePastedText') {
     return hasOnlyKeys(value, [
       ...requestKeys,
@@ -427,9 +468,14 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
     return hasOnlyKeys(value, [
       ...requestKeys,
       'selectedRange',
-      'plan'
+      'plan',
+      ...(value.startPosition === undefined ? [] : ['startPosition'])
     ])
     && isTypingViewSourceRange(value.selectedRange)
+    && (
+      value.startPosition === undefined
+      || isTypingViewStartPosition(value.startPosition)
+    )
     && isTypingViewSetupPlan(value.plan);
   }
   if (value.type === 'resolveSessionConflict') {
@@ -678,9 +724,21 @@ function isTypingViewPageContent(
   }
   if (activePage === 'materials') {
     return value.kind === 'materials'
-    && hasOnlyKeys(value, ['kind', 'library', 'actions'])
+    && hasOnlyKeys(
+      value,
+      value.pendingRemovals === undefined
+        ? ['kind', 'library', 'actions']
+        : ['kind', 'library', 'pendingRemovals', 'actions']
+    )
     && Array.isArray(value.library)
     && value.library.every(isTypingViewMaterialSummary)
+    && (
+      value.pendingRemovals === undefined
+      || (
+        Array.isArray(value.pendingRemovals)
+        && value.pendingRemovals.every(isTypingViewPendingMaterialRemoval)
+      )
+    )
     && isRecord(value.actions)
     && hasOnlyKeys(value.actions, ['paste', 'importTxt', 'importEpub'])
     && typeof value.actions.paste === 'boolean'
@@ -690,7 +748,15 @@ function isTypingViewPageContent(
   if (activePage !== 'setup' || value.kind !== 'setup') return false;
   const selectedRange = value.selectedRange;
   if (
-    !hasOnlyKeys(value, ['kind', 'source', 'ranges', 'selectedRange', 'plan'])
+    !hasOnlyKeys(value, [
+      'kind',
+      'source',
+      'ranges',
+      'selectedRange',
+      'plan',
+      ...(value.startPosition === undefined ? [] : ['startPosition']),
+      ...(value.continuations === undefined ? [] : ['continuations'])
+    ])
     || !isRecord(value.source)
     || !hasOnlyKeys(value.source, ['title', 'profileKey', 'counts'])
     || !isNonEmptyString(value.source.title)
@@ -700,6 +766,17 @@ function isTypingViewPageContent(
     || value.ranges.length === 0
     || !value.ranges.every(isTypingViewSetupRange)
     || !isTypingViewSourceRange(selectedRange)
+    || (
+      value.startPosition !== undefined
+      && !isTypingViewStartPosition(value.startPosition)
+    )
+    || (
+      value.continuations !== undefined
+      && (
+        !Array.isArray(value.continuations)
+        || !value.continuations.every(isTypingViewContinuation)
+      )
+    )
     || !isTypingViewSetupPlan(value.plan)
   ) {
     return false;
@@ -707,6 +784,52 @@ function isTypingViewPageContent(
   return value.ranges.some(item => (
     isRecord(item) && sameRange(item.range, selectedRange)
   ));
+}
+
+function isTypingViewContinuation(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, [
+      'range',
+      'sourceRevision',
+      'targetIndex',
+      'totalUnits',
+      'updatedAt'
+    ])
+    && isTypingViewSourceRange(value.range)
+    && isNonEmptyString(value.sourceRevision)
+    && isPositiveSafeInteger(value.targetIndex)
+    && isPositiveSafeInteger(value.totalUnits)
+    && value.targetIndex < value.totalUnits
+    && isNonNegativeFinite(value.updatedAt);
+}
+
+function isTypingViewStartPosition(
+  value: unknown
+): value is TypingViewStartPosition {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'beginning' || value.kind === 'continuation') {
+    return hasOnlyKeys(value, ['kind']);
+  }
+  return value.kind === 'percentage'
+    && hasOnlyKeys(value, ['kind', 'percent'])
+    && typeof value.percent === 'number'
+    && Number.isSafeInteger(value.percent)
+    && value.percent >= 0
+    && value.percent <= 99;
+}
+
+function isTypingViewPendingMaterialRemoval(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, [
+      'materialId',
+      'title',
+      'deleteAfter',
+      'waitingForPractice'
+    ])
+    && isSafeMaterialId(value.materialId)
+    && isNonEmptyString(value.title)
+    && isNonNegativeFinite(value.deleteAfter)
+    && typeof value.waitingForPractice === 'boolean';
 }
 
 function isTypingViewRecentItem(value: unknown): boolean {

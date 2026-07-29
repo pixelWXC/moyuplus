@@ -56,6 +56,7 @@ import {
   DailyProjectionStore,
   HistoryProjectionStore,
   MasteryProjectionStore,
+  PracticeContinuationStore,
   PracticePreferencesStore,
   PracticeTransactionJournalStore,
   ProjectedResultCommitter,
@@ -78,6 +79,7 @@ import {
 import {
   PracticeApplicationCoordinator,
   PracticeInputTransactionCoordinator,
+  MaterialRemovalCoordinator,
   type PracticeOutcome,
   type PracticePanelPort,
   type PracticeSessionState,
@@ -155,6 +157,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const typingSetupDraft = new PracticeSetupDraft();
   const typingPracticePreferences = new PracticePreferencesStore(typingStorageDirectory);
+  const typingContinuations = new PracticeContinuationStore(
+    typingStorageDirectory
+  );
   const typingResults = new ResultStore(typingStorageDirectory);
   const typingHistory = new HistoryProjectionStore(
     typingStorageDirectory,
@@ -187,7 +192,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const typingSessionLeaseStore = new SessionLeaseStore(
     typingWorkspaceDirectory,
     {
-      ownerId: `extension-host-${process.pid}-${randomUUID()}`
+      ownerId: `extension-host-${process.pid}-${randomUUID()}`,
+      ownerIsAlive: isExtensionHostOwnerAlive
     }
   );
   const typingSessionLease = new WorkspacePracticeSessionLease(
@@ -203,6 +209,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   let typingPracticePanel: PracticeWebviewPanel;
   let typingViewProvider: ReturnType<typeof registerTypingView> | undefined;
+  const typingMaterialRemovals = new MaterialRemovalCoordinator({
+    catalog: typingContentCatalog,
+    activeMaterialIds: async () => {
+      const session = await typingRuntimeState.currentSession();
+      if (!session) return new Set<string>();
+      const snapshot = await typingRuntimeState.snapshots.get(session.snapshotId);
+      return snapshot?.materialId
+        ? new Set([snapshot.materialId])
+        : new Set<string>();
+    },
+    onChanged: () => typingViewProvider?.refreshCurrent(),
+    onPurged: records => Promise.all(records.map(record =>
+      typingContinuations.clearSource({
+        kind: 'custom',
+        materialId: record.id
+      })
+    )).then(() => undefined),
+    onError: error => {
+      output?.appendLine(
+        `[typing.materials] removal cleanup failed: ${safeError(error)}`
+      );
+    }
+  });
+  context.subscriptions.push(typingMaterialRemovals);
   const typingPanelPort: PracticePanelPort = {
     open: async (
       snapshot: PracticeSnapshot,
@@ -215,6 +245,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         acceptedTextByLine: [],
         savedAt: Date.now()
       });
+      await typingWorkspaceStore.saveActiveSession(session.id);
+      await typingContinuations.update(snapshot, session);
       typingPracticePanel.open(session.id);
     },
     render: async (session: PracticeSessionState) => {
@@ -224,6 +256,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         acceptedTextByLine: [],
         savedAt: Date.now()
       });
+      const snapshot = await typingRuntimeState.snapshots.get(
+        session.snapshotId
+      );
+      if (snapshot) await typingContinuations.update(snapshot, session);
       await typingTransactionJournal.compact(session.id, session.revision);
       void typingPracticePanel.refresh(session.id).catch(error => {
         output?.appendLine(`[typing.panel] refresh failed: ${safeError(error)}`);
@@ -236,7 +272,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         acceptedTextByLine: [],
         savedAt: Date.now()
       });
+      const snapshot = await typingRuntimeState.snapshots.get(
+        session.snapshotId
+      );
+      if (snapshot) await typingContinuations.update(snapshot, session);
       await typingTransactionJournal.compact(session.id, session.revision);
+      await typingWorkspaceStore.clearActiveSession(session.id);
       void typingPracticePanel.refresh(session.id).catch(error => {
         output?.appendLine(`[typing.panel] refresh failed: ${safeError(error)}`);
       });
@@ -382,6 +423,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     draft: typingSetupDraft,
     coordinator: typingApplication,
     preferences: typingPracticePreferences,
+    continuations: typingContinuations,
     active: {
       current: () => typingRuntimeState.current(),
       focus: async () => {
@@ -418,7 +460,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         typingPracticePanel.open(session.id);
       }
     },
-    complete: commitTypingResult,
+    complete: async (session, snapshot) => {
+      await commitTypingResult(session, snapshot);
+      await typingContinuations.update(snapshot, session);
+      await typingWorkspaceStore.clearActiveSession(session.id);
+    },
     clock: {
       monotonicNow: () => performance.now()
     }
@@ -440,10 +486,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     practicePreferences: async () => (
       await typingPracticePreferences.load()
     ).preferences,
+    continuations: typingContinuations,
     activeSessionStatus: async () => (
       await typingRuntimeState.current()
     )?.status ?? null,
     recoverablePractice: () => typingSessionRecovery.snapshot(),
+    pendingMaterialRemovals: () => typingMaterialRemovals.snapshot(),
     legacyResumeHint: () => {
       const hint = readLegacyResumeHint(context.workspaceState);
       return hint
@@ -530,12 +578,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
     reportError: async error => {
       await vscode.window.showErrorMessage(error.message);
-    }
+    },
+    removals: typingMaterialRemovals
   });
   let resumeLegacyPractice = async (): Promise<boolean> => false;
   let dismissLegacyPractice = async (): Promise<void> => undefined;
   const typingViewCommands = {
     selectMaterial: typingMaterialCommands.selectMaterial.bind(typingMaterialCommands),
+    removeMaterial: typingMaterialCommands.removeMaterial.bind(typingMaterialCommands),
+    undoRemoveMaterial:
+      typingMaterialCommands.undoRemoveMaterial.bind(typingMaterialCommands),
     usePastedText: typingMaterialCommands.usePastedText.bind(typingMaterialCommands),
     importTxt: typingMaterialCommands.importTxt.bind(typingMaterialCommands),
     importEpub: typingMaterialCommands.importEpub.bind(typingMaterialCommands),
@@ -739,6 +791,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
     saveResumeTarget: async target => { await progress.save({ ...target, updatedAt: Date.now() }); }
   });
+  try {
+    await typingMaterialRemovals.initialize();
+  } catch (error) {
+    output?.appendLine(
+      `[typing.materials] startup cleanup failed: ${safeError(error)}`
+    );
+  }
   typingViewProvider = registerTypingView(
     context,
     context.extensionUri ?? vscode.Uri.file('.'),
@@ -771,4 +830,21 @@ function createMoyuplusOutputChannel(): MoyuplusOutputChannel | undefined {
 function safeError(error: unknown): string {
   const value = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   return value.replace(/[\r\n]+/g, ' ').slice(0, 500);
+}
+
+function isExtensionHostOwnerAlive(ownerId: string): boolean {
+  const match = /^extension-host-(\d+)-/.exec(ownerId);
+  if (!match) return true;
+  const ownerPid = Number(match[1]);
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) return true;
+  try {
+    process.kill(ownerPid, 0);
+    return true;
+  } catch (error) {
+    return !(
+      error instanceof Error
+      && 'code' in error
+      && error.code === 'ESRCH'
+    );
+  }
 }
