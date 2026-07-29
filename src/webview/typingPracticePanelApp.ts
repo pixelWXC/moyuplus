@@ -31,6 +31,7 @@ let inputState = restored
   ? restoreTypingPracticeInputState(restored, panelInstanceId)
   : createTypingPracticeInputState(panelInstanceId);
 let snapshot: PracticePanelSnapshot | undefined;
+let snapshotReceivedAt = performance.now();
 let focused = false;
 let domChangeSequence = 0;
 let observedValue = '';
@@ -48,6 +49,7 @@ const machine = new TypingPracticeInputStateMachine({
 applyAppearance();
 const elements = createShell(root);
 bindInput();
+window.setInterval(renderLiveMetrics, 250);
 window.addEventListener('message', event => receive(event.data));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'hidden') return;
@@ -75,6 +77,7 @@ function receive(value: unknown): void {
   if (!isRecord(value) || value.protocolVersion !== 1) return;
   if (value.type === 'practice/snapshot' && isSnapshot(value.snapshot)) {
     snapshot = value.snapshot;
+    snapshotReceivedAt = performance.now();
     transition({
       type: 'snapshot',
       revision: snapshot.revision,
@@ -93,6 +96,7 @@ function receive(value: unknown): void {
     && typeof value.currentRevision === 'number'
   ) {
     snapshot = value.snapshot;
+    snapshotReceivedAt = performance.now();
     transition({
       type: 'ack',
       panelInstanceId: value.panelInstanceId,
@@ -242,6 +246,8 @@ function render(): void {
       ? '正在同步进度…'
       : '练习进行中';
   elements.progress.textContent = model.progressLabel;
+  elements.metrics.hidden = !snapshot.showMetrics;
+  renderLiveMetrics();
   elements.error.textContent = model.errorMessage ?? '';
   elements.error.hidden = !model.errorMessage;
   elements.focusPrompt.textContent = model.focusMessage ?? '';
@@ -259,6 +265,32 @@ function render(): void {
   renderSegments(elements.reference, model.referenceSegments);
   renderSegments(elements.typed, model.inputSegments);
   renderKeyboard(model.keyboardTarget);
+}
+
+function renderLiveMetrics(): void {
+  if (!snapshot) return;
+  const running = snapshot.status === 'running'
+    || snapshot.status === 'blockedOnError';
+  const sinceSnapshotMs = running
+    ? Math.max(0, performance.now() - snapshotReceivedAt)
+    : 0;
+  const activeElapsedMs = snapshot.metrics.activeElapsedMs + sinceSnapshotMs;
+  const completedPrintable = snapshot.metrics.activeElapsedMs <= 0
+    ? 0
+    : snapshot.metrics.currentCpm
+      * snapshot.metrics.activeElapsedMs / 60_000;
+  const currentCpm = activeElapsedMs <= 0
+    ? 0
+    : completedPrintable / (activeElapsedMs / 60_000);
+  elements.currentCpm.textContent = formatMetric(currentCpm);
+  elements.accuracy.textContent = `${formatMetric(snapshot.metrics.accuracy)}%`;
+  elements.duration.textContent = formatDuration(activeElapsedMs);
+  elements.remaining.textContent = snapshot.metrics.remaining.kind === 'time'
+    ? formatDuration(Math.max(
+      0,
+      snapshot.metrics.remaining.remainingMs - sinceSnapshotMs
+    ), true)
+    : `${snapshot.metrics.remaining.remainingUnits} 单元`;
 }
 
 function renderSegments(
@@ -309,6 +341,24 @@ function createShell(container: HTMLElement) {
           <p class="practice-style-note">外观可在打字练习设置中调整</p>
         </div>
       </header>
+      <dl class="practice-metrics" aria-label="局内实时数据">
+        <div>
+          <dt>当前速度</dt>
+          <dd><span class="practice-current-cpm">0</span> <small>CPM</small></dd>
+        </div>
+        <div>
+          <dt>准确率</dt>
+          <dd class="practice-accuracy">100%</dd>
+        </div>
+        <div>
+          <dt>练习时长</dt>
+          <dd class="practice-duration">00:00</dd>
+        </div>
+        <div>
+          <dt>目标剩余</dt>
+          <dd class="practice-remaining">—</dd>
+        </div>
+      </dl>
       <section class="practice-stage" aria-label="打字练习">
         <div class="practice-track practice-track--reference">
           <span class="practice-track-label">对照</span>
@@ -348,6 +398,11 @@ function createShell(container: HTMLElement) {
   return {
     status: requiredSelector<HTMLElement>('.practice-status'),
     progress: requiredSelector<HTMLElement>('.practice-progress'),
+    metrics: requiredSelector<HTMLElement>('.practice-metrics'),
+    currentCpm: requiredSelector<HTMLElement>('.practice-current-cpm'),
+    accuracy: requiredSelector<HTMLElement>('.practice-accuracy'),
+    duration: requiredSelector<HTMLElement>('.practice-duration'),
+    remaining: requiredSelector<HTMLElement>('.practice-remaining'),
     stage: requiredSelector<HTMLElement>('.practice-stage'),
     reference: requiredSelector<HTMLElement>('.practice-reference-line'),
     typed: requiredSelector<HTMLElement>('.practice-typed-line'),
@@ -481,8 +536,42 @@ function isSnapshot(value: unknown): value is PracticePanelSnapshot {
     && typeof value.status === 'string'
     && typeof value.targetIndex === 'number'
     && typeof value.totalUnits === 'number'
+    && typeof value.showMetrics === 'boolean'
+    && isRecord(value.metrics)
+    && typeof value.metrics.activeElapsedMs === 'number'
+    && typeof value.metrics.currentCpm === 'number'
+    && typeof value.metrics.accuracy === 'number'
+    && isRecord(value.metrics.remaining)
+    && (
+      (
+        value.metrics.remaining.kind === 'time'
+        && typeof value.metrics.remaining.remainingMs === 'number'
+        && typeof value.metrics.remaining.totalMs === 'number'
+      )
+      || (
+        value.metrics.remaining.kind === 'units'
+        && typeof value.metrics.remaining.remainingUnits === 'number'
+      )
+    )
     && isRecord(value.window)
     && Array.isArray(value.window.units);
+}
+
+function formatMetric(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return value >= 100 ? Math.round(value).toString() : value.toFixed(1);
+}
+
+function formatDuration(milliseconds: number, roundUp = false): string {
+  const totalSeconds = Math.max(
+    0,
+    (roundUp ? Math.ceil : Math.floor)(milliseconds / 1_000)
+  );
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds
+    .toString()
+    .padStart(2, '0')}`;
 }
 
 function isAckOutcome(

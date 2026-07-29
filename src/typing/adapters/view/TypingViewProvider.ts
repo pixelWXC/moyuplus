@@ -127,6 +127,16 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     }
   }
 
+  async syncPage(page: TypingViewPage): Promise<void> {
+    if (this.disposed) return;
+    this.activePage = page;
+    const view = this.view;
+    const instanceId = this.instanceId;
+    if (view && instanceId) {
+      await this.refresh(view, instanceId, page);
+    }
+  }
+
   private async handleMessage(
     value: unknown,
     view: vscode.WebviewView

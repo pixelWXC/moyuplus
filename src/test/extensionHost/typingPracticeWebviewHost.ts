@@ -33,6 +33,7 @@ export async function run(): Promise<void> {
       }
     },
     pause: async () => undefined,
+    timeout: async () => undefined,
     reportError: error => {
       throw error;
     }
@@ -63,6 +64,16 @@ function snapshot(): PracticePanelSnapshot {
     status: 'running',
     targetIndex: 0,
     totalUnits: 3,
+    showMetrics: true,
+    metrics: {
+      activeElapsedMs: 0,
+      currentCpm: 0,
+      accuracy: 100,
+      remaining: {
+        kind: 'units',
+        remainingUnits: 3
+      }
+    },
     window: {
       start: 0,
       end: 3,

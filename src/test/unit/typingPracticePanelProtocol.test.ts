@@ -75,6 +75,16 @@ describe('typing practice panel protocol', () => {
       status: 'running' as const,
       targetIndex: 2,
       totalUnits: 10,
+      showMetrics: true,
+      metrics: {
+        activeElapsedMs: 10_000,
+        currentCpm: 12,
+        accuracy: 100,
+        remaining: {
+          kind: 'units' as const,
+          remainingUnits: 8
+        }
+      },
       window: { start: 0, end: 3, units: [] },
       updatedAt: 10
     };

@@ -73,6 +73,48 @@ input {
   text-align: right;
 }
 
+.practice-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 72rem;
+  margin: 0.75rem auto 0;
+  border-block: 1px solid var(--vscode-panel-border);
+}
+
+.practice-metrics > div {
+  min-width: 0;
+  padding: 0.65rem clamp(0.5rem, 1.5vw, 1rem);
+  border-right: 1px solid var(--vscode-panel-border);
+}
+
+.practice-metrics > div:last-child {
+  border-right: 0;
+}
+
+.practice-metrics dt,
+.practice-metrics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.practice-metrics dt {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+.practice-metrics dd {
+  margin-top: 0.1rem;
+  font-size: clamp(0.95rem, 2vw, 1.2rem);
+  font-weight: 600;
+}
+
+.practice-metrics small {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.625rem;
+  font-weight: 400;
+}
+
 .practice-style-note {
   margin-top: 0.1rem;
   font-size: 0.6875rem;
@@ -423,6 +465,18 @@ input {
 
   .practice-header-meta {
     text-align: left;
+  }
+
+  .practice-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .practice-metrics > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .practice-metrics > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--vscode-panel-border);
   }
 
   .practice-stage {

@@ -59,7 +59,7 @@ const pageCopy: Record<TypingViewPage, {
   live: {
     label: '进行中',
     title: '练习进行中',
-    description: '在编辑器中输入；这里提供会话状态和控制命令。'
+    description: '局内数据在练习窗口实时显示；练习完成后，结果会同步到此侧栏。'
   },
   result: {
     label: '结果',
@@ -246,6 +246,51 @@ function render(): void {
   const setupForm = app.querySelector<HTMLFormElement>('[data-setup-form]');
   if (setupForm && state.content?.kind === 'setup') {
     const setupContent = state.content;
+    const rangeSelect = setupForm.elements.namedItem('range') as HTMLSelectElement | null;
+    const completionSelect = setupForm.elements.namedItem('completionKind') as HTMLSelectElement | null;
+    const completionSourceRange = completionSelect?.querySelector<HTMLOptionElement>(
+      '[data-completion-source-range]'
+    );
+    const completionHelp = setupForm.querySelector<HTMLElement>('[data-completion-help]');
+    const completionSettings = Array.from(
+      setupForm.querySelectorAll<HTMLElement>('[data-completion-setting]')
+    );
+    const syncCompletionControls = () => {
+      if (!rangeSelect || !completionSelect) return;
+      const rangeKind = rangeSelect.selectedOptions[0]?.dataset.rangeKind;
+      const supportsSourceRange = rangeKind === 'article'
+        || rangeKind === 'chapter'
+        || rangeKind === 'selection';
+      if (completionSourceRange) {
+        completionSourceRange.disabled = !supportsSourceRange;
+        completionSourceRange.hidden = !supportsSourceRange;
+      }
+      if (!supportsSourceRange && completionSelect.value === 'sourceRange') {
+        completionSelect.value = 'free';
+      }
+
+      const completionKind = completionSelect.value;
+      for (const setting of completionSettings) {
+        const visible = setting.dataset.completionSetting === completionKind;
+        setting.hidden = !visible;
+        setting.querySelectorAll<HTMLInputElement>('input').forEach(input => {
+          input.disabled = !visible;
+        });
+      }
+      if (completionHelp) {
+        completionHelp.textContent = completionKind === 'sourceRange'
+          ? '输入到上方所选范围的末尾后自动结束。'
+          : completionKind === 'timed'
+            ? '到达设定时长后自动结束。'
+            : completionKind === 'length'
+              ? '完成设定数量的可打印单元后自动结束。'
+              : '不设时间和单元数限制，需要时可在练习页手动结束。';
+      }
+    };
+    rangeSelect?.addEventListener('change', syncCompletionControls);
+    completionSelect?.addEventListener('change', syncCompletionControls);
+    syncCompletionControls();
+
     const currentConfiguration = () => {
       if (!setupForm.reportValidity()) return;
       const data = new FormData(setupForm);

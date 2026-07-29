@@ -36,6 +36,16 @@ describe('typing practice panel render model', () => {
         status: 'blockedOnError',
         targetIndex: 1,
         totalUnits: 3,
+        showMetrics: true,
+        metrics: {
+          activeElapsedMs: 10_000,
+          currentCpm: 6,
+          accuracy: 50,
+          remaining: {
+            kind: 'units',
+            remainingUnits: 2
+          }
+        },
         blockedAttempt: {
           attemptId: 'input-1',
           expected: '主',

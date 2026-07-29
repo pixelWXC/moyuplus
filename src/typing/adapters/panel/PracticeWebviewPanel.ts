@@ -27,6 +27,7 @@ export interface PracticeWebviewPanelOptions {
     'snapshot' | 'submit' | 'correct'
   >;
   pause(sessionId: string): PromiseLike<void>;
+  timeout(sessionId: string): PromiseLike<void>;
   reportError(error: unknown): void;
 }
 
@@ -37,6 +38,7 @@ interface PanelBinding {
   lastTransactionSequence: number;
   queue: Promise<void>;
   subscriptions: vscode.Disposable[];
+  timeoutHandle?: ReturnType<typeof setTimeout>;
   disposing: boolean;
 }
 
@@ -92,6 +94,15 @@ export class PracticeWebviewPanel implements vscode.Disposable {
     return panel;
   }
 
+  async refresh(sessionId: string): Promise<void> {
+    const binding = this.bindings.get(sessionId);
+    const panelInstanceId = binding?.panelInstanceId;
+    if (!binding || binding.disposing || !panelInstanceId) return;
+    await this.enqueue(binding, () =>
+      this.publishSnapshot(binding, panelInstanceId)
+    );
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -144,6 +155,7 @@ export class PracticeWebviewPanel implements vscode.Disposable {
     if (message.sequence <= binding.lastTransactionSequence) return;
     binding.lastTransactionSequence = message.sequence;
     const ack = await this.applyTransaction(message);
+    this.scheduleTimeout(binding, ack.snapshot);
     await this.post(binding, wrapPracticeTransactionAck({
       sessionId: binding.sessionId,
       panelInstanceId: message.panelInstanceId,
@@ -183,6 +195,7 @@ export class PracticeWebviewPanel implements vscode.Disposable {
   ): Promise<void> {
     const snapshot: PracticePanelSnapshot =
       await this.options.coordinator.snapshot(binding.sessionId);
+    this.scheduleTimeout(binding, snapshot);
     await this.post(binding, {
       protocolVersion: TYPING_PRACTICE_PANEL_PROTOCOL_VERSION,
       type: 'practice/snapshot',
@@ -195,6 +208,7 @@ export class PracticeWebviewPanel implements vscode.Disposable {
   private async release(binding: PanelBinding): Promise<void> {
     if (binding.disposing) return;
     binding.disposing = true;
+    this.clearTimeout(binding);
     try {
       await this.options.pause(binding.sessionId);
     } finally {
@@ -205,6 +219,39 @@ export class PracticeWebviewPanel implements vscode.Disposable {
       binding.subscriptions = [];
       subscriptions.forEach(subscription => subscription.dispose());
     }
+  }
+
+  private scheduleTimeout(
+    binding: PanelBinding,
+    snapshot: PracticePanelSnapshot
+  ): void {
+    this.clearTimeout(binding);
+    if (
+      binding.disposing
+      || (snapshot.status !== 'running' && snapshot.status !== 'blockedOnError')
+      || snapshot.metrics.remaining.kind !== 'time'
+    ) {
+      return;
+    }
+    const delay = Math.max(
+      0,
+      Math.min(snapshot.metrics.remaining.remainingMs, 2_147_483_647)
+    );
+    binding.timeoutHandle = setTimeout(() => {
+      binding.timeoutHandle = undefined;
+      void this.enqueue(binding, async () => {
+        await this.options.timeout(binding.sessionId);
+        if (binding.panelInstanceId) {
+          await this.publishSnapshot(binding, binding.panelInstanceId);
+        }
+      });
+    }, delay);
+  }
+
+  private clearTimeout(binding: PanelBinding): void {
+    if (binding.timeoutHandle === undefined) return;
+    clearTimeout(binding.timeoutHandle);
+    delete binding.timeoutHandle;
   }
 
   private async post(binding: PanelBinding, message: unknown): Promise<void> {

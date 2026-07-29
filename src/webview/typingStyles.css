@@ -420,6 +420,17 @@ h1 {
   font-size: 10px;
 }
 
+.setup-form [hidden] {
+  display: none;
+}
+
+.setup-field-help {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .setup-form select,
 .setup-form input[type="number"] {
   width: 100%;

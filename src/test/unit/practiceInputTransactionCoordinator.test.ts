@@ -108,16 +108,43 @@ describe('PracticeInputTransactionCoordinator', () => {
     expect(late.outcome).toBe('stale');
     expect(harness.complete).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects input at the timed boundary and invokes authoritative timeout', async () => {
+    const harness = createHarness(new PracticeTransactionEngine(), {
+      completion: { kind: 'timed', seconds: 1 },
+      monotonicNow: 1_001
+    });
+
+    const ack = await harness.coordinator.submit({
+      sessionId: harness.session.id,
+      transactionId: 'after-timeout',
+      baseRevision: 0,
+      kind: 'direct',
+      text: 'a'
+    });
+
+    expect(harness.timeout).toHaveBeenCalledWith(harness.session.id);
+    expect(ack.outcome).toBe('completed');
+    expect(ack.consumedText).toBe('');
+    expect(harness.append).not.toHaveBeenCalled();
+  });
 });
 
-function createHarness(engine = new PracticeTransactionEngine()) {
+function createHarness(
+  engine = new PracticeTransactionEngine(),
+  options: {
+    completion?: { kind: 'timed'; seconds: number };
+    monotonicNow?: number;
+  } = {}
+) {
   const contentProfile = { kind: 'english', category: 'adHoc' } as const;
   const snapshot = buildPracticeSnapshot({
     id: 'snapshot-coordinator',
     createdAt: 1,
     plan: createDefaultPracticePlan({
       contentRecipe: { kind: 'adHoc', text: 'ab' },
-      contentProfile
+      contentProfile,
+      ...(options.completion ? { completion: options.completion } : {})
     }),
     prepared: preparePracticeContent('ab', {
       sourceRevision: 'source-1',
@@ -144,6 +171,14 @@ function createHarness(engine = new PracticeTransactionEngine()) {
     current = next;
   });
   const complete = vi.fn(async () => undefined);
+  const timeout = vi.fn(async () => {
+    current = {
+      ...current,
+      status: 'completed',
+      endedAt: 2,
+      updatedAt: 2
+    };
+  });
   const coordinator = new PracticeInputTransactionCoordinator({
     authority: {
       get: async () => current,
@@ -159,8 +194,12 @@ function createHarness(engine = new PracticeTransactionEngine()) {
         current.transactionReceipts[transactionId]
     },
     engine,
-    clock: { wallNow: () => 2 },
+    clock: {
+      wallNow: () => 2,
+      monotonicNow: () => options.monotonicNow ?? 1
+    },
     nextAttemptId: () => `input-${++attempt}`,
+    timeout,
     complete
   });
   return {
@@ -172,6 +211,7 @@ function createHarness(engine = new PracticeTransactionEngine()) {
     order,
     append,
     replace,
+    timeout,
     complete
   };
 }

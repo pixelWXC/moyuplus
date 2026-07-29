@@ -679,10 +679,8 @@ describe('extension activation', () => {
         content: expect.objectContaining({
           kind: 'live',
           status: 'paused',
-          progress: {
-            completedUnits: 1,
-            totalUnits: 2
-          }
+          progress: null,
+          metrics: null
         })
       })
     }));

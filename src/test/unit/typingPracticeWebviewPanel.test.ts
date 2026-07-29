@@ -92,15 +92,47 @@ describe('PracticeWebviewPanel', () => {
     await panel.dispose();
     await vi.waitFor(() => expect(owner.pause).toHaveBeenCalledWith('session-1'));
   });
+
+  it('ends a timed session when the authoritative remaining time elapses', async () => {
+    vi.useFakeTimers();
+    try {
+      const owner = createOwner(true);
+      owner.panel.open('session-1');
+      const webview = window.createdWebviewPanels[0].webview;
+
+      await webview.receiveMessage(ready('panel-timed'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(owner.timeout).toHaveBeenCalledWith('session-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
-function createOwner() {
+function createOwner(timed = false) {
   const snapshotValue = {
     sessionId: 'session-1',
     revision: 0,
     status: 'running' as const,
     targetIndex: 0,
     totalUnits: 1,
+    showMetrics: true,
+    metrics: {
+      activeElapsedMs: 0,
+      currentCpm: 0,
+      accuracy: 100,
+      remaining: timed
+        ? {
+          kind: 'time' as const,
+          remainingMs: 1_000,
+          totalMs: 1_000
+        }
+        : {
+          kind: 'units' as const,
+          remainingUnits: 1
+        }
+    },
     window: {
       start: 0,
       end: 1,
@@ -124,15 +156,18 @@ function createOwner() {
   }));
   const correct = vi.fn();
   const pause = vi.fn(async () => undefined);
+  const timeout = vi.fn(async () => undefined);
   return {
     snapshot,
     submit,
     correct,
     pause,
+    timeout,
     panel: new PracticeWebviewPanel({
       extensionUri: Uri.file('/extension'),
       coordinator: { snapshot, submit, correct },
       pause,
+      timeout,
       reportError: vi.fn()
     })
   };

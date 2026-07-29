@@ -279,6 +279,13 @@ function renderSetup(
   content: Extract<TypingViewPageContent, { kind: 'setup' }>
 ): string {
   const completion = content.plan.completion;
+  const selectedRangeSupportsCompletion = content.selectedRange.kind === 'article'
+    || content.selectedRange.kind === 'chapter'
+    || content.selectedRange.kind === 'selection';
+  const completionKind = completion.kind === 'sourceRange'
+    && !selectedRangeSupportsCompletion
+    ? 'free'
+    : completion.kind;
   return `
     <section class="setup-page" aria-label="本次练习设置">
       <div class="setup-source">
@@ -288,32 +295,43 @@ function renderSetup(
       </div>
       <form class="setup-form" data-setup-form>
         <fieldset>
-          <legend>内容范围</legend>
+          <legend>本次练习范围</legend>
           <label>
-            范围
-            <select name="range">
+            练习哪一部分
+            <select name="range" aria-describedby="setup-range-help">
               ${content.ranges.map((item, index) => `
-                <option value="${index}"${sameRange(item.range, content.selectedRange) ? ' selected' : ''}>${escapeHtml(item.label)}</option>`
+                <option
+                  value="${index}"
+                  data-range-kind="${item.range.kind}"
+                  ${sameRange(item.range, content.selectedRange) ? 'selected' : ''}
+                >${escapeHtml(item.label)}</option>`
               ).join('')}
             </select>
           </label>
+          <p class="setup-field-help" id="setup-range-help">这里只决定本次要练习的内容；结束方式在下一项设置。</p>
         </fieldset>
         <fieldset>
-          <legend>完成条件</legend>
+          <legend>结束方式</legend>
           <label>
-            类型
-            <select name="completionKind">
-              ${option('sourceRange', '完成所选范围', completion.kind)}
-              ${option('timed', '限时', completion.kind)}
-              ${option('length', '定长', completion.kind)}
-              ${option('free', '自由练习', completion.kind)}
+            什么时候结束
+            <select name="completionKind" aria-describedby="setup-completion-help">
+              <option
+                value="sourceRange"
+                data-completion-source-range
+                ${completionKind === 'sourceRange' ? 'selected' : ''}
+                ${selectedRangeSupportsCompletion ? '' : 'disabled hidden'}
+              >练完本次范围</option>
+              ${option('timed', '达到指定时间', completionKind)}
+              ${option('length', '达到指定单元数', completionKind)}
+              ${option('free', '手动结束（自由练习）', completionKind)}
             </select>
           </label>
-          <label>
-            限时秒数
+          <p class="setup-field-help" id="setup-completion-help" data-completion-help></p>
+          <label data-completion-setting="timed"${completionKind === 'timed' ? '' : ' hidden'}>
+            练习时长（秒）
             <input name="completionSeconds" type="number" min="1" step="1" value="${completion.kind === 'timed' ? completion.seconds : 180}">
           </label>
-          <label>
+          <label data-completion-setting="length"${completionKind === 'length' ? '' : ' hidden'}>
             目标单元数
             <input name="completionUnits" type="number" min="1" step="1" value="${completion.kind === 'length' ? completion.targetUnits : 100}">
           </label>
@@ -364,7 +382,7 @@ function renderSetup(
               ${option('lineFocus', '逐行聚焦', content.plan.flowPolicy.presentation)}
             </select>
           </label>
-          ${checkbox('showLiveMetrics', '显示实时指标', content.plan.displayPolicy.showLiveMetrics)}
+          ${checkbox('showLiveMetrics', '在练习窗口显示局内指标', content.plan.displayPolicy.showLiveMetrics)}
           ${checkbox('showWhitespace', '显示空白符', content.plan.displayPolicy.showWhitespace)}
         </fieldset>
         <div class="setup-actions" role="group" aria-label="练习设置操作">

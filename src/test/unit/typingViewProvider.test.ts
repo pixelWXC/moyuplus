@@ -123,6 +123,31 @@ describe('TypingViewProvider', () => {
     }));
   });
 
+  it('synchronizes a completed result into the existing sidebar without refocusing it', async () => {
+    const query = {
+      shellSnapshot: vi.fn(async (page: TypingViewPage) => snapshot(page))
+    };
+    const provider = new TypingViewProvider(Uri.file('/extension'), query);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'typingReady'
+    });
+
+    await provider.syncPage('result');
+
+    expect(query.shellSnapshot.mock.calls).toEqual([
+      ['materials'],
+      ['result']
+    ]);
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshotRevision: 2,
+      snapshot: snapshot('result')
+    }));
+  });
+
   it('routes material commands through the injected port and refreshes the authoritative page', async () => {
     const query = {
       shellSnapshot: vi.fn(async (page: TypingViewPage) => snapshot(page))

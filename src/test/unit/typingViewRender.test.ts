@@ -160,6 +160,11 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('name="range"');
     expect(html).toContain('name="completionKind"');
     expect(html).toContain('value="timed" selected');
+    expect(html).toContain('本次练习范围');
+    expect(html).toContain('练完本次范围');
+    expect(html).toContain('手动结束（自由练习）');
+    expect(html).toContain('data-completion-setting="timed"');
+    expect(html).toContain('data-completion-setting="length" hidden');
     expect(html).not.toContain('name="evaluationMode"');
     expect(html).toContain('name="showLiveMetrics"');
     expect(html).not.toContain('name="showLiveMetrics" checked');
@@ -169,6 +174,50 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('data-save-setup-defaults');
     expect(html).toContain('编辑练习字体与外观');
     expect(html).toContain('data-open-practice-editor-settings');
+  });
+
+  it('renders free practice without irrelevant time or unit controls', () => {
+    const html = renderTypingPageContent({
+      kind: 'setup',
+      source: {
+        title: '自由练习',
+        profileKey: 'chinese.adHoc',
+        counts: {
+          graphemes: 20,
+          hanGraphemes: 20,
+          englishWords: 0,
+          printableUnits: 20
+        }
+      },
+      ranges: [{
+        label: '全部内容',
+        range: { kind: 'whole' }
+      }],
+      selectedRange: { kind: 'whole' },
+      plan: {
+        completion: { kind: 'free' },
+        evaluation: { errorPolicy: 'block' },
+        textPolicy: {
+          punctuation: { mode: 'strict', mappingVersion: 'strict-v1' },
+          whitespace: { mode: 'strict' },
+          caseSensitive: true
+        },
+        flowPolicy: {
+          lineAdvance: 'automatic',
+          presentation: 'continuous'
+        },
+        displayPolicy: {
+          showLiveMetrics: true,
+          showWhitespace: false
+        }
+      }
+    });
+
+    expect(html).toContain('value="free" selected');
+    expect(html).toContain('data-completion-source-range');
+    expect(html).toContain('disabled hidden');
+    expect(html).toContain('data-completion-setting="timed" hidden');
+    expect(html).toContain('data-completion-setting="length" hidden');
   });
 
   it('renders all three explicit active-session conflict choices', () => {

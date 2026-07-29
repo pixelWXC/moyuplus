@@ -235,7 +235,7 @@ describe('TypingViewApplicationQuery', () => {
     );
   });
 
-  it('projects live metrics from the active session and immutable snapshot', async () => {
+  it('keeps live metrics in the practice panel until the result is committed', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
       activePractice: async () => ({
@@ -282,19 +282,8 @@ describe('TypingViewApplicationQuery', () => {
         content: {
           kind: 'live',
           status: 'running',
-          progress: {
-            completedUnits: 2,
-            totalUnits: 10
-          },
-          metrics: {
-            activeElapsedMs: 60_000,
-            totalAttempts: 3,
-            correctAttempts: 2,
-            errorAttempts: 1,
-            accuracy: expect.closeTo(66.666, 2),
-            rawCpm: 3,
-            effectiveCpm: 2
-          },
+          progress: null,
+          metrics: null,
           controls: {
             pause: true,
             resume: false,

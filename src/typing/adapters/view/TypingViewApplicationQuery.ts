@@ -500,44 +500,13 @@ function projectLiveContent(input: {
   ) {
     throw new Error('Active practice session has no live projection.');
   }
-  const attempts = session.inputAttempts;
-  const correctAttempts = attempts.filter(attempt => attempt.correct);
-  const activeElapsedMs = activeElapsed(session, input.monotonicNow);
-  const activeMinutes = activeElapsedMs / 60_000;
-  const printableAttempts = attempts.filter(
-    attempt => isPrintable(attempt.actual)
-  ).length;
-  const completedPrintable = correctAttempts.filter(
-    attempt => isPrintable(attempt.expected)
-  ).length;
   const canPause = session.status === 'running'
     || session.status === 'blockedOnError';
-  const showLiveMetrics = snapshot.plan.displayPolicy.showLiveMetrics;
   return {
     kind: 'live',
     status: session.status,
-    progress: showLiveMetrics
-      ? {
-        completedUnits: Math.min(
-          session.targetIndex,
-          snapshot.targetUnits.length
-        ),
-        totalUnits: snapshot.targetUnits.length
-      }
-      : null,
-    metrics: showLiveMetrics
-      ? {
-        activeElapsedMs,
-        totalAttempts: attempts.length,
-        correctAttempts: correctAttempts.length,
-        errorAttempts: attempts.length - correctAttempts.length,
-        accuracy: attempts.length === 0
-          ? 100
-          : correctAttempts.length / attempts.length * 100,
-        rawCpm: perMinute(printableAttempts, activeMinutes),
-        effectiveCpm: perMinute(completedPrintable, activeMinutes)
-      }
-      : null,
+    progress: null,
+    metrics: null,
     controls: {
       pause: canPause,
       resume: session.status === 'paused',
@@ -545,34 +514,6 @@ function projectLiveContent(input: {
       finish: true
     }
   };
-}
-
-function activeElapsed(
-  session: PracticeSessionState,
-  monotonicNow: number
-): number {
-  if (session.startedAtMonotonic === undefined) return 0;
-  let elapsed = Math.max(
-    0,
-    monotonicNow
-      - session.startedAtMonotonic
-      - (session.accumulatedPausedMs ?? 0)
-  );
-  if (session.pausedAtMonotonic !== undefined) {
-    elapsed = Math.max(
-      0,
-      elapsed - Math.max(0, monotonicNow - session.pausedAtMonotonic)
-    );
-  }
-  return elapsed;
-}
-
-function perMinute(value: number, minutes: number): number {
-  return minutes <= 0 ? 0 : value / minutes;
-}
-
-function isPrintable(value: string): boolean {
-  return value.length > 0 && !/^[\r\n\t]$/u.test(value);
 }
 
 function projectCatalogMaterial(

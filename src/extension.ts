@@ -78,6 +78,7 @@ import {
 import {
   PracticeApplicationCoordinator,
   PracticeInputTransactionCoordinator,
+  type PracticeOutcome,
   type PracticePanelPort,
   type PracticeSessionState,
   type PracticeSnapshot,
@@ -201,6 +202,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   );
   let typingPracticePanel: PracticeWebviewPanel;
+  let typingViewProvider: ReturnType<typeof registerTypingView> | undefined;
   const typingPanelPort: PracticePanelPort = {
     open: async (
       snapshot: PracticeSnapshot,
@@ -223,6 +225,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         savedAt: Date.now()
       });
       await typingTransactionJournal.compact(session.id, session.revision);
+      void typingPracticePanel.refresh(session.id).catch(error => {
+        output?.appendLine(`[typing.panel] refresh failed: ${safeError(error)}`);
+      });
     },
     complete: async (session: PracticeSessionState) => {
       await typingWorkspaceStore.saveCheckpoint({
@@ -232,6 +237,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         savedAt: Date.now()
       });
       await typingTransactionJournal.compact(session.id, session.revision);
+      void typingPracticePanel.refresh(session.id).catch(error => {
+        output?.appendLine(`[typing.panel] refresh failed: ${safeError(error)}`);
+      });
     }
   };
   const typingApplication = new PracticeApplicationCoordinator({
@@ -271,7 +279,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const typingTransactionEngine = new PracticeTransactionEngine();
   const commitTypingResult = async (
     session: PracticeSessionState,
-    snapshot: PracticeSnapshot
+    snapshot: PracticeSnapshot,
+    outcome: PracticeOutcome = 'completed'
   ): Promise<void> => {
     const endedAt = session.endedAt ?? session.updatedAt;
     const startedAt = session.startedAt ?? endedAt;
@@ -279,12 +288,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       id: `result-${session.id}`,
       session,
       snapshot,
-      outcome: 'completed',
+      outcome,
       wallTime: endedAt,
       monotonicTime: (session.startedAtMonotonic ?? 0)
         + Math.max(0, endedAt - startedAt)
     });
     await typingResultCommitter.commit(result);
+  };
+  const syncTypingResult = async (): Promise<void> => {
+    await typingViewProvider?.syncPage('result');
+  };
+  const finishTimedPractice = async (sessionId: string): Promise<void> => {
+    const session = await typingRuntimeState.sessions.get(sessionId);
+    if (
+      !session
+      || (session.status !== 'running' && session.status !== 'blockedOnError')
+    ) {
+      return;
+    }
+    await typingApplication.finish({
+      type: 'finish',
+      sessionId,
+      outcome: 'timedOut'
+    });
+    await syncTypingResult();
   };
   const typingInputTransactions = new PracticeInputTransactionCoordinator({
     authority: {
@@ -294,11 +321,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     snapshots: typingRuntimeState.snapshots,
     journal: typingTransactionJournal,
     engine: typingTransactionEngine,
-    clock: { wallNow: Date.now },
+    clock: {
+      wallNow: Date.now,
+      monotonicNow: () => performance.now()
+    },
     nextAttemptId: () => `inputAttempt-${randomUUID()}`,
+    timeout: finishTimedPractice,
     complete: async (session, snapshot) => {
+      await typingPanelPort.complete(session);
       await commitTypingResult(session, snapshot);
       await typingSessionLease.release(session.id);
+      await syncTypingResult();
     }
   });
   typingPracticePanel = new PracticeWebviewPanel({
@@ -316,6 +349,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         });
       }
     },
+    timeout: finishTimedPractice,
     reportError: error => {
       output?.appendLine(`[typing.panel] ${safeError(error)}`);
       void vscode.window.showErrorMessage(
@@ -543,7 +577,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       `[library.inspect] adapter=${format} error=${safeError(error)}`
     )
   });
-  let typingViewProvider: ReturnType<typeof registerTypingView> | undefined;
   const typingEntryPoint = new ReaderTypingEntryPoint(
     typingSetupDraft,
     {

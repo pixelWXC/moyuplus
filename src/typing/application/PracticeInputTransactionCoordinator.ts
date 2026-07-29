@@ -9,6 +9,7 @@ import {
 } from '../domain/session';
 import {
   PracticePanelSnapshotProjector,
+  timedPracticeRemainingMs,
   type PracticePanelSnapshot
 } from './PracticePanelSnapshotProjector';
 
@@ -42,8 +43,10 @@ export interface PracticeInputTransactionCoordinatorOptions {
   projector?: PracticePanelSnapshotProjector;
   clock: {
     wallNow(): number;
+    monotonicNow?(): number;
   };
   nextAttemptId(): string;
+  timeout?(sessionId: string): PromiseLike<void>;
   complete?(
     session: PracticeSessionState,
     snapshot: PracticeSnapshot
@@ -107,8 +110,13 @@ export class PracticeInputTransactionCoordinator {
 
   async snapshot(sessionId: string): Promise<PracticePanelSnapshot> {
     return this.enqueue(sessionId, async () => {
-      const { session, snapshot } = await this.loadAuthority(sessionId);
-      return this.projector.project(session, snapshot);
+      const loaded = await this.loadAuthority(sessionId);
+      const { session, snapshot } = await this.expireTimedPractice(loaded);
+      return this.projector.project(
+        session,
+        snapshot,
+        this.monotonicNow(session)
+      );
     });
   }
 
@@ -116,7 +124,8 @@ export class PracticeInputTransactionCoordinator {
     sessionId: string,
     transaction: PracticeInputTransaction
   ): Promise<PracticeInputTransactionAck> {
-    const { session, snapshot } = await this.loadAuthority(sessionId);
+    const loaded = await this.loadAuthority(sessionId);
+    const { session, snapshot } = await this.expireTimedPractice(loaded);
     const knownReceipt = session.transactionReceipts[transaction.transactionId]
       ?? await this.options.journal.findReceipt(sessionId, transaction.transactionId);
     if (knownReceipt) {
@@ -128,7 +137,11 @@ export class PracticeInputTransactionCoordinator {
         currentRevision: session.revision,
         consumedText: '',
         unconsumedText: transaction.type === 'submit' ? transaction.text : '',
-        snapshot: this.projector.project(session, snapshot)
+        snapshot: this.projector.project(
+          session,
+          snapshot,
+          this.monotonicNow(session)
+        )
       };
     }
     if (session.status === 'completed') {
@@ -137,7 +150,11 @@ export class PracticeInputTransactionCoordinator {
         currentRevision: session.revision,
         consumedText: '',
         unconsumedText: transaction.type === 'submit' ? transaction.text : '',
-        snapshot: this.projector.project(session, snapshot)
+        snapshot: this.projector.project(
+          session,
+          snapshot,
+          this.monotonicNow(session)
+        )
       };
     }
 
@@ -154,10 +171,10 @@ export class PracticeInputTransactionCoordinator {
     await this.options.journal.append(sessionId, calculation.delta);
     const candidate = structuredClone(session);
     this.engine.applyDelta(candidate, calculation.delta);
+    await this.options.authority.replace(candidate);
     if (candidate.status === 'completed') {
       await this.options.complete?.(candidate, snapshot);
     }
-    await this.options.authority.replace(candidate);
     return this.ackFromReceipt(calculation.receipt, candidate, snapshot);
   }
 
@@ -204,8 +221,46 @@ export class PracticeInputTransactionCoordinator {
       currentRevision: session.revision,
       consumedText: receipt.consumedText,
       unconsumedText: receipt.unconsumedText,
-      snapshot: this.projector.project(session, snapshot)
+      snapshot: this.projector.project(
+        session,
+        snapshot,
+        this.monotonicNow(session)
+      )
     };
+  }
+
+  private async expireTimedPractice(input: {
+    session: PracticeSessionState;
+    snapshot: PracticeSnapshot;
+  }): Promise<{
+    session: PracticeSessionState;
+    snapshot: PracticeSnapshot;
+  }> {
+    const { session, snapshot } = input;
+    if (
+      !this.options.timeout
+      || (session.status !== 'running' && session.status !== 'blockedOnError')
+      || snapshot.plan.completion.kind !== 'timed'
+      || timedPracticeRemainingMs(
+        session,
+        snapshot,
+        this.monotonicNow(session)
+      ) > 0
+    ) {
+      return input;
+    }
+    await this.options.timeout(session.id);
+    const expired = await this.options.authority.get(session.id);
+    return {
+      session: expired ?? session,
+      snapshot
+    };
+  }
+
+  private monotonicNow(session: PracticeSessionState): number {
+    return this.options.clock.monotonicNow?.()
+      ?? session.startedAtMonotonic
+      ?? 0;
   }
 
   private enqueue<T>(sessionId: string, task: () => Promise<T>): Promise<T> {

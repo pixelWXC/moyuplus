@@ -595,6 +595,8 @@
   }
   function renderSetup(content) {
     const completion = content.plan.completion;
+    const selectedRangeSupportsCompletion = content.selectedRange.kind === "article" || content.selectedRange.kind === "chapter" || content.selectedRange.kind === "selection";
+    const completionKind = completion.kind === "sourceRange" && !selectedRangeSupportsCompletion ? "free" : completion.kind;
     return `
     <section class="setup-page" aria-label="\u672C\u6B21\u7EC3\u4E60\u8BBE\u7F6E">
       <div class="setup-source">
@@ -604,33 +606,44 @@
       </div>
       <form class="setup-form" data-setup-form>
         <fieldset>
-          <legend>\u5185\u5BB9\u8303\u56F4</legend>
+          <legend>\u672C\u6B21\u7EC3\u4E60\u8303\u56F4</legend>
           <label>
-            \u8303\u56F4
-            <select name="range">
+            \u7EC3\u4E60\u54EA\u4E00\u90E8\u5206
+            <select name="range" aria-describedby="setup-range-help">
               ${content.ranges.map(
       (item, index) => `
-                <option value="${index}"${sameRange2(item.range, content.selectedRange) ? " selected" : ""}>${escapeHtml(item.label)}</option>`
+                <option
+                  value="${index}"
+                  data-range-kind="${item.range.kind}"
+                  ${sameRange2(item.range, content.selectedRange) ? "selected" : ""}
+                >${escapeHtml(item.label)}</option>`
     ).join("")}
             </select>
           </label>
+          <p class="setup-field-help" id="setup-range-help">\u8FD9\u91CC\u53EA\u51B3\u5B9A\u672C\u6B21\u8981\u7EC3\u4E60\u7684\u5185\u5BB9\uFF1B\u7ED3\u675F\u65B9\u5F0F\u5728\u4E0B\u4E00\u9879\u8BBE\u7F6E\u3002</p>
         </fieldset>
         <fieldset>
-          <legend>\u5B8C\u6210\u6761\u4EF6</legend>
+          <legend>\u7ED3\u675F\u65B9\u5F0F</legend>
           <label>
-            \u7C7B\u578B
-            <select name="completionKind">
-              ${option("sourceRange", "\u5B8C\u6210\u6240\u9009\u8303\u56F4", completion.kind)}
-              ${option("timed", "\u9650\u65F6", completion.kind)}
-              ${option("length", "\u5B9A\u957F", completion.kind)}
-              ${option("free", "\u81EA\u7531\u7EC3\u4E60", completion.kind)}
+            \u4EC0\u4E48\u65F6\u5019\u7ED3\u675F
+            <select name="completionKind" aria-describedby="setup-completion-help">
+              <option
+                value="sourceRange"
+                data-completion-source-range
+                ${completionKind === "sourceRange" ? "selected" : ""}
+                ${selectedRangeSupportsCompletion ? "" : "disabled hidden"}
+              >\u7EC3\u5B8C\u672C\u6B21\u8303\u56F4</option>
+              ${option("timed", "\u8FBE\u5230\u6307\u5B9A\u65F6\u95F4", completionKind)}
+              ${option("length", "\u8FBE\u5230\u6307\u5B9A\u5355\u5143\u6570", completionKind)}
+              ${option("free", "\u624B\u52A8\u7ED3\u675F\uFF08\u81EA\u7531\u7EC3\u4E60\uFF09", completionKind)}
             </select>
           </label>
-          <label>
-            \u9650\u65F6\u79D2\u6570
+          <p class="setup-field-help" id="setup-completion-help" data-completion-help></p>
+          <label data-completion-setting="timed"${completionKind === "timed" ? "" : " hidden"}>
+            \u7EC3\u4E60\u65F6\u957F\uFF08\u79D2\uFF09
             <input name="completionSeconds" type="number" min="1" step="1" value="${completion.kind === "timed" ? completion.seconds : 180}">
           </label>
-          <label>
+          <label data-completion-setting="length"${completionKind === "length" ? "" : " hidden"}>
             \u76EE\u6807\u5355\u5143\u6570
             <input name="completionUnits" type="number" min="1" step="1" value="${completion.kind === "length" ? completion.targetUnits : 100}">
           </label>
@@ -681,7 +694,7 @@
               ${option("lineFocus", "\u9010\u884C\u805A\u7126", content.plan.flowPolicy.presentation)}
             </select>
           </label>
-          ${checkbox("showLiveMetrics", "\u663E\u793A\u5B9E\u65F6\u6307\u6807", content.plan.displayPolicy.showLiveMetrics)}
+          ${checkbox("showLiveMetrics", "\u5728\u7EC3\u4E60\u7A97\u53E3\u663E\u793A\u5C40\u5185\u6307\u6807", content.plan.displayPolicy.showLiveMetrics)}
           ${checkbox("showWhitespace", "\u663E\u793A\u7A7A\u767D\u7B26", content.plan.displayPolicy.showWhitespace)}
         </fieldset>
         <div class="setup-actions" role="group" aria-label="\u7EC3\u4E60\u8BBE\u7F6E\u64CD\u4F5C">
@@ -938,7 +951,7 @@
     live: {
       label: "\u8FDB\u884C\u4E2D",
       title: "\u7EC3\u4E60\u8FDB\u884C\u4E2D",
-      description: "\u5728\u7F16\u8F91\u5668\u4E2D\u8F93\u5165\uFF1B\u8FD9\u91CC\u63D0\u4F9B\u4F1A\u8BDD\u72B6\u6001\u548C\u63A7\u5236\u547D\u4EE4\u3002"
+      description: "\u5C40\u5185\u6570\u636E\u5728\u7EC3\u4E60\u7A97\u53E3\u5B9E\u65F6\u663E\u793A\uFF1B\u7EC3\u4E60\u5B8C\u6210\u540E\uFF0C\u7ED3\u679C\u4F1A\u540C\u6B65\u5230\u6B64\u4FA7\u680F\u3002"
     },
     result: {
       label: "\u7ED3\u679C",
@@ -1099,6 +1112,41 @@
     const setupForm = app.querySelector("[data-setup-form]");
     if (setupForm && state.content?.kind === "setup") {
       const setupContent = state.content;
+      const rangeSelect = setupForm.elements.namedItem("range");
+      const completionSelect = setupForm.elements.namedItem("completionKind");
+      const completionSourceRange = completionSelect?.querySelector(
+        "[data-completion-source-range]"
+      );
+      const completionHelp = setupForm.querySelector("[data-completion-help]");
+      const completionSettings = Array.from(
+        setupForm.querySelectorAll("[data-completion-setting]")
+      );
+      const syncCompletionControls = () => {
+        if (!rangeSelect || !completionSelect) return;
+        const rangeKind = rangeSelect.selectedOptions[0]?.dataset.rangeKind;
+        const supportsSourceRange = rangeKind === "article" || rangeKind === "chapter" || rangeKind === "selection";
+        if (completionSourceRange) {
+          completionSourceRange.disabled = !supportsSourceRange;
+          completionSourceRange.hidden = !supportsSourceRange;
+        }
+        if (!supportsSourceRange && completionSelect.value === "sourceRange") {
+          completionSelect.value = "free";
+        }
+        const completionKind = completionSelect.value;
+        for (const setting of completionSettings) {
+          const visible = setting.dataset.completionSetting === completionKind;
+          setting.hidden = !visible;
+          setting.querySelectorAll("input").forEach((input) => {
+            input.disabled = !visible;
+          });
+        }
+        if (completionHelp) {
+          completionHelp.textContent = completionKind === "sourceRange" ? "\u8F93\u5165\u5230\u4E0A\u65B9\u6240\u9009\u8303\u56F4\u7684\u672B\u5C3E\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : completionKind === "timed" ? "\u5230\u8FBE\u8BBE\u5B9A\u65F6\u957F\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : completionKind === "length" ? "\u5B8C\u6210\u8BBE\u5B9A\u6570\u91CF\u7684\u53EF\u6253\u5370\u5355\u5143\u540E\u81EA\u52A8\u7ED3\u675F\u3002" : "\u4E0D\u8BBE\u65F6\u95F4\u548C\u5355\u5143\u6570\u9650\u5236\uFF0C\u9700\u8981\u65F6\u53EF\u5728\u7EC3\u4E60\u9875\u624B\u52A8\u7ED3\u675F\u3002";
+        }
+      };
+      rangeSelect?.addEventListener("change", syncCompletionControls);
+      completionSelect?.addEventListener("change", syncCompletionControls);
+      syncCompletionControls();
       const currentConfiguration = () => {
         if (!setupForm.reportValidity()) return;
         const data = new FormData(setupForm);
