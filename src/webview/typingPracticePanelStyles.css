@@ -1,7 +1,10 @@
 :root {
   color-scheme: light dark;
-  --keyboard-left-accent: oklch(72% 0.2 250);
-  --keyboard-right-accent: oklch(79% 0.19 70);
+  --keyboard-left-accent: oklch(67% 0.19 252);
+  --keyboard-right-accent: oklch(76% 0.18 62);
+  --keyboard-unit-max: 3.4rem;
+  --keyboard-key-height: clamp(2.35rem, 4vw, 2.8rem);
+  --keyboard-gap: clamp(3px, 0.38vw, 5px);
 }
 
 * {
@@ -26,64 +29,30 @@ input {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .practice-panel {
   min-height: 100vh;
   padding:
-    max(1rem, env(safe-area-inset-top))
-    max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom))
-    max(1rem, env(safe-area-inset-left));
-}
-
-.practice-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  max-width: 72rem;
-  margin: 0 auto;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--vscode-panel-border);
-}
-
-.practice-eyebrow,
-.practice-status,
-.practice-progress,
-.practice-style-note {
-  margin: 0;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-}
-
-.practice-eyebrow {
-  color: var(--vscode-foreground);
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-}
-
-.practice-status {
-  margin-top: 0.15rem;
-  font-size: 0.875rem;
-}
-
-.practice-header-meta {
-  text-align: right;
+    max(0.45rem, env(safe-area-inset-top))
+    max(0.55rem, env(safe-area-inset-right))
+    max(0.45rem, env(safe-area-inset-bottom))
+    max(0.55rem, env(safe-area-inset-left));
 }
 
 .practice-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  max-width: 72rem;
-  margin: 0.75rem auto 0;
+  width: 100%;
+  margin: 0;
   border-block: 1px solid var(--vscode-panel-border);
 }
 
 .practice-metrics > div {
   min-width: 0;
-  padding: 0.65rem clamp(0.5rem, 1.5vw, 1rem);
+  padding: 0.4rem clamp(0.4rem, 1vw, 0.7rem);
   border-right: 1px solid var(--vscode-panel-border);
 }
 
@@ -115,28 +84,28 @@ input {
   font-weight: 400;
 }
 
-.practice-style-note {
-  margin-top: 0.1rem;
-  font-size: 0.6875rem;
-}
-
 .practice-stage {
   display: grid;
-  align-content: center;
-  gap: clamp(0.65rem, 1.6vh, 1.2rem);
-  min-height: calc(100vh - 5rem);
-  max-width: 72rem;
-  margin: 0 auto;
-  padding-block: clamp(1.5rem, 5vh, 4rem);
+  align-content: start;
+  gap: clamp(0.4rem, 1vh, 0.65rem);
+  width: 100%;
+  margin: 0;
+  padding-top: clamp(0.45rem, 1.2vh, 0.8rem);
+}
+
+.practice-copy {
+  position: relative;
+  display: grid;
+  min-width: 0;
 }
 
 .practice-track {
   position: relative;
   display: grid;
-  grid-template-columns: clamp(2.6rem, 7vw, 4rem) minmax(0, 1fr);
+  grid-template-columns: clamp(2.4rem, 5vw, 3.2rem) minmax(0, 1fr);
   align-items: baseline;
   min-width: 0;
-  padding-block: clamp(0.55rem, 1.5vh, 0.9rem);
+  padding-block: clamp(0.35rem, 0.9vh, 0.55rem);
   border-bottom: 1px solid var(--vscode-panel-border);
 }
 
@@ -237,8 +206,8 @@ input {
 .practice-input {
   position: absolute;
   z-index: 2;
-  left: clamp(2.6rem, 7vw, 4rem);
-  bottom: 0.75rem;
+  left: clamp(2.4rem, 5vw, 3.2rem);
+  bottom: 0.5rem;
   width: 2px;
   height: 1.25em;
   margin: 0;
@@ -264,22 +233,104 @@ input {
 
 .practice-error-message {
   margin: 0;
-  padding-left: clamp(2.6rem, 7vw, 4rem);
+  padding: 0.35rem 0 0 clamp(2.4rem, 5vw, 3.2rem);
   color: var(--vscode-errorForeground);
   font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .practice-focus-prompt {
-  justify-self: start;
-  min-height: 2rem;
-  margin-left: clamp(2.6rem, 7vw, 4rem);
-  padding: 0.25rem 0;
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0.5rem;
   color: var(--vscode-foreground);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--vscode-focusBorder);
+  background: linear-gradient(
+    180deg,
+    color-mix(
+      in srgb,
+      var(--vscode-editor-background) 14%,
+      transparent
+    ),
+    color-mix(
+      in srgb,
+      var(--vscode-editor-background) 26%,
+      transparent
+    ) 48%,
+    color-mix(
+      in srgb,
+      var(--vscode-editor-background) 17%,
+      transparent
+    )
+  );
+  border: 1px solid color-mix(
+    in srgb,
+    var(--vscode-focusBorder) 48%,
+    transparent
+  );
+  border-radius: 2px;
+  backdrop-filter: blur(0.65px) saturate(0.82);
+  -webkit-backdrop-filter: blur(0.65px) saturate(0.82);
   cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  box-shadow:
+    inset 0 1px 0 color-mix(
+      in srgb,
+      var(--vscode-foreground) 8%,
+      transparent
+    ),
+    inset 0 0 2rem color-mix(
+      in srgb,
+      var(--vscode-focusBorder) 5%,
+      transparent
+    );
+}
+
+.practice-focus-prompt-label {
+  padding: 0.42rem 0.85rem;
+  background: color-mix(
+    in srgb,
+    var(--vscode-editor-background) 82%,
+    transparent
+  );
+  border: 1px solid color-mix(
+    in srgb,
+    var(--vscode-focusBorder) 34%,
+    var(--vscode-panel-border)
+  );
+  border-radius: 999px;
+  box-shadow:
+    0 2px 12px color-mix(
+      in srgb,
+      var(--vscode-editor-background) 42%,
+      transparent
+    ),
+    0 0 18px color-mix(
+      in srgb,
+      var(--vscode-focusBorder) 10%,
+      transparent
+    );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.practice-focus-prompt:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--vscode-focusBorder) 72%,
+    transparent
+  );
+}
+
+.practice-focus-prompt:active .practice-focus-prompt-label {
+  transform: scale(0.98);
 }
 
 .practice-focus-prompt:focus-visible {
@@ -288,10 +339,11 @@ input {
 }
 
 .virtual-keyboard {
-  width: min(100%, 58rem);
-  margin: clamp(0.5rem, 2vh, 1.5rem) auto 0;
-  padding-top: 0.8rem;
+  width: min(100%, 56rem);
+  margin: clamp(0.25rem, 0.7vh, 0.45rem) auto 0;
+  padding: 0.65rem clamp(0.25rem, 0.8vw, 0.6rem) 0.25rem;
   border-top: 1px solid var(--vscode-panel-border);
+  overflow: visible;
 }
 
 .keyboard-heading,
@@ -313,107 +365,241 @@ input {
 
 .keyboard-board {
   display: grid;
-  gap: clamp(2px, 0.45vw, 5px);
-  margin-top: 0.55rem;
+  gap: var(--keyboard-gap);
+  margin-top: 0.5rem;
+  padding: 0.15rem 0.2rem 0.35rem;
+  overflow: visible;
 }
 
 .keyboard-row {
   display: flex;
   justify-content: center;
-  gap: clamp(2px, 0.45vw, 5px);
+  gap: var(--keyboard-gap);
   min-width: 0;
 }
 
 .keyboard-key {
+  --key-accent: var(--vscode-foreground);
   display: grid;
   flex: 1 1 0;
   place-items: center;
+  position: relative;
+  isolation: isolate;
   min-width: 0;
-  max-width: 3.7rem;
-  height: clamp(1.45rem, 4.5vw, 2.4rem);
-  color: var(--vscode-foreground);
-  background: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-panel-border);
-  border-bottom-color: var(--vscode-descriptionForeground);
-  border-radius: 3px;
+  max-width: var(--keyboard-unit-max);
+  height: var(--keyboard-key-height);
+  color: color-mix(
+    in srgb,
+    var(--key-accent) 82%,
+    var(--vscode-foreground)
+  );
+  background: color-mix(
+    in srgb,
+    var(--key-accent) 5%,
+    transparent
+  );
+  border: 1px solid color-mix(
+    in srgb,
+    var(--key-accent) 72%,
+    transparent
+  );
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--key-accent) 92%,
+    transparent
+  );
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 color-mix(
+      in srgb,
+      var(--key-accent) 15%,
+      transparent
+    ),
+    0 0 7px color-mix(
+      in srgb,
+      var(--key-accent) 8%,
+      transparent
+    );
   font-family: var(--vscode-editor-font-family);
-  font-size: clamp(0.45rem, 1.35vw, 0.72rem);
+  font-size: clamp(0.5rem, 1.25vw, 0.73rem);
+  font-weight: 500;
   line-height: 1;
+  text-shadow: 0 0 8px color-mix(
+    in srgb,
+    var(--key-accent) 16%,
+    transparent
+  );
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.keyboard-key::before {
+  position: absolute;
+  z-index: -1;
+  inset: 1px;
+  border-radius: 3px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--key-accent) 8%, transparent),
+    transparent 58%
+  );
+  content: '';
+  pointer-events: none;
 }
 
 .keyboard-key--wide {
-  flex-grow: 1.45;
-  max-width: 5.2rem;
+  flex-grow: 1.5;
+  max-width: calc(var(--keyboard-unit-max) * 1.5);
 }
 
 .keyboard-key--shift {
-  flex-grow: 2;
-  max-width: 7rem;
+  flex-grow: 2.25;
+  max-width: calc(var(--keyboard-unit-max) * 2.25);
 }
 
 .keyboard-key--space {
-  flex: 0 1 42%;
-  max-width: 22rem;
+  flex: 0 1 calc(var(--keyboard-unit-max) * 6.25);
+  max-width: calc(var(--keyboard-unit-max) * 6.25);
 }
 
 .color-keyboard-hands .keyboard-key--left {
-  background: color-mix(
-    in srgb,
-    var(--keyboard-left-accent) 52%,
-    var(--vscode-editor-background)
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--keyboard-left-accent) 82%,
-    var(--vscode-panel-border)
-  );
+  --key-accent: var(--keyboard-left-accent);
 }
 
 .color-keyboard-hands .keyboard-key--right {
-  background: color-mix(
-    in srgb,
-    var(--keyboard-right-accent) 52%,
-    var(--vscode-editor-background)
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--keyboard-right-accent) 82%,
-    var(--vscode-panel-border)
-  );
+  --key-accent: var(--keyboard-right-accent);
 }
 
 .color-keyboard-hands .keyboard-key--both {
+  --key-accent: color-mix(
+    in oklch,
+    var(--keyboard-left-accent),
+    var(--keyboard-right-accent)
+  );
+  color: var(--vscode-foreground);
   background: linear-gradient(
     90deg,
-    color-mix(
-      in srgb,
-      var(--keyboard-left-accent) 52%,
-      var(--vscode-editor-background)
-    ) 0 50%,
-    color-mix(
-      in srgb,
-      var(--keyboard-right-accent) 52%,
-      var(--vscode-editor-background)
-    ) 50% 100%
+    color-mix(in srgb, var(--keyboard-left-accent) 5%, transparent),
+    color-mix(in srgb, var(--keyboard-right-accent) 5%, transparent)
   );
-  border-color: var(--vscode-focusBorder);
+  border-color:
+    var(--keyboard-left-accent)
+    var(--keyboard-right-accent)
+    var(--keyboard-right-accent)
+    var(--keyboard-left-accent);
+  text-shadow: none;
 }
 
 .keyboard-key.is-next {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-  border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 2px color-mix(
+  color: color-mix(
     in srgb,
-    var(--vscode-focusBorder) 35%,
+    var(--vscode-foreground) 88%,
+    var(--key-accent)
+  );
+  background: color-mix(
+    in srgb,
+    var(--key-accent) 34%,
     transparent
   );
+  border-color: color-mix(
+    in srgb,
+    var(--key-accent) 94%,
+    transparent
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(
+      in srgb,
+      var(--vscode-foreground) 28%,
+      transparent
+    ),
+    inset 0 -10px 22px color-mix(
+      in srgb,
+      var(--key-accent) 16%,
+      transparent
+    ),
+    0 0 0 1px color-mix(
+      in srgb,
+      var(--key-accent) 22%,
+      transparent
+    ),
+    0 0 14px color-mix(
+      in srgb,
+      var(--key-accent) 46%,
+      transparent
+    ),
+    0 0 30px color-mix(
+      in srgb,
+      var(--key-accent) 18%,
+      transparent
+    );
+  font-weight: 700;
   transform: translateY(-1px);
+  text-shadow: 0 0 10px color-mix(
+    in srgb,
+    var(--key-accent) 52%,
+    transparent
+  );
+}
+
+.color-keyboard-hands .keyboard-key--left.is-next {
+  --key-accent: var(--keyboard-left-accent);
+}
+
+.color-keyboard-hands .keyboard-key--right.is-next {
+  --key-accent: var(--keyboard-right-accent);
+}
+
+.color-keyboard-hands .keyboard-key--both.is-next {
+  color: var(--vscode-foreground);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--keyboard-left-accent) 34%, transparent) 0 50%,
+    color-mix(in srgb, var(--keyboard-right-accent) 34%, transparent) 50% 100%
+  );
+  border-color: var(--vscode-focusBorder);
+  box-shadow:
+    -5px 0 18px color-mix(
+      in srgb,
+      var(--keyboard-left-accent) 32%,
+      transparent
+    ),
+    5px 0 18px color-mix(
+      in srgb,
+      var(--keyboard-right-accent) 32%,
+      transparent
+    );
+}
+
+.keyboard-key[data-code='Backspace'] {
+  flex-grow: 2;
+  max-width: calc(var(--keyboard-unit-max) * 2);
+}
+
+.keyboard-key[data-code='Backslash'] {
+  flex-grow: 1.5;
+  max-width: calc(var(--keyboard-unit-max) * 1.5);
+}
+
+.keyboard-key[data-code='CapsLock'] {
+  flex-grow: 1.75;
+  max-width: calc(var(--keyboard-unit-max) * 1.75);
+}
+
+.keyboard-key[data-code='Enter'] {
+  flex-grow: 2.25;
+  max-width: calc(var(--keyboard-unit-max) * 2.25);
+}
+
+.keyboard-key[data-code='ShiftRight'] {
+  flex-grow: 2.75;
+  max-width: calc(var(--keyboard-unit-max) * 2.75);
 }
 
 .keyboard-legend {
   justify-content: flex-end;
-  margin-top: 0.5rem;
+  margin-top: 0.3rem;
 }
 
 .keyboard-legend > span {
@@ -430,20 +616,12 @@ input {
 }
 
 .legend-swatch--left {
-  background: color-mix(
-    in srgb,
-    var(--keyboard-left-accent) 68%,
-    var(--vscode-editor-background)
-  );
+  background: transparent;
   border-color: var(--keyboard-left-accent);
 }
 
 .legend-swatch--right {
-  background: color-mix(
-    in srgb,
-    var(--keyboard-right-accent) 68%,
-    var(--vscode-editor-background)
-  );
+  background: transparent;
   border-color: var(--keyboard-right-accent);
 }
 
@@ -457,14 +635,9 @@ input {
 }
 
 @media (max-width: 32rem) {
-  .practice-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .practice-header-meta {
-    text-align: left;
+  :root {
+    --keyboard-key-height: clamp(1.8rem, 8vw, 2.2rem);
+    --keyboard-gap: 2px;
   }
 
   .practice-metrics {
@@ -480,9 +653,7 @@ input {
   }
 
   .practice-stage {
-    align-content: start;
-    min-height: auto;
-    padding-block: 1.5rem;
+    padding-top: 0.5rem;
   }
 
   .practice-track {
@@ -493,10 +664,8 @@ input {
     left: 2.4rem;
   }
 
-  .practice-error-message,
-  .practice-focus-prompt {
+  .practice-error-message {
     padding-left: 0;
-    margin-left: 2.4rem;
   }
 
   .keyboard-legend {
@@ -515,7 +684,13 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .keyboard-key.is-next {
+  .keyboard-key,
+  .practice-focus-prompt-label {
+    transition: none;
+  }
+
+  .keyboard-key.is-next,
+  .practice-focus-prompt:active .practice-focus-prompt-label {
     transform: none;
   }
 }

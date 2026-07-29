@@ -27,6 +27,7 @@ export interface PracticeWebviewPanelOptions {
     'snapshot' | 'submit' | 'correct'
   >;
   pause(sessionId: string): PromiseLike<void>;
+  resume(sessionId: string): PromiseLike<void>;
   timeout(sessionId: string): PromiseLike<void>;
   reportError(error: unknown): void;
 }
@@ -149,6 +150,11 @@ export class PracticeWebviewPanel implements vscode.Disposable {
     }
     if (message.type === 'practice/pause') {
       await this.options.pause(binding.sessionId);
+      await this.publishSnapshot(binding, message.panelInstanceId);
+      return;
+    }
+    if (message.type === 'practice/resume') {
+      await this.options.resume(binding.sessionId);
       await this.publishSnapshot(binding, message.panelInstanceId);
       return;
     }

@@ -349,6 +349,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         });
       }
     },
+    resume: async sessionId => {
+      const session = await typingRuntimeState.sessions.get(sessionId);
+      if (session?.status === 'paused') {
+        await typingApplication.resume({
+          type: 'resume',
+          sessionId
+        });
+      }
+    },
     timeout: finishTimedPractice,
     reportError: error => {
       output?.appendLine(`[typing.panel] ${safeError(error)}`);

@@ -7,7 +7,12 @@ const harness = path.resolve(
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`file:///${harness.replaceAll('\\', '/')}`);
-  await expect(page.getByRole('textbox', { name: '练习输入' })).toBeVisible();
+  const input = page.getByRole('textbox', { name: '练习输入' });
+  await expect(input).toBeVisible();
+  const prompt = page.locator('.practice-focus-prompt');
+  await expect(prompt).toBeVisible();
+  await prompt.click();
+  await expect(input).toBeEnabled();
 });
 
 test('keeps a bounded DOM for a 200k-unit authority snapshot', async ({ page }) => {
@@ -30,7 +35,8 @@ test('keeps a bounded DOM for a 200k-unit authority snapshot', async ({ page }) 
   }));
 
   expect(await page.locator('.practice-unit').count()).toBeLessThan(20);
-  await expect(page.locator('.practice-progress')).toHaveText('100000 / 200000');
+  await expect(page.locator('.practice-header')).toHaveCount(0);
+  await expect(page.getByText('FOCUS MODE')).toHaveCount(0);
 });
 
 test('keeps reference and typed output in separate single-line tracks', async ({ page }) => {
@@ -59,6 +65,55 @@ test('marks hand zones and highlights the next physical key', async ({ page }) =
   await expect(page.locator('[data-code="KeyA"]')).toHaveClass(/keyboard-key--left/);
   await expect(page.locator('[data-code="KeyJ"]')).toHaveClass(/keyboard-key--right/);
   await expect(page.locator('.keyboard-hint')).toContainText('A');
+  const colors = await page.evaluate(() => {
+    const left = getComputedStyle(document.querySelector('[data-code="KeyQ"]')!);
+    const right = getComputedStyle(document.querySelector('[data-code="KeyJ"]')!);
+    const next = getComputedStyle(document.querySelector('[data-code="KeyA"]')!);
+    return {
+      leftBackground: left.backgroundColor,
+      rightBackground: right.backgroundColor,
+      leftColor: left.color,
+      rightColor: right.color,
+      nextBackground: next.backgroundColor
+    };
+  });
+  expect(colors.leftBackground).not.toBe('rgba(0, 0, 0, 0)');
+  expect(colors.rightBackground).not.toBe('rgba(0, 0, 0, 0)');
+  expect(colors.leftBackground).not.toBe(colors.rightBackground);
+  expect(colors.leftColor).not.toBe(colors.rightColor);
+  expect(colors.nextBackground).not.toBe(colors.leftBackground);
+
+  const keyGeometry = await page.evaluate(() => {
+    const rect = (code: string) => {
+      const { width, height } = document.querySelector(
+        `[data-code="${code}"]`
+      )!.getBoundingClientRect();
+      return { width, height };
+    };
+    return {
+      normal: rect('KeyQ'),
+      tab: rect('Tab'),
+      caps: rect('CapsLock'),
+      backspace: rect('Backspace'),
+      enter: rect('Enter'),
+      shiftLeft: rect('ShiftLeft'),
+      shiftRight: rect('ShiftRight'),
+      space: rect('Space')
+    };
+  });
+  expect(keyGeometry.normal.height).toBeGreaterThanOrEqual(40);
+  expect(keyGeometry.normal.width).toBeGreaterThan(keyGeometry.normal.height);
+  expect(keyGeometry.normal.width).toBeLessThan(keyGeometry.normal.height * 1.5);
+  expect(keyGeometry.tab.width).toBeGreaterThan(keyGeometry.normal.width * 1.3);
+  expect(keyGeometry.caps.width).toBeGreaterThan(keyGeometry.tab.width);
+  expect(keyGeometry.backspace.width).toBeGreaterThan(
+    keyGeometry.normal.width * 1.7
+  );
+  expect(keyGeometry.enter.width).toBeGreaterThan(keyGeometry.caps.width);
+  expect(keyGeometry.shiftRight.width).toBeGreaterThan(
+    keyGeometry.shiftLeft.width
+  );
+  expect(keyGeometry.space.width).toBeGreaterThan(keyGeometry.normal.width * 5.5);
 });
 
 test('predicts the next physical key throughout Chinese pinyin composition', async ({ page }) => {
@@ -112,14 +167,57 @@ test('remains readable at narrow width and follows dark theme tokens', async ({ 
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
 });
 
-test('shows a user-action focus prompt without polling focus', async ({ page }) => {
+test('pauses behind a readable click-anywhere focus overlay', async ({ page }) => {
   const input = page.getByRole('textbox', { name: '练习输入' });
-  await input.focus();
+  await page.evaluate(() => window.practiceHarness.sendSnapshot({
+    sessionId: 'session-1',
+    revision: 3,
+    status: 'running',
+    targetIndex: 0,
+    totalUnits: 3,
+    showMetrics: true,
+    metrics: {
+      activeElapsedMs: 10_000,
+      currentCpm: 60,
+      accuracy: 100,
+      remaining: { kind: 'units', remainingUnits: 3 }
+    },
+    window: {
+      start: 0,
+      end: 3,
+      units: [
+        { index: 0, text: 'a', display: 'a', state: 'target' },
+        { index: 1, text: 'b', display: 'b', state: 'remaining' },
+        { index: 2, text: 'c', display: 'c', state: 'remaining' }
+      ]
+    },
+    updatedAt: 3
+  }));
+  await page.evaluate(() => window.practiceHarness.clear());
   await input.blur();
   const prompt = page.getByRole('button', { name: '点击继续输入' });
   await expect(prompt).toBeVisible();
+  await expect(prompt).toHaveCSS('position', 'absolute');
+  const overlayGeometry = await page.evaluate(() => {
+    const copy = document.querySelector('.practice-copy')!.getBoundingClientRect();
+    const overlay = document.querySelector(
+      '.practice-focus-prompt'
+    )!.getBoundingClientRect();
+    return {
+      copy: [copy.x, copy.y, copy.width, copy.height],
+      overlay: [overlay.x, overlay.y, overlay.width, overlay.height]
+    };
+  });
+  expect(overlayGeometry.overlay).toEqual(overlayGeometry.copy);
+  const elapsedBefore = await page.locator('.practice-duration').textContent();
+  await page.waitForTimeout(1_100);
+  await expect(page.locator('.practice-duration')).toHaveText(elapsedBefore ?? '');
+  expect(await page.evaluate(() => window.practiceHarness.sent()))
+    .toContainEqual(expect.objectContaining({ type: 'practice/pause' }));
   await prompt.click();
   await expect(input).toBeFocused();
+  expect(await page.evaluate(() => window.practiceHarness.sent()))
+    .toContainEqual(expect.objectContaining({ type: 'practice/resume' }));
 });
 
 declare global {

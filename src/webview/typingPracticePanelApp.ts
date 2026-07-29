@@ -31,13 +31,17 @@ let inputState = restored
   ? restoreTypingPracticeInputState(restored, panelInstanceId)
   : createTypingPracticeInputState(panelInstanceId);
 let snapshot: PracticePanelSnapshot | undefined;
-let snapshotReceivedAt = performance.now();
 let focused = false;
+let focusPauseRequested = false;
+let focusAfterResume = false;
+let localActiveElapsedMs = 0;
+let localActiveStartedAt: number | undefined;
 let domChangeSequence = 0;
 let observedValue = '';
 let lastEndedCompositionId: string | undefined;
 let transactionSequence = 0;
 let compositionSequence = 0;
+let controlSequence = 1;
 const showVirtualKeyboard = document.body.dataset.showVirtualKeyboard !== 'false';
 
 const machine = new TypingPracticeInputStateMachine({
@@ -77,13 +81,15 @@ function receive(value: unknown): void {
   if (!isRecord(value) || value.protocolVersion !== 1) return;
   if (value.type === 'practice/snapshot' && isSnapshot(value.snapshot)) {
     snapshot = value.snapshot;
-    snapshotReceivedAt = performance.now();
+    resetLocalActiveClock();
     transition({
       type: 'snapshot',
       revision: snapshot.revision,
       status: snapshot.status,
       blockedAttemptId: snapshot.blockedAttempt?.attemptId
     });
+    restoreFocusAfterResume();
+    requestFocusPause();
     return;
   }
   if (
@@ -96,7 +102,7 @@ function receive(value: unknown): void {
     && typeof value.currentRevision === 'number'
   ) {
     snapshot = value.snapshot;
-    snapshotReceivedAt = performance.now();
+    resetLocalActiveClock();
     transition({
       type: 'ack',
       panelInstanceId: value.panelInstanceId,
@@ -106,6 +112,8 @@ function receive(value: unknown): void {
       currentRevision: value.currentRevision,
       blockedAttemptId: snapshot.blockedAttempt?.attemptId
     });
+    restoreFocusAfterResume();
+    requestFocusPause();
   }
 }
 
@@ -113,11 +121,14 @@ function bindInput(): void {
   const input = elements.input;
   input.addEventListener('focus', () => {
     focused = true;
+    startLocalActiveClock();
     render();
   });
   input.addEventListener('blur', () => {
+    stopLocalActiveClock();
     focused = false;
     render();
+    requestFocusPause();
   });
   input.addEventListener('compositionstart', () => {
     transition({ type: 'compositionStart' });
@@ -208,7 +219,21 @@ function bindInput(): void {
       input.setSelectionRange(input.value.length, input.value.length);
     }
   });
-  elements.focusPrompt.addEventListener('click', () => input.focus());
+  elements.focusPrompt.addEventListener('click', () => {
+    if (focusPauseRequested || snapshot?.status === 'paused') {
+      focusPauseRequested = false;
+      focusAfterResume = true;
+      vscode.postMessage({
+        protocolVersion: TYPING_PRACTICE_PANEL_PROTOCOL_VERSION,
+        type: 'practice/resume',
+        sessionId,
+        panelInstanceId,
+        sequence: ++controlSequence
+      });
+      return;
+    }
+    input.focus();
+  });
 }
 
 function transition(action: Parameters<typeof machine.dispatch>[1]): void {
@@ -231,7 +256,6 @@ function persistAndRender(): void {
 
 function render(): void {
   if (!snapshot) {
-    elements.status.textContent = '正在恢复练习…';
     elements.input.disabled = true;
     return;
   }
@@ -240,17 +264,11 @@ function render(): void {
     input: inputState,
     focused
   });
-  elements.status.textContent = snapshot.status === 'completed'
-    ? '练习完成'
-    : inputState.transport.resyncing
-      ? '正在同步进度…'
-      : '练习进行中';
-  elements.progress.textContent = model.progressLabel;
   elements.metrics.hidden = !snapshot.showMetrics;
   renderLiveMetrics();
   elements.error.textContent = model.errorMessage ?? '';
   elements.error.hidden = !model.errorMessage;
-  elements.focusPrompt.textContent = model.focusMessage ?? '';
+  elements.focusPromptLabel.textContent = model.focusMessage ?? '';
   elements.focusPrompt.hidden = !model.focusMessage;
   elements.input.disabled = inputState.authority.kind === 'loading'
     || inputState.transport.resyncing
@@ -272,7 +290,7 @@ function renderLiveMetrics(): void {
   const running = snapshot.status === 'running'
     || snapshot.status === 'blockedOnError';
   const sinceSnapshotMs = running
-    ? Math.max(0, performance.now() - snapshotReceivedAt)
+    ? currentLocalActiveElapsedMs()
     : 0;
   const activeElapsedMs = snapshot.metrics.activeElapsedMs + sinceSnapshotMs;
   const completedPrintable = snapshot.metrics.activeElapsedMs <= 0
@@ -331,16 +349,6 @@ function span(segment: { text: string; className: string }): HTMLSpanElement {
 function createShell(container: HTMLElement) {
   container.innerHTML = `
     <main class="practice-panel">
-      <header class="practice-header">
-        <div>
-          <p class="practice-eyebrow">FOCUS MODE</p>
-          <p class="practice-status" role="status"></p>
-        </div>
-        <div class="practice-header-meta">
-          <p class="practice-progress" aria-label="练习进度"></p>
-          <p class="practice-style-note">外观可在打字练习设置中调整</p>
-        </div>
-      </header>
       <dl class="practice-metrics" aria-label="局内实时数据">
         <div>
           <dt>当前速度</dt>
@@ -360,24 +368,28 @@ function createShell(container: HTMLElement) {
         </div>
       </dl>
       <section class="practice-stage" aria-label="打字练习">
-        <div class="practice-track practice-track--reference">
-          <span class="practice-track-label">对照</span>
-          <div class="practice-line practice-reference-line"></div>
+        <div class="practice-copy">
+          <div class="practice-track practice-track--reference">
+            <span class="practice-track-label">对照</span>
+            <div class="practice-line practice-reference-line"></div>
+          </div>
+          <div class="practice-track practice-track--input">
+            <span class="practice-track-label">输入</span>
+            <div class="practice-line practice-typed-line"></div>
+            <input
+                class="practice-input"
+                type="text"
+                aria-label="练习输入"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="off"
+              >
+          </div>
+          <p class="practice-error-message" role="alert" hidden></p>
+          <button class="practice-focus-prompt" type="button" hidden>
+            <span class="practice-focus-prompt-label"></span>
+          </button>
         </div>
-        <div class="practice-track practice-track--input">
-          <span class="practice-track-label">输入</span>
-          <div class="practice-line practice-typed-line"></div>
-          <input
-              class="practice-input"
-              type="text"
-              aria-label="练习输入"
-              spellcheck="false"
-              autocomplete="off"
-              autocapitalize="off"
-            >
-        </div>
-        <p class="practice-error-message" role="alert" hidden></p>
-        <button class="practice-focus-prompt" type="button" hidden></button>
         <section class="virtual-keyboard" aria-label="虚拟键盘">
           <div class="keyboard-heading">
             <span>键位提示</span>
@@ -396,8 +408,6 @@ function createShell(container: HTMLElement) {
     </main>
   `;
   return {
-    status: requiredSelector<HTMLElement>('.practice-status'),
-    progress: requiredSelector<HTMLElement>('.practice-progress'),
     metrics: requiredSelector<HTMLElement>('.practice-metrics'),
     currentCpm: requiredSelector<HTMLElement>('.practice-current-cpm'),
     accuracy: requiredSelector<HTMLElement>('.practice-accuracy'),
@@ -409,10 +419,78 @@ function createShell(container: HTMLElement) {
     input: requiredSelector<HTMLInputElement>('.practice-input'),
     error: requiredSelector<HTMLElement>('.practice-error-message'),
     focusPrompt: requiredSelector<HTMLButtonElement>('.practice-focus-prompt'),
+    focusPromptLabel: requiredSelector<HTMLElement>(
+      '.practice-focus-prompt-label'
+    ),
     keyboard: requiredSelector<HTMLElement>('.virtual-keyboard'),
     keyboardHint: requiredSelector<HTMLElement>('.keyboard-hint'),
     keys: Array.from(root.querySelectorAll<HTMLElement>('.keyboard-key'))
   };
+}
+
+function requestFocusPause(): void {
+  if (
+    focused
+    || focusPauseRequested
+    || !snapshot
+    || (snapshot.status !== 'running' && snapshot.status !== 'blockedOnError')
+  ) {
+    return;
+  }
+  focusPauseRequested = true;
+  vscode.postMessage({
+    protocolVersion: TYPING_PRACTICE_PANEL_PROTOCOL_VERSION,
+    type: 'practice/pause',
+    sessionId,
+    panelInstanceId,
+    sequence: ++controlSequence
+  });
+}
+
+function restoreFocusAfterResume(): void {
+  if (
+    !focusAfterResume
+    || !snapshot
+    || (snapshot.status !== 'ready'
+      && snapshot.status !== 'running'
+      && snapshot.status !== 'blockedOnError')
+  ) {
+    return;
+  }
+  focusAfterResume = false;
+  elements.input.focus();
+}
+
+function resetLocalActiveClock(): void {
+  localActiveElapsedMs = 0;
+  localActiveStartedAt = undefined;
+  startLocalActiveClock();
+}
+
+function startLocalActiveClock(): void {
+  if (
+    !focused
+    || !snapshot
+    || (snapshot.status !== 'running' && snapshot.status !== 'blockedOnError')
+    || localActiveStartedAt !== undefined
+  ) {
+    return;
+  }
+  localActiveStartedAt = performance.now();
+}
+
+function stopLocalActiveClock(): void {
+  if (localActiveStartedAt === undefined) return;
+  localActiveElapsedMs += Math.max(0, performance.now() - localActiveStartedAt);
+  localActiveStartedAt = undefined;
+}
+
+function currentLocalActiveElapsedMs(): number {
+  return localActiveElapsedMs + (
+    localActiveStartedAt === undefined
+      ? 0
+      : Math.max(0, performance.now() - localActiveStartedAt)
+  );
 }
 
 function keyboardRows() {

@@ -33,6 +33,16 @@
       status: 'running',
       targetIndex: 0,
       totalUnits: 3,
+      showMetrics: true,
+      metrics: {
+        activeElapsedMs: 0,
+        currentCpm: 0,
+        accuracy: 100,
+        remaining: {
+          kind: 'units',
+          remainingUnits: 3
+        }
+      },
       window: {
         start: 0,
         end: 3,
@@ -44,11 +54,22 @@
       },
       updatedAt: 1
     };
+    let currentSnapshot = baseSnapshot;
     window.acquireVsCodeApi = () => ({
       postMessage(message) {
         window.sentMessages.push(message);
         if (message.type === 'practice/ready') {
           queueMicrotask(() => window.practiceHarness.sendSnapshot(baseSnapshot));
+        } else if (message.type === 'practice/pause') {
+          queueMicrotask(() => window.practiceHarness.sendSnapshot({
+            ...currentSnapshot,
+            status: 'paused'
+          }));
+        } else if (message.type === 'practice/resume') {
+          queueMicrotask(() => window.practiceHarness.sendSnapshot({
+            ...currentSnapshot,
+            status: 'running'
+          }));
         }
       },
       getState() { return persistedState; },
@@ -58,8 +79,20 @@
       sent: () => window.sentMessages,
       clear: () => { window.sentMessages.length = 0; },
       sendSnapshot(snapshot) {
+        currentSnapshot = {
+          ...baseSnapshot,
+          ...snapshot,
+          metrics: {
+            ...baseSnapshot.metrics,
+            ...(snapshot.metrics || {})
+          }
+        };
         window.dispatchEvent(new MessageEvent('message', {
-          data: { protocolVersion: 1, type: 'practice/snapshot', snapshot }
+          data: {
+            protocolVersion: 1,
+            type: 'practice/snapshot',
+            snapshot: currentSnapshot
+          }
         }));
       },
       sendBlocked() {

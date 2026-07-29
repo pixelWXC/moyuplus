@@ -33,6 +33,7 @@ export async function run(): Promise<void> {
       }
     },
     pause: async () => undefined,
+    resume: async () => undefined,
     timeout: async () => undefined,
     reportError: error => {
       throw error;

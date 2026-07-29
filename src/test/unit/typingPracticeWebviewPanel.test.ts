@@ -93,6 +93,31 @@ describe('PracticeWebviewPanel', () => {
     await vi.waitFor(() => expect(owner.pause).toHaveBeenCalledWith('session-1'));
   });
 
+  it('routes focus-overlay pause and resume controls to the session runtime', async () => {
+    const owner = createOwner();
+    owner.panel.open('session-1');
+    const webview = window.createdWebviewPanels[0].webview;
+    await webview.receiveMessage(ready('panel-focus'));
+
+    await webview.receiveMessage({
+      protocolVersion: 1,
+      type: 'practice/pause',
+      sessionId: 'session-1',
+      panelInstanceId: 'panel-focus',
+      sequence: 2
+    });
+    await webview.receiveMessage({
+      protocolVersion: 1,
+      type: 'practice/resume',
+      sessionId: 'session-1',
+      panelInstanceId: 'panel-focus',
+      sequence: 3
+    });
+
+    expect(owner.pause).toHaveBeenCalledWith('session-1');
+    expect(owner.resume).toHaveBeenCalledWith('session-1');
+  });
+
   it('ends a timed session when the authoritative remaining time elapses', async () => {
     vi.useFakeTimers();
     try {
@@ -156,17 +181,20 @@ function createOwner(timed = false) {
   }));
   const correct = vi.fn();
   const pause = vi.fn(async () => undefined);
+  const resume = vi.fn(async () => undefined);
   const timeout = vi.fn(async () => undefined);
   return {
     snapshot,
     submit,
     correct,
     pause,
+    resume,
     timeout,
     panel: new PracticeWebviewPanel({
       extensionUri: Uri.file('/extension'),
       coordinator: { snapshot, submit, correct },
       pause,
+      resume,
       timeout,
       reportError: vi.fn()
     })

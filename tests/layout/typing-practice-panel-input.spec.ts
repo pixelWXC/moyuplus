@@ -7,7 +7,12 @@ const harness = path.resolve(
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`file:///${harness.replaceAll('\\', '/')}`);
-  await expect(page.getByRole('textbox', { name: '练习输入' })).toBeVisible();
+  const input = page.getByRole('textbox', { name: '练习输入' });
+  await expect(input).toBeVisible();
+  const prompt = page.locator('.practice-focus-prompt');
+  await expect(prompt).toBeVisible();
+  await prompt.click();
+  await expect(input).toBeEnabled();
   await page.evaluate(() => window.practiceHarness.clear());
 });
 

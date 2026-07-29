@@ -26,6 +26,10 @@ export interface PracticePanelPauseMessage extends PracticePanelMessageBase {
   type: 'practice/pause';
 }
 
+export interface PracticePanelResumeMessage extends PracticePanelMessageBase {
+  type: 'practice/resume';
+}
+
 export interface PracticePanelSubmitMessage extends PracticePanelMessageBase {
   type: 'practice/submit';
   transactionId: string;
@@ -44,6 +48,7 @@ export type PracticePanelClientMessage =
   | PracticePanelReadyMessage
   | PracticePanelRequestSnapshotMessage
   | PracticePanelPauseMessage
+  | PracticePanelResumeMessage
   | PracticePanelSubmitMessage
   | PracticePanelCorrectMessage;
 
@@ -73,6 +78,7 @@ export function decodePracticePanelClientMessage(
     case 'practice/ready':
     case 'practice/requestSnapshot':
     case 'practice/pause':
+    case 'practice/resume':
       return { ...base, type: value.type };
     case 'practice/submit':
       if (

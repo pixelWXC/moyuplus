@@ -42,6 +42,12 @@ describe('typing practice panel protocol', () => {
       sessionId: 'session-1',
       panelInstanceId: 'panel-1',
       sequence: 5
+    },
+    {
+      type: 'practice/resume',
+      sessionId: 'session-1',
+      panelInstanceId: 'panel-1',
+      sequence: 6
     }
   ])('accepts a valid $type message', message => {
     expect(decodePracticePanelClientMessage({
