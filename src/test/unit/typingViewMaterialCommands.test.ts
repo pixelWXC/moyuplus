@@ -9,14 +9,14 @@ describe('Typing View material commands', () => {
   it('keeps the configured plan and range with the selected source in the application draft', () => {
     const draft = new PracticeSetupDraft();
     draft.selectContent({
-      kind: 'builtIn',
-      materialId: 'builtin-zh-1'
+      kind: 'custom',
+      materialId: 'material-1'
     });
 
     draft.configure({
       selectedRange: {
         kind: 'article',
-        articleId: 'builtin-zh-1'
+        articleId: 'material-1'
       },
       plan: {
         completion: {
@@ -49,17 +49,17 @@ describe('Typing View material commands', () => {
 
     expect(draft.snapshot()).toEqual({
       contentRecipe: {
-        kind: 'builtIn',
-        materialId: 'builtin-zh-1'
+        kind: 'custom',
+        materialId: 'material-1'
       },
       selectedRange: {
         kind: 'article',
-        articleId: 'builtin-zh-1'
+        articleId: 'material-1'
       },
       plan: {
         contentRecipe: {
-          kind: 'builtIn',
-          materialId: 'builtin-zh-1'
+          kind: 'custom',
+          materialId: 'material-1'
         },
         completion: {
           kind: 'timed',
@@ -109,13 +109,13 @@ describe('Typing View material commands', () => {
     });
 
     await commands.selectMaterial({
-      materialId: 'builtin-zh-1',
-      materialOrigin: 'builtIn'
+      materialId: 'custom-1',
+      materialOrigin: 'custom'
     });
     expect(draft.snapshot()).toEqual({
       contentRecipe: {
-        kind: 'builtIn',
-        materialId: 'builtin-zh-1'
+        kind: 'custom',
+        materialId: 'custom-1'
       }
     });
 
@@ -143,7 +143,7 @@ describe('Typing View material commands', () => {
 
   it('rejects empty pasted content without replacing the current draft', async () => {
     const draft = new PracticeSetupDraft();
-    draft.selectContent({ kind: 'builtIn', materialId: 'keep-me' });
+    draft.selectContent({ kind: 'custom', materialId: 'keep-me' });
     const reportError = vi.fn(async () => undefined);
     const commands = new TypingViewMaterialCommands({
       draft,
@@ -161,7 +161,7 @@ describe('Typing View material commands', () => {
       message: 'Practice content is empty.'
     }));
     expect(draft.snapshot()).toEqual({
-      contentRecipe: { kind: 'builtIn', materialId: 'keep-me' }
+      contentRecipe: { kind: 'custom', materialId: 'keep-me' }
     });
   });
 
@@ -240,8 +240,8 @@ describe('Typing View material commands', () => {
     const reportError = vi.fn(async () => undefined);
     const epubImporter = {
       listChapters: vi.fn(async () => [
-        { id: 'chapter-1', title: '第一章' },
-        { id: 'chapter-2', title: '第二章' }
+        { id: 'chapter-1', title: '第一章', graphemes: 100 },
+        { id: 'chapter-2', title: '第二章', graphemes: 200 }
       ]),
       import: vi.fn()
         .mockResolvedValueOnce(undefined)

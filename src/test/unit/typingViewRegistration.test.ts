@@ -28,7 +28,6 @@ describe('Typing View registration', () => {
         recovery: null,
         content: {
           kind: 'materials' as const,
-          builtIn: [],
           library: [],
           actions: {
             paste: true,

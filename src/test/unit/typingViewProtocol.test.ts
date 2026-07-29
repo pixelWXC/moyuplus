@@ -15,7 +15,7 @@ const envelope = {
 describe('Typing View protocol', () => {
   it('owns a distinct view id, protocol version and complete page set', () => {
     expect(TYPING_VIEW_ID).toBe('moyuplus.typingView');
-    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(10);
+    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(11);
     expect(TYPING_VIEW_PAGES).toEqual([
       'materials',
       'recent',
@@ -93,10 +93,10 @@ describe('Typing View protocol', () => {
     expect(isTypingViewToHostMessage({
       ...envelope,
       type: 'selectMaterial',
-      requestId: 'select-built-in',
+      requestId: 'select-custom',
       clientRevision: 1,
-      materialId: 'builtin-zh-1',
-      materialOrigin: 'builtIn'
+      materialId: 'custom-1',
+      materialOrigin: 'custom'
     })).toBe(true);
     expect(isTypingViewToHostMessage({
       ...envelope,
@@ -122,6 +122,14 @@ describe('Typing View protocol', () => {
       clientRevision: 1,
       materialId: '../catalog',
       materialOrigin: 'custom'
+    })).toBe(false);
+    expect(isTypingViewToHostMessage({
+      ...envelope,
+      type: 'selectMaterial',
+      requestId: 'removed-origin',
+      clientRevision: 1,
+      materialId: 'legacy-entry',
+      materialOrigin: 'builtIn'
     })).toBe(false);
     expect(isTypingViewToHostMessage({
       ...envelope,
@@ -451,7 +459,6 @@ describe('Typing View protocol', () => {
         },
         content: {
           kind: 'materials',
-          builtIn: [],
           library: [],
           actions: {
             paste: true,
@@ -542,7 +549,6 @@ describe('Typing View protocol', () => {
         recovery: null,
         content: {
           kind: 'materials',
-          builtIn: [],
           library: [],
           actions: {
             paste: true,
@@ -554,6 +560,16 @@ describe('Typing View protocol', () => {
     };
 
     expect(isHostToTypingViewMessage(message)).toBe(true);
+    expect(isHostToTypingViewMessage({
+      ...message,
+      snapshot: {
+        ...message.snapshot,
+        content: {
+          ...message.snapshot.content,
+          builtIn: []
+        }
+      }
+    })).toBe(false);
     expect(isHostToTypingViewMessage({
       ...message,
       snapshot: {

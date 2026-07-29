@@ -44,7 +44,7 @@ const pageCopy: Record<TypingViewPage, {
   materials: {
     label: '素材',
     title: '选择练习内容',
-    description: '从内置素材、自定义素材、导入内容或自由练习开始。'
+    description: '从自定义素材、导入内容或自由练习开始。'
   },
   recent: {
     label: '最近',

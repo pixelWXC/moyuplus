@@ -74,7 +74,6 @@ describe('legacy resume hint in Typing View', () => {
         legacyResumeHint: hint,
         content: {
           kind: 'materials',
-          builtIn: [],
           library: [],
           actions: { paste: true, importTxt: true, importEpub: true }
         }
@@ -116,7 +115,6 @@ describe('legacy resume hint in Typing View', () => {
         content: activePage === 'materials'
           ? {
             kind: 'materials' as const,
-            builtIn: [],
             library: [],
             actions: { paste: true, importTxt: true, importEpub: true }
           }

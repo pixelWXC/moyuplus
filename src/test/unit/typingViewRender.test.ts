@@ -21,28 +21,9 @@ describe('Typing View page rendering', () => {
     expect(html).not.toContain('session-');
   });
 
-  it('renders material actions and separates built-in content from the user library', () => {
+  it('renders material actions and the user library', () => {
     const content: TypingViewPageContent = {
       kind: 'materials',
-      builtIn: [{
-        id: 'zh-1',
-        revision: 'v1',
-        title: '清晨',
-        origin: 'builtIn',
-        profileKey: 'chinese.modernArticle',
-        tags: ['中文', '文章'],
-        counts: {
-          graphemes: 120,
-          hanGraphemes: 110,
-          englishWords: 0,
-          printableUnits: 118
-        },
-        estimatedSeconds: 70,
-        sourceNotice: {
-          license: 'CC0-1.0',
-          attribution: 'MoyuPlus original practice content'
-        }
-      }],
       library: [{
         id: 'mine-1',
         revision: 'v2',
@@ -73,12 +54,8 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('开始设置');
     expect(html).toContain('导入 TXT');
     expect(html).toContain('导入 EPUB');
-    expect(html).toContain('内置素材 <span class="section-count">1</span>');
     expect(html).toContain('我的素材 <span class="section-count">1</span>');
-    expect(html).toContain('data-material-id="zh-1"');
-    expect(html).toContain('中文文章');
-    expect(html).toContain('约 2 分钟');
-    expect(html).toContain('CC0-1.0');
+    expect(html).not.toContain('内置素材');
     expect(html).toContain('data-material-id="mine-1"');
     expect(html).toContain('TXT 导入');
   });
@@ -86,7 +63,6 @@ describe('Typing View page rendering', () => {
   it('escapes host-provided material text and teaches an empty library how to start', () => {
     const html = renderTypingPageContent({
       kind: 'materials',
-      builtIn: [],
       library: [{
         id: 'unsafe" onclick="alert(1)',
         revision: 'v1',
@@ -116,7 +92,6 @@ describe('Typing View page rendering', () => {
 
     expect(renderTypingPageContent({
       kind: 'materials',
-      builtIn: [],
       library: [],
       actions: {
         paste: true,

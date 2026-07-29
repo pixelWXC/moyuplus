@@ -62,9 +62,7 @@ export class TypingViewMaterialCommands {
     materialOrigin: MaterialOrigin;
   }): Promise<boolean> {
     this.options.draft.selectContent(
-      input.materialOrigin === 'builtIn'
-        ? { kind: 'builtIn', materialId: input.materialId }
-        : { kind: 'custom', materialId: input.materialId }
+      { kind: 'custom', materialId: input.materialId }
     );
     return true;
   }
@@ -140,7 +138,9 @@ export class TypingViewMaterialCommands {
     try {
       const chapters = await this.options.epubImporter.listChapters(file.sourceUri);
       if (chapters.length === 0) {
-        throw new Error('EPUB contains no readable practice chapters.');
+        throw new Error(
+          'EPUB 中没有可用于打字练习的文本章节；纯图片章节需要先进行 OCR。'
+        );
       }
       const chapterIds = await this.options.selectEpubChapters(chapters);
       if (!chapterIds || chapterIds.length === 0) return false;

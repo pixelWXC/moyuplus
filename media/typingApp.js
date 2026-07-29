@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/typing/adapters/view/typingViewProtocol.ts
-  var TYPING_VIEW_PROTOCOL_VERSION = 10;
+  var TYPING_VIEW_PROTOCOL_VERSION = 11;
   var TYPING_VIEW_PAGES = [
     "materials",
     "recent",
@@ -108,7 +108,7 @@
       return activePage !== "materials" && hasOnlyKeys(value, ["kind", "page"]) && value.page === activePage;
     }
     if (activePage === "materials") {
-      return value.kind === "materials" && hasOnlyKeys(value, ["kind", "builtIn", "library", "actions"]) && Array.isArray(value.builtIn) && value.builtIn.every(isTypingViewMaterialSummary) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
+      return value.kind === "materials" && hasOnlyKeys(value, ["kind", "library", "actions"]) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
     }
     if (activePage !== "setup" || value.kind !== "setup") return false;
     const selectedRange = value.selectedRange;
@@ -292,7 +292,7 @@
     return value === "completed" || value === "timedOut" || value === "abandoned" || value === "restarted";
   }
   function isTypingViewMaterialOrigin(value) {
-    return value === "builtIn" || value === "custom" || value === "txtImport" || value === "epubImport" || value === "readerBook" || value === "generated" || value === "mastery" || value === "adHoc";
+    return value === "custom" || value === "txtImport" || value === "epubImport" || value === "readerBook" || value === "generated" || value === "mastery" || value === "adHoc";
   }
   function isTypingViewPage(value) {
     return typeof value === "string" && TYPING_VIEW_PAGES.includes(value);
@@ -391,7 +391,6 @@
     "mastery.mixed": "\u7EFC\u5408\u5F3A\u5316"
   };
   var originLabels = {
-    builtIn: "\u5185\u7F6E",
     custom: "\u81EA\u5B9A\u4E49",
     txtImport: "TXT \u5BFC\u5165",
     epubImport: "EPUB \u5BFC\u5165",
@@ -466,7 +465,6 @@
     return `
     <section class="materials-page" aria-label="\u7EC3\u4E60\u7D20\u6750">
       ${renderMaterialActions(content.actions)}
-      ${renderMaterialSection("\u5185\u7F6E\u7D20\u6750", content.builtIn, "")}
       ${renderMaterialSection(
       "\u6211\u7684\u7D20\u6750",
       content.library,
@@ -925,7 +923,7 @@
     materials: {
       label: "\u7D20\u6750",
       title: "\u9009\u62E9\u7EC3\u4E60\u5185\u5BB9",
-      description: "\u4ECE\u5185\u7F6E\u7D20\u6750\u3001\u81EA\u5B9A\u4E49\u7D20\u6750\u3001\u5BFC\u5165\u5185\u5BB9\u6216\u81EA\u7531\u7EC3\u4E60\u5F00\u59CB\u3002"
+      description: "\u4ECE\u81EA\u5B9A\u4E49\u7D20\u6750\u3001\u5BFC\u5165\u5185\u5BB9\u6216\u81EA\u7531\u7EC3\u4E60\u5F00\u59CB\u3002"
     },
     recent: {
       label: "\u6700\u8FD1",

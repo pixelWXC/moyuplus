@@ -1,5 +1,4 @@
 export * from './AdHocContentProvider';
-export * from './BuiltInPackProvider';
 export * from './CustomMaterialProvider';
 export * from './CustomMaterialWriter';
 export * from './EpubMaterialImporter';

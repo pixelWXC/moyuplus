@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { BookAdapter } from '../../../adapters/bookAdapter';
+import type {
+  BookAdapter,
+  BookHandle,
+  SectionRef,
+  TocNode
+} from '../../../adapters/bookAdapter';
 import { EpubAdapter } from '../../../adapters/epub/epubAdapter';
 import {
   BOOK_SCHEMA_VERSION,
@@ -26,6 +31,7 @@ export interface EpubMaterialImportRequest {
 export interface EpubMaterialChapterSummary {
   id: string;
   title: string;
+  graphemes: number;
 }
 
 export interface EpubMaterialImporterOptions {
@@ -65,12 +71,26 @@ export class EpubMaterialImporter {
       updatedAt: now
     });
     try {
-      return (await handle.getSections())
-        .sort((left, right) => left.order - right.order)
-        .map((section, index) => ({
+      const [sections, toc] = await Promise.all([
+        handle.getSections(),
+        handle.getToc()
+      ]);
+      const tocTitles = indexTocTitles(toc);
+      const summaries: EpubMaterialChapterSummary[] = [];
+      for (const section of sections.sort((left, right) => left.order - right.order)) {
+        const extracted = await extractPracticeChapter(handle, section);
+        if (extracted.text.length === 0) continue;
+        summaries.push({
           id: section.id,
-          title: section.title?.trim() || `章节 ${index + 1}`
-        }));
+          title: practiceChapterTitle(
+            section,
+            tocTitles,
+            summaries.length
+          ),
+          graphemes: countGraphemes(extracted.text)
+        });
+      }
+      return summaries;
     } finally {
       handle.dispose();
     }
@@ -96,8 +116,12 @@ export class EpubMaterialImporter {
     };
     const handle = await this.adapter.open(temporaryBook);
     try {
-      const availableSections = (await handle.getSections())
-        .sort((left, right) => left.order - right.order);
+      const [availableSections, toc] = await Promise.all([
+        handle.getSections(),
+        handle.getToc()
+      ]);
+      availableSections.sort((left, right) => left.order - right.order);
+      const tocTitles = indexTocTitles(toc);
       const requestedChapterIds = request.chapterIds
         ? new Set(request.chapterIds)
         : undefined;
@@ -114,30 +138,32 @@ export class EpubMaterialImporter {
         throw new Error('One or more selected EPUB chapters are unavailable.');
       }
       if (sections.length === 0) {
-        throw new Error('EPUB contains no readable practice chapters.');
+        throw new Error('EPUB 中没有可读取的练习章节。');
       }
       const chapterTexts: string[] = [];
       const chapterRevisions: string[] = [];
       const chapters: MaterialChapterIndex[] = [];
       let offset = 0;
       for (const section of sections) {
-        const safe = await handle.getSection(section.id);
-        const text = normalizeMaterialText(safe.immersiveProjection.text);
+        const extracted = await extractPracticeChapter(handle, section);
+        const { text } = extracted;
         if (text.length === 0) continue;
         if (chapterTexts.length > 0) offset += 2;
         const start = offset;
         offset += text.length;
         chapterTexts.push(text);
-        chapterRevisions.push(safe.sourceRevision);
+        chapterRevisions.push(extracted.sourceRevision);
         chapters.push({
           id: section.id,
-          title: section.title,
+          title: practiceChapterTitle(section, tocTitles, chapters.length),
           start,
           end: offset
         });
       }
       if (chapterTexts.length === 0) {
-        throw new Error('EPUB contains no non-empty practice chapters.');
+        throw new Error(
+          '所选 EPUB 章节没有可用于打字练习的文本；纯图片章节需要先进行 OCR。'
+        );
       }
 
       const normalizedText = chapterTexts.join('\n\n');
@@ -180,4 +206,49 @@ export class EpubMaterialImporter {
       handle.dispose();
     }
   }
+}
+
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: 'grapheme'
+});
+
+async function extractPracticeChapter(
+  handle: BookHandle,
+  section: SectionRef
+): Promise<{ text: string; sourceRevision: string }> {
+  const safe = await handle.getSection(section.id);
+  return {
+    text: normalizeMaterialText(safe.immersiveProjection.text),
+    sourceRevision: safe.sourceRevision
+  };
+}
+
+function indexTocTitles(nodes: readonly TocNode[]): ReadonlyMap<string, string> {
+  const titles = new Map<string, string>();
+  const visit = (node: TocNode, ancestors: readonly string[]): void => {
+    const ownTitle = node.title.trim();
+    const path = ownTitle.length > 0
+      ? [...ancestors, ownTitle]
+      : [...ancestors];
+    if (!titles.has(node.sectionId) && path.length > 0) {
+      titles.set(node.sectionId, [...new Set(path)].join(' · '));
+    }
+    for (const child of node.children ?? []) visit(child, path);
+  };
+  for (const node of nodes) visit(node, []);
+  return titles;
+}
+
+function practiceChapterTitle(
+  section: SectionRef,
+  tocTitles: ReadonlyMap<string, string>,
+  fallbackIndex: number
+): string {
+  return tocTitles.get(section.id)
+    || section.title?.trim()
+    || `章节 ${fallbackIndex + 1}`;
+}
+
+function countGraphemes(text: string): number {
+  return [...graphemeSegmenter.segment(text)].length;
 }

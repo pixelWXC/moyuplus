@@ -17,7 +17,11 @@ describe('typing legacy-stack removal', () => {
     'src/test/unit/typingPracticeIntegration.test.ts',
     'src/typing/registration/editorRegistration.ts',
     'src/test/extensionHost/typingPracticeEditorHost.ts',
-    'src/test/extensionHost/typingPracticeImeManual.ts'
+    'src/test/extensionHost/typingPracticeImeManual.ts',
+    'src/typing/assets/builtInPack.ts',
+    'src/typing/assets/index.ts',
+    'src/typing/adapters/sources/BuiltInPackProvider.ts',
+    'src/test/unit/typingBuiltInContent.test.ts'
   ])('removes %s', async relativePath => {
     await expect(access(path.join(projectRoot, relativePath)))
       .rejects.toThrow();
@@ -42,4 +46,30 @@ describe('typing legacy-stack removal', () => {
     expect(combined).not.toContain('moyuplus.typing.tabMode');
     expect(combined).not.toContain('nextPracticeLine');
   });
+
+  it('keeps the production typing stack free of the removed built-in material contract', async () => {
+    const files = [
+      'src/extension.ts',
+      ...await collectTypeScriptFiles(path.join(projectRoot, 'src/typing')),
+      'src/webview/typingApp.ts',
+      'src/webview/typingViewRender.ts'
+    ];
+    const combined = (await Promise.all(files.map(file => (
+      readFile(path.isAbsolute(file) ? file : path.join(projectRoot, file), 'utf8')
+    )))).join('\n');
+
+    expect(combined).not.toMatch(/BuiltInPack|builtIn|内置素材/);
+  });
 });
+
+async function collectTypeScriptFiles(directory: string): Promise<string[]> {
+  const entries = await import('node:fs/promises').then(fs =>
+    fs.readdir(directory, { withFileTypes: true })
+  );
+  const nested = await Promise.all(entries.map(entry => {
+    const value = path.join(directory, entry.name);
+    if (entry.isDirectory()) return collectTypeScriptFiles(value);
+    return entry.isFile() && entry.name.endsWith('.ts') ? [value] : [];
+  }));
+  return nested.flat();
+}

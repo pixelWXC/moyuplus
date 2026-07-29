@@ -86,10 +86,54 @@ describe('typing content providers and imports', () => {
       });
   });
 
+  it('lists only non-empty EPUB practice chapters and keeps hierarchical TOC titles', async () => {
+    const catalog = await createCatalog();
+    const dispose = vi.fn();
+    const adapter = {
+      format: 'epub',
+      inspect: async () => ({ title: '分离扉页与正文', authors: [] }),
+      open: async () => ({
+        getToc: async () => [{
+          title: '第一章',
+          sectionId: 'chapter-title',
+          children: [{
+            title: '1',
+            sectionId: 'chapter-body'
+          }]
+        }],
+        getSections: async () => [
+          { id: 'cover', order: 0, progressionWeight: 1 },
+          { id: 'chapter-title', order: 1, progressionWeight: 1 },
+          { id: 'chapter-body', order: 2, progressionWeight: 1 }
+        ],
+        getSection: async (id: string) => safeSection(
+          id,
+          id === 'chapter-body' ? '正文😀' : '　'
+        ),
+        dispose
+      })
+    } as unknown as BookAdapter;
+    const importer = new EpubMaterialImporter(catalog, {
+      adapter,
+      createId: () => 'epub-preview-1',
+      now: () => 2_000
+    });
+
+    await expect(importer.listChapters('file:///split.epub')).resolves.toEqual([
+      {
+        id: 'chapter-body',
+        title: '第一章 · 1',
+        graphemes: 3
+      }
+    ]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('imports only safe EPUB chapter text and records a managed chapter index', async () => {
     const catalog = await createCatalog();
     const dispose = vi.fn();
     const handle = {
+      getToc: vi.fn(async () => []),
       getSections: vi.fn(async () => [
         { id: 'chapter-1', title: '一', order: 0, progressionWeight: 3 },
         { id: 'chapter-2', title: '二', order: 1, progressionWeight: 3 }
@@ -141,6 +185,7 @@ describe('typing content providers and imports', () => {
       format: 'epub',
       inspect: async () => ({ title: 'English book', authors: [] }),
       open: async () => ({
+        getToc: async () => [],
         getSections: async () => [
           { id: 'chapter-1', order: 0, progressionWeight: 1 }
         ],
@@ -173,6 +218,7 @@ describe('typing content providers and imports', () => {
       format: 'epub',
       inspect: async () => ({ title: '章节选择', authors: [] }),
       open: async () => ({
+        getToc: async () => [],
         getSections: async () => [
           { id: 'selected', title: '选中章', order: 0, progressionWeight: 1 },
           { id: 'oversized', title: '超长章', order: 1, progressionWeight: 1 }
@@ -210,6 +256,7 @@ describe('typing content providers and imports', () => {
       format: 'epub',
       inspect: vi.fn(async () => ({ title: '损坏书籍', authors: [] })),
       open: vi.fn(async () => ({
+        getToc: async () => [],
         getSections: async () => [
           { id: 'chapter-1', order: 0, progressionWeight: 1 },
           { id: 'chapter-2', order: 1, progressionWeight: 1 }

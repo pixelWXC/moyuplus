@@ -67,7 +67,6 @@ import {
 import { PracticeWebviewPanel } from './typing/adapters/panel';
 import {
   AdHocContentProvider,
-  BuiltInPackProvider,
   CustomMaterialProvider,
   EpubMaterialImporter,
   TxtMaterialImporter
@@ -173,7 +172,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [typingHistory, typingDaily, typingMastery]
   );
   const typingContentProviders = [
-    new BuiltInPackProvider(),
     new CustomMaterialProvider(typingContentCatalog),
     new ReaderBookSourceProvider(books, adapters),
     new AdHocContentProvider()
@@ -463,13 +461,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const selected = await vscode.window.showQuickPick(
         chapters.map((chapter, index) => ({
           label: chapter.title,
-          description: `第 ${index + 1} 章`,
+          description: `第 ${index + 1} 章 · ${chapter.graphemes.toLocaleString()} 个可练习字符`,
           chapterId: chapter.id,
-          picked: true
+          picked: false
         })),
         {
           canPickMany: true,
-          placeHolder: '选择要导入并用于长度校验的 EPUB 章节',
+          placeHolder: '选择要导入的文本章节（合计不超过 200,000 个字符）',
           title: '选择练习章节'
         }
       );

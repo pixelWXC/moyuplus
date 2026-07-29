@@ -186,14 +186,12 @@ describe('extension activation', () => {
         activePage: 'materials',
         content: expect.objectContaining({
           kind: 'materials',
-          builtIn: expect.arrayContaining([
-            expect.objectContaining({
-              origin: 'builtIn'
-            })
-          ])
+          library: []
         })
       })
     }));
+    expect(view.webview.postedMessages[0]?.snapshot?.content)
+      .not.toHaveProperty('builtIn');
   });
 
   it('routes the Reader shelf typing action into the new Typing View setup', async () => {
@@ -338,7 +336,7 @@ describe('extension activation', () => {
     }
   });
 
-  it('inspects a selected built-in source into an authoritative setup snapshot', async () => {
+  it('inspects pasted text into an authoritative setup snapshot', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-setup-'));
     temporaryRoots.push(root);
     await activate({
@@ -358,20 +356,13 @@ describe('extension activation', () => {
       instanceId: 'typing-view-setup',
       type: 'typingReady'
     });
-    const materials = view.webview.postedMessages[0]?.snapshot?.content;
-    const materialId = materials?.kind === 'materials'
-      ? materials.builtIn[0]?.id
-      : undefined;
-    expect(materialId).toBeTruthy();
-
     await view.webview.receiveMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
       instanceId: 'typing-view-setup',
-      type: 'selectMaterial',
-      requestId: 'select-setup-source',
+      type: 'usePastedText',
+      requestId: 'paste-setup-source',
       clientRevision: 1,
-      materialId,
-      materialOrigin: 'builtIn'
+      text: '清晨的街道逐渐醒来。'
     });
 
     expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
@@ -417,18 +408,13 @@ describe('extension activation', () => {
       instanceId: 'typing-view-defaults',
       type: 'typingReady'
     });
-    const materials = view.webview.postedMessages[0]?.snapshot?.content;
-    const material = materials?.kind === 'materials'
-      ? materials.builtIn[0]
-      : undefined;
     await view.webview.receiveMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
       instanceId: 'typing-view-defaults',
-      type: 'selectMaterial',
-      requestId: 'select-default-source',
+      type: 'usePastedText',
+      requestId: 'paste-default-source',
       clientRevision: 1,
-      materialId: material?.id,
-      materialOrigin: 'builtIn'
+      text: '保存这一段自由练习作为默认设置测试。'
     });
     const setup = view.webview.postedMessages.at(-1)?.snapshot?.content;
     expect(setup?.kind).toBe('setup');
@@ -508,19 +494,13 @@ describe('extension activation', () => {
       instanceId: 'typing-view-start',
       type: 'typingReady'
     });
-    const materials = view.webview.postedMessages[0]?.snapshot?.content;
-    const material = materials?.kind === 'materials'
-      ? materials.builtIn[0]
-      : undefined;
-    expect(material).toBeTruthy();
     await view.webview.receiveMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
       instanceId: 'typing-view-start',
-      type: 'selectMaterial',
-      requestId: 'select-start-source',
+      type: 'usePastedText',
+      requestId: 'paste-start-source',
       clientRevision: 1,
-      materialId: material?.id,
-      materialOrigin: 'builtIn'
+      text: '开始一段可以稳定完成的自由练习。'
     });
     const setup = view.webview.postedMessages.at(-1)?.snapshot?.content;
     expect(setup?.kind).toBe('setup');

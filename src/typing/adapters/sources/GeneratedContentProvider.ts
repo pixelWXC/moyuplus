@@ -1,9 +1,4 @@
 import { createHash } from 'node:crypto';
-import {
-  BUILT_IN_PACK_MANIFEST,
-  type BuiltInPackEntry,
-  type BuiltInPackManifest
-} from '../../assets';
 import type {
   ContentDescriptor,
   ContentProfile,
@@ -21,11 +16,9 @@ import {
 } from '../../domain/generators';
 
 export class GeneratedContentProvider implements ContentProvider {
-  private readonly pools: GeneratorPools;
-
-  constructor(manifest: BuiltInPackManifest = BUILT_IN_PACK_MANIFEST) {
-    this.pools = createPools(manifest);
-  }
+  constructor(
+    private readonly pools: GeneratorPools = DEFAULT_GENERATOR_POOLS
+  ) {}
 
   canResolve(recipe: ContentRecipe): boolean {
     return recipe.kind === 'generated' && recipe.generator !== 'mastery';
@@ -73,46 +66,60 @@ export class GeneratedContentProvider implements ContentProvider {
   }
 }
 
-function createPools(manifest: BuiltInPackManifest): GeneratorPools {
-  const byProfile = (predicate: (entry: BuiltInPackEntry) => boolean): string[] => (
-    manifest.entries.filter(predicate).flatMap(entry => splitEntry(entry))
-  );
-  const category = (kind: ContentProfile['kind'], value: string) => (
-    (entry: BuiltInPackEntry) => entry.contentProfile.kind === kind
-      && 'category' in entry.contentProfile
-      && entry.contentProfile.category === value
-  );
-  return {
-    commonSentences: byProfile(category('chinese', 'commonSentence')),
-    englishWords: byProfile(category('english', 'word')),
-    englishSentences: byProfile(category('english', 'sentence')),
-    mixedProgrammer: byProfile(category('mixed', 'programmer')),
-    mixedOffice: byProfile(category('mixed', 'office')),
-    frequentHanzi: byProfile(category('randomChinese', 'frequentHanzi'))
-      .flatMap(value => Array.from(value)),
-    idiom: byProfile(category('randomChinese', 'idiom')),
-    phrase: byProfile(category('randomChinese', 'phrase')),
-    punctuation: byProfile(category('numberSymbol', 'punctuation'))
-      .flatMap(value => Array.from(value)),
-    specialSymbol: byProfile(category('numberSymbol', 'specialSymbol'))
-      .flatMap(value => Array.from(value)),
-    code: byProfile(entry => entry.contentProfile.kind === 'code')
-  };
-}
-
-function splitEntry(entry: BuiltInPackEntry): string[] {
-  if (entry.contentProfile.kind === 'code') {
-    return entry.body.split('\n\n---\n\n').filter(Boolean);
-  }
-  if (
-    (entry.contentProfile.kind === 'randomChinese'
-      && entry.contentProfile.category === 'frequentHanzi')
-    || entry.contentProfile.kind === 'numberSymbol'
-  ) {
-    return [entry.body];
-  }
-  return entry.body.split('\n').filter(Boolean);
-}
+const DEFAULT_GENERATOR_POOLS: GeneratorPools = {
+  commonSentences: [
+    '清晨的街道从安静中醒来。',
+    '认真记录可以让变化更容易被发现。',
+    '稳定的节奏比短暂的速度更重要。',
+    '明确的目标能够减少重复沟通。',
+    '每次练习都从一个准确的按键开始。'
+  ],
+  englishWords: [
+    'about', 'active', 'build', 'clear', 'design', 'focus', 'learn', 'practice',
+    'reliable', 'result', 'stable', 'system', 'typing', 'useful', 'version'
+  ],
+  englishSentences: [
+    'A careful reader notices small changes.',
+    'Clear notes keep every decision visible.',
+    'Practice turns a difficult action into a habit.',
+    'Reliable systems make recovery predictable.',
+    'The next step should always be easy to find.'
+  ],
+  mixedProgrammer: [
+    '运行 npm test 后检查 result。',
+    '更新 API_STATUS 并记录 revision。',
+    '打开 src/main.ts 查看错误位置。',
+    '确认 build 成功，再提交 change。',
+    '检查 keyboard event 与输入法状态。'
+  ],
+  mixedOffice: [
+    '请在 09:30 前确认 Meeting 议程。',
+    '订单 PO-1001 的金额为 ¥128.00。',
+    '将 Report v2 发送给项目成员。',
+    '本周 Progress 已更新 80%。',
+    '请确认 2026-08-01 的交付安排。'
+  ],
+  frequentHanzi: Array.from(
+    '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说'
+  ),
+  idiom: [
+    '一心一意', '循序渐进', '持之以恒', '有条不紊', '实事求是',
+    '精益求精', '脚踏实地', '集思广益', '学以致用', '迎难而上'
+  ],
+  phrase: [
+    '清晰目标', '稳定节奏', '认真观察', '准确表达', '有效反馈',
+    '可靠结果', '版本记录', '键盘操作', '练习计划', '异常恢复'
+  ],
+  punctuation: Array.from('，。！？；：“”‘’、（）《》【】…—'),
+  specialSymbol: Array.from('~`@#$%^&*_-+=|\\/<>{}[]'),
+  code: [
+    'const total = values.reduce((sum, value) => sum + value, 0);',
+    'function greet(name) {\n  return `Hello, ${name}!`;\n}',
+    'type Status = "idle" | "running" | "done";',
+    '<main><h1>Practice</h1></main>',
+    '.card { display: grid; gap: 1rem; }'
+  ]
+};
 
 function profileFor(generator: DeterministicGeneratorKind): ContentProfile {
   switch (generator) {

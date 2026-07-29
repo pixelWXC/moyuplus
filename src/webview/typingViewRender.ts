@@ -33,7 +33,6 @@ const profileLabels: Readonly<Record<string, string>> = {
 };
 
 const originLabels = {
-  builtIn: '内置',
   custom: '自定义',
   txtImport: 'TXT 导入',
   epubImport: 'EPUB 导入',
@@ -128,7 +127,6 @@ export function renderTypingPageContent(content: TypingViewPageContent): string 
   return `
     <section class="materials-page" aria-label="练习素材">
       ${renderMaterialActions(content.actions)}
-      ${renderMaterialSection('内置素材', content.builtIn, '')}
       ${renderMaterialSection(
         '我的素材',
         content.library,

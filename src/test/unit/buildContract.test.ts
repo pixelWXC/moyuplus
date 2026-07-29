@@ -42,7 +42,10 @@ describe('dual-target build contract', () => {
     expect(ignore).toMatch(/^src\/test\/$/m);
     expect(ignore).toMatch(/^tests\/$/m);
     expect(ignore).toMatch(/^test-results\/$/m);
-    expect(ignore).toMatch(/^docs\/$/m);
+    expect(ignore).toMatch(/^docs\/\*\*$/m);
+    expect(ignore).toMatch(/^!docs\/typing-practice-settings\.md$/m);
+    expect(ignore).toMatch(/^!docs\/typing-practice-migration\.md$/m);
+    expect(ignore).toMatch(/^!docs\/typing-practice-verification\.md$/m);
     expect(ignore).toMatch(/^\.superpowers\/$/m);
     expect(ignore).toMatch(/^\*\*\/\*\.epub$/m);
     expect(ignore).toMatch(/^\*\*\/\*\.txt$/m);

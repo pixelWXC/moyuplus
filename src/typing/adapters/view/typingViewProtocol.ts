@@ -1,5 +1,5 @@
 export const TYPING_VIEW_ID = 'moyuplus.typingView';
-export const TYPING_VIEW_PROTOCOL_VERSION = 10 as const;
+export const TYPING_VIEW_PROTOCOL_VERSION = 11 as const;
 
 export const TYPING_VIEW_PAGES = [
   'materials',
@@ -33,7 +33,6 @@ export type TypingViewSessionStatus =
   | 'abandoned';
 
 export type TypingViewMaterialOrigin =
-  | 'builtIn'
   | 'custom'
   | 'txtImport'
   | 'epubImport'
@@ -263,7 +262,6 @@ export interface TypingViewMasteryContent {
 export type TypingViewPageContent =
   | {
     kind: 'materials';
-    builtIn: readonly TypingViewMaterialSummary[];
     library: readonly TypingViewMaterialSummary[];
     actions: {
       paste: boolean;
@@ -680,9 +678,7 @@ function isTypingViewPageContent(
   }
   if (activePage === 'materials') {
     return value.kind === 'materials'
-    && hasOnlyKeys(value, ['kind', 'builtIn', 'library', 'actions'])
-    && Array.isArray(value.builtIn)
-    && value.builtIn.every(isTypingViewMaterialSummary)
+    && hasOnlyKeys(value, ['kind', 'library', 'actions'])
     && Array.isArray(value.library)
     && value.library.every(isTypingViewMaterialSummary)
     && isRecord(value.actions)
@@ -1065,8 +1061,7 @@ function isPracticeOutcome(value: unknown): boolean {
 }
 
 function isTypingViewMaterialOrigin(value: unknown): value is TypingViewMaterialOrigin {
-  return value === 'builtIn'
-    || value === 'custom'
+  return value === 'custom'
     || value === 'txtImport'
     || value === 'epubImport'
     || value === 'readerBook'

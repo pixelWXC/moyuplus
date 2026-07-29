@@ -16,12 +16,12 @@ import {
 describe('typing public contracts', () => {
   it('keeps the five plan axes orthogonal in the default Chinese article plan', () => {
     const plan = createDefaultPracticePlan({
-      contentRecipe: { kind: 'builtIn', materialId: 'zh-modern-001' },
+      contentRecipe: { kind: 'custom', materialId: 'article-001' },
       contentProfile: { kind: 'chinese', category: 'modernArticle' }
     });
 
     expect(plan).toEqual({
-      contentRecipe: { kind: 'builtIn', materialId: 'zh-modern-001' },
+      contentRecipe: { kind: 'custom', materialId: 'article-001' },
       completion: { kind: 'sourceRange', range: 'article' },
       evaluation: { errorPolicy: 'block' },
       textPolicy: {

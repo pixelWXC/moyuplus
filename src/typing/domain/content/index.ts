@@ -8,7 +8,6 @@ import type {
 export const TYPING_SCHEMA_VERSION = 1;
 
 export type MaterialOrigin =
-  | 'builtIn'
   | 'custom'
   | 'txtImport'
   | 'epubImport'
@@ -48,7 +47,6 @@ export type ContentProfile =
   };
 
 export type MaterialSourceRef =
-  | { kind: 'builtIn'; packId: string; entryId: string }
   | { kind: 'managed'; bodyRevision: string }
   | { kind: 'txtImport'; originalUri?: string; encoding: string }
   | { kind: 'epubImport'; originalUri?: string; chapterIds: string[] }
@@ -104,7 +102,6 @@ export type GeneratorKind =
   | 'mastery';
 
 export type ContentRecipe =
-  | { kind: 'builtIn'; materialId: string }
   | { kind: 'custom'; materialId: string }
   | { kind: 'readerBook'; bookId: string; suggestedSectionId?: string }
   | { kind: 'generated'; generator: GeneratorKind; seed: string; length?: number }

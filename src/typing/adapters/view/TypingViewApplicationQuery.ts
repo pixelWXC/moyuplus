@@ -1,10 +1,5 @@
 import {
-  BUILT_IN_PACK_MANIFEST,
-  type BuiltInPackManifest
-} from '../../assets';
-import {
   createDefaultPracticePlan,
-  preparePracticeContent,
   type ContentDescriptor,
   type ContentProfile,
   type ContentRecipe,
@@ -88,7 +83,6 @@ export interface TypingViewApplicationQueryOptions {
   history?: TypingViewHistoryProjectionPort;
   daily?: TypingViewDailyProjectionPort;
   mastery?: TypingViewMasteryProjectionPort;
-  builtInManifest?: BuiltInPackManifest;
   activeSessionStatus?: () => PromiseLike<TypingViewSessionStatus | null>;
   pendingResultCount?: () => PromiseLike<number>;
   setupDraft?: {
@@ -115,13 +109,7 @@ export interface TypingViewApplicationQueryOptions {
 }
 
 export class TypingViewApplicationQuery {
-  private readonly builtIn: readonly TypingViewMaterialSummary[];
-
-  constructor(private readonly options: TypingViewApplicationQueryOptions) {
-    this.builtIn = projectBuiltInMaterials(
-      options.builtInManifest ?? BUILT_IN_PACK_MANIFEST
-    );
-  }
+  constructor(private readonly options: TypingViewApplicationQueryOptions) {}
 
   async shellSnapshot(page: TypingViewPage): Promise<TypingViewShellSnapshot> {
     const [
@@ -271,7 +259,6 @@ export class TypingViewApplicationQuery {
       ...legacyResumeField,
       content: {
         kind: 'materials',
-        builtIn: structuredClone(this.builtIn),
         library: [...records]
           .sort((left, right) => (
             right.updatedAt - left.updatedAt || left.title.localeCompare(right.title)
@@ -586,30 +573,6 @@ function perMinute(value: number, minutes: number): number {
 
 function isPrintable(value: string): boolean {
   return value.length > 0 && !/^[\r\n\t]$/u.test(value);
-}
-
-function projectBuiltInMaterials(
-  manifest: BuiltInPackManifest
-): TypingViewMaterialSummary[] {
-  return manifest.entries.map(entry => {
-    const prepared = preparePracticeContent(entry.body, {
-      materialId: entry.id,
-      sourceRevision: entry.revision,
-      contentProfile: entry.contentProfile,
-      range: { kind: 'whole' }
-    });
-    return {
-      id: entry.id,
-      revision: entry.revision,
-      title: entry.title,
-      origin: 'builtIn',
-      profileKey: profileKey(entry.contentProfile),
-      tags: [...entry.tags],
-      counts: structuredClone(prepared.counts),
-      estimatedSeconds: prepared.estimatedSeconds,
-      sourceNotice: structuredClone(entry.source)
-    };
-  });
 }
 
 function projectCatalogMaterial(

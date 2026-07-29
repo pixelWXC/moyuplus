@@ -8,25 +8,6 @@ import {
   TypingViewApplicationQuery,
   type TypingViewMaterialCatalogPort
 } from '../../typing/adapters/view';
-import type { BuiltInPackManifest } from '../../typing/assets';
-
-const builtInManifest: BuiltInPackManifest = {
-  schemaVersion: 1,
-  id: 'test-pack',
-  revision: 'pack-v1',
-  entries: [{
-    id: 'builtin-zh-1',
-    revision: 'entry-v1',
-    title: '清晨',
-    contentProfile: { kind: 'chinese', category: 'modernArticle' },
-    tags: ['中文', '文章'],
-    source: {
-      license: 'CC0-1.0',
-      attribution: 'Test fixture'
-    },
-    body: '清晨的街道逐渐醒来。'
-  }]
-};
 
 const customMaterial: PracticeMaterialRecord = {
   schemaVersion: 1,
@@ -52,7 +33,6 @@ describe('TypingViewApplicationQuery', () => {
   it('projects a stale workspace checkpoint as a host-owned recovery prompt', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       recoverablePractice: async () => ({
         status: 'paused',
         savedAt: 2_000,
@@ -73,13 +53,12 @@ describe('TypingViewApplicationQuery', () => {
     );
   });
 
-  it('projects built-in and managed materials without exposing store mutation', async () => {
+  it('projects managed materials without exposing store mutation', async () => {
     const catalog: TypingViewMaterialCatalogPort = {
       list: async () => [structuredClone(customMaterial)]
     };
     const query = new TypingViewApplicationQuery({
       catalog,
-      builtInManifest,
       activeSessionStatus: async () => 'paused',
       pendingResultCount: async () => 2
     });
@@ -100,25 +79,6 @@ describe('TypingViewApplicationQuery', () => {
       recovery: null,
       content: {
         kind: 'materials',
-        builtIn: [{
-          id: 'builtin-zh-1',
-          revision: 'entry-v1',
-          title: '清晨',
-          origin: 'builtIn',
-          profileKey: 'chinese.modernArticle',
-          tags: ['中文', '文章'],
-          counts: {
-            graphemes: 10,
-            hanGraphemes: 9,
-            englishWords: 0,
-            printableUnits: 10
-          },
-          estimatedSeconds: 10,
-          sourceNotice: {
-            license: 'CC0-1.0',
-            attribution: 'Test fixture'
-          }
-        }],
         library: [{
           id: 'custom-1',
           revision: 'custom-v1',
@@ -146,8 +106,7 @@ describe('TypingViewApplicationQuery', () => {
 
   it('returns an explicit placeholder for pages whose query slice is not loaded yet', async () => {
     const query = new TypingViewApplicationQuery({
-      catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] }
+      catalog: { list: async () => [] }
     });
 
     await expect(query.shellSnapshot('setup')).resolves.toEqual(expect.objectContaining({
@@ -162,17 +121,16 @@ describe('TypingViewApplicationQuery', () => {
   it('projects the selected setup draft through content inspection and preference defaults', async () => {
     const draft = new PracticeSetupDraft();
     draft.selectContent({
-      kind: 'builtIn',
-      materialId: 'builtin-zh-1'
+      kind: 'custom',
+      materialId: 'material-1'
     });
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       setupDraft: draft,
       inspectContent: async recipe => {
         expect(recipe).toEqual({
-          kind: 'builtIn',
-          materialId: 'builtin-zh-1'
+          kind: 'custom',
+          materialId: 'material-1'
         });
         return {
           title: '清晨',
@@ -186,7 +144,7 @@ describe('TypingViewApplicationQuery', () => {
           },
           ranges: [{
             kind: 'article',
-            articleId: 'builtin-zh-1'
+            articleId: 'material-1'
           }]
         };
       },
@@ -221,12 +179,12 @@ describe('TypingViewApplicationQuery', () => {
             label: '全文',
             range: {
               kind: 'article',
-              articleId: 'builtin-zh-1'
+              articleId: 'material-1'
             }
           }],
           selectedRange: {
             kind: 'article',
-            articleId: 'builtin-zh-1'
+            articleId: 'material-1'
           },
           plan: {
             completion: {
@@ -251,12 +209,11 @@ describe('TypingViewApplicationQuery', () => {
   it('projects a pending active-session conflict instead of silently replacing setup', async () => {
     const draft = new PracticeSetupDraft();
     draft.selectContent({
-      kind: 'builtIn',
-      materialId: 'builtin-zh-1'
+      kind: 'custom',
+      materialId: 'material-1'
     });
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       setupDraft: draft,
       sessionConflict: () => ({
         sessionId: 'session-current',
@@ -281,7 +238,6 @@ describe('TypingViewApplicationQuery', () => {
   it('projects live metrics from the active session and immutable snapshot', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       activePractice: async () => ({
         monotonicNow: 61_000,
         session: {
@@ -353,7 +309,6 @@ describe('TypingViewApplicationQuery', () => {
   it('does not project live metrics when the active plan hides them', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       activePractice: async () => ({
         monotonicNow: 61_000,
         session: {
@@ -403,7 +358,7 @@ describe('TypingViewApplicationQuery', () => {
       sessionId: 'session-latest',
       attemptId: 'attempt-latest',
       snapshotId: 'snapshot-latest',
-      materialId: 'builtin-zh-1',
+      materialId: 'material-1',
       sourceRevision: 'entry-v1',
       outcome: 'completed',
       contentProfile: { kind: 'chinese', category: 'modernArticle' },
@@ -465,7 +420,6 @@ describe('TypingViewApplicationQuery', () => {
     }));
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       results: { list: async () => [structuredClone(result)] },
       history: {
         read: async () => ({
@@ -545,7 +499,7 @@ describe('TypingViewApplicationQuery', () => {
         kind: 'recent',
         items: [{
           resultId: 'result-latest',
-          materialId: 'builtin-zh-1',
+          materialId: 'material-1',
           sourceRevision: 'entry-v1',
           profileKey: 'chinese.modernArticle',
           outcome: 'completed',
@@ -591,7 +545,6 @@ describe('TypingViewApplicationQuery', () => {
   it('returns explicit empty facts when no result, history or mastery exists', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] },
-      builtInManifest: { ...builtInManifest, entries: [] },
       results: { list: async () => [] },
       history: {
         read: async () => ({

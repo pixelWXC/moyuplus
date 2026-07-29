@@ -18,7 +18,6 @@ function snapshot(activePage: TypingViewPage): TypingViewShellSnapshot {
     content: activePage === 'materials'
       ? {
         kind: 'materials',
-        builtIn: [],
         library: [],
         actions: {
           paste: true,
@@ -149,8 +148,8 @@ describe('TypingViewProvider', () => {
       type: 'selectMaterial',
       requestId: 'select-1',
       clientRevision: 1,
-      materialId: 'builtin-zh-1',
-      materialOrigin: 'builtIn'
+      materialId: 'custom-1',
+      materialOrigin: 'custom'
     });
     await view.webview.receiveMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
@@ -178,8 +177,8 @@ describe('TypingViewProvider', () => {
     });
 
     expect(commands.selectMaterial).toHaveBeenCalledWith({
-      materialId: 'builtin-zh-1',
-      materialOrigin: 'builtIn'
+      materialId: 'custom-1',
+      materialOrigin: 'custom'
     });
     expect(commands.usePastedText).toHaveBeenCalledWith('自由练习内容');
     expect(commands.importTxt).toHaveBeenCalledTimes(1);
