@@ -842,10 +842,7 @@ function applyAppearance(): void {
       ? 'var(--vscode-font-family)'
       : 'var(--vscode-editor-font-family)'
   );
-  root.classList.toggle(
-    'color-keyboard-hands',
-    document.body.dataset.colorKeyboardHands !== 'false'
-  );
+  root.classList.add('color-keyboard-hands');
 }
 
 function observeInputValue(): number {

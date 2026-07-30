@@ -117,7 +117,10 @@ test('keeps setup contextual and exposes labelled native setup controls', async 
     ['punctuationMode', /^标点/],
     ['whitespaceMode', /^空白/],
     ['lineAdvance', /^换行推进/],
-    ['presentation', /^呈现方式/]
+    ['presentation', /^呈现方式/],
+    ['fontSize', /^练习字号/],
+    ['lineHeight', /^练习行高/],
+    ['fontFamily', /^练习字体/]
   ] as const) {
     const control = page.locator(`[name="${name}"]`);
     await expect(control).toBeVisible();
@@ -125,6 +128,13 @@ test('keeps setup contextual and exposes labelled native setup controls', async 
   }
   await expect(page.getByRole('button', { name: '保存并开始练习' }))
     .toBeVisible();
+  const keyboardToggle = page.getByRole('checkbox', {
+    name: '显示虚拟键盘与下一按键提示'
+  });
+  await expect(keyboardToggle).toBeChecked();
+  await expect(page.getByRole('checkbox', {
+    name: '使用颜色区分左右手按键区域'
+  })).toHaveCount(0);
 
   await page.getByRole('button', { name: '素材', exact: true }).click();
   await expect(page.locator('.setup-context')).toHaveCount(0);

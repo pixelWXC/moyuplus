@@ -46,7 +46,6 @@ describe('typing package cutover', () => {
       command: string;
       when?: string;
     }[];
-    const properties = manifest.contributes.configuration.properties;
 
     expect(keybindings.some(binding => (
       binding.command === LEGACY_GLOBAL_TAB_COMMAND_ID
@@ -54,11 +53,7 @@ describe('typing package cutover', () => {
     expect(keybindings.some(binding => (
       binding.when?.includes('moyuplus.typingPracticeActive')
     ))).toBe(false);
-    expect(properties).not.toHaveProperty(
-      'moyuplus.shortcuts.enableTabRouter'
-    );
-    expect(properties).not.toHaveProperty('moyuplus.typing.tabMode');
-    expect(properties).not.toHaveProperty('moyuplus.enter.nextPracticeLine');
+    expect(manifest.contributes).not.toHaveProperty('configuration');
   });
 
   it('documents browser composition facts and real Windows IME acceptance', async () => {

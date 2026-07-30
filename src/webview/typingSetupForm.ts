@@ -1,5 +1,6 @@
 import type {
   TypingViewSetupContent,
+  TypingViewAppearancePreferences,
   TypingViewSetupPlan,
   TypingViewStartPosition,
   TypingViewSourceRange
@@ -20,12 +21,17 @@ export interface TypingSetupFormValues {
   presentation?: string;
   showLiveMetrics?: boolean;
   showWhitespace?: boolean;
+  fontSize?: string;
+  lineHeight?: string;
+  fontFamily?: string;
+  showVirtualKeyboard?: boolean;
 }
 
 export interface TypingSetupConfiguration {
   selectedRange: TypingViewSourceRange;
   startPosition: TypingViewStartPosition;
   plan: TypingViewSetupPlan;
+  appearance: TypingViewAppearancePreferences;
 }
 
 export function createTypingSetupConfiguration(
@@ -99,6 +105,17 @@ export function createTypingSetupConfiguration(
         showWhitespace: values.showWhitespace
           ?? content.plan.displayPolicy.showWhitespace
       }
+    },
+    appearance: {
+      fontSize: numberBetween(values.fontSize, 18, 64, content.appearance.fontSize),
+      lineHeight: numberBetween(values.lineHeight, 1.2, 2.4, content.appearance.lineHeight),
+      fontFamily: values.fontFamily === 'interface'
+        ? 'interface'
+        : values.fontFamily === 'editor'
+          ? 'editor'
+          : content.appearance.fontFamily,
+      showVirtualKeyboard: values.showVirtualKeyboard
+        ?? content.appearance.showVirtualKeyboard
     }
   };
 }
@@ -168,6 +185,18 @@ function completionFor(
 function positiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function numberBetween(
+  value: string | undefined,
+  minimum: number,
+  maximum: number,
+  fallback: number
+): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.max(minimum, Math.min(maximum, parsed))
+    : fallback;
 }
 
 function whitespaceMode(

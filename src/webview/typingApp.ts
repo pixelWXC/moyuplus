@@ -1,6 +1,7 @@
 import './typingStyles.css';
 import {
   TYPING_VIEW_PROTOCOL_VERSION,
+  type TypingViewAppearancePreferences,
   type TypingViewMaterialOrigin,
   type TypingViewPage,
   type TypingViewSetupPlan,
@@ -363,7 +364,6 @@ function render(): void {
     startSelect?.addEventListener('change', syncStartControls);
     syncCompletionControls();
     syncStartControls();
-
     const currentConfiguration = () => {
       if (!setupForm.reportValidity()) return;
       const data = new FormData(setupForm);
@@ -381,7 +381,11 @@ function render(): void {
         lineAdvance: String(data.get('lineAdvance')),
         presentation: String(data.get('presentation')),
         showLiveMetrics: data.has('showLiveMetrics'),
-        showWhitespace: data.has('showWhitespace')
+        showWhitespace: data.has('showWhitespace'),
+        fontSize: String(data.get('fontSize')),
+        lineHeight: String(data.get('lineHeight')),
+        fontFamily: String(data.get('fontFamily')),
+        showVirtualKeyboard: data.has('showVirtualKeyboard')
       });
     };
     setupForm.addEventListener('submit', event => {
@@ -401,10 +405,6 @@ function render(): void {
           type: 'saveSetupAsDefault',
           ...configuration
         });
-      });
-    setupForm.querySelector<HTMLButtonElement>('[data-open-practice-editor-settings]')
-      ?.addEventListener('click', () => {
-        postRequest({ type: 'openPracticeEditorSettings' });
       });
   }
 
@@ -522,15 +522,14 @@ function postRequest(
       selectedRange: TypingViewSourceRange;
       startPosition?: TypingViewStartPosition;
       plan: TypingViewSetupPlan;
-    }
-    | {
-      type: 'openPracticeEditorSettings';
+      appearance: TypingViewAppearancePreferences;
     }
     | {
       type: 'startPractice';
       selectedRange: TypingViewSourceRange;
       startPosition?: TypingViewStartPosition;
       plan: TypingViewSetupPlan;
+      appearance: TypingViewAppearancePreferences;
     }
     | {
       type: 'resolveSessionConflict';

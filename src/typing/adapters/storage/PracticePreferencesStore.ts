@@ -96,6 +96,17 @@ function normalizePreferences(value: unknown): PracticePreferencesLoadResult {
       diagnostics.push('Practice preferences display policy is invalid.'),
       structuredClone(DEFAULT_PRACTICE_PREFERENCES.displayPolicy)
     );
+  let appearance = structuredClone(DEFAULT_PRACTICE_PREFERENCES.appearance);
+  if (validAppearance(source.appearance)) {
+    appearance = {
+      fontSize: source.appearance.fontSize,
+      lineHeight: source.appearance.lineHeight,
+      fontFamily: source.appearance.fontFamily,
+      showVirtualKeyboard: source.appearance.showVirtualKeyboard
+    };
+  } else if (source.appearance !== undefined) {
+    diagnostics.push('Practice preferences appearance is invalid.');
+  }
 
   return {
     preferences: {
@@ -103,7 +114,8 @@ function normalizePreferences(value: unknown): PracticePreferencesLoadResult {
       evaluation,
       textPolicy,
       flowPolicy,
-      displayPolicy
+      displayPolicy,
+      appearance
     },
     diagnostics
   };
@@ -141,6 +153,20 @@ function validDisplayPolicy(value: unknown): value is PracticePreferences['displ
   return isRecord(value)
     && typeof value.showLiveMetrics === 'boolean'
     && typeof value.showWhitespace === 'boolean';
+}
+
+function validAppearance(value: unknown): value is PracticePreferences['appearance'] {
+  return isRecord(value)
+    && typeof value.fontSize === 'number'
+    && Number.isFinite(value.fontSize)
+    && value.fontSize >= 18
+    && value.fontSize <= 64
+    && typeof value.lineHeight === 'number'
+    && Number.isFinite(value.lineHeight)
+    && value.lineHeight >= 1.2
+    && value.lineHeight <= 2.4
+    && (value.fontFamily === 'editor' || value.fontFamily === 'interface')
+    && typeof value.showVirtualKeyboard === 'boolean';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -3,6 +3,7 @@ import type {
   PracticePlan,
   SourceRange
 } from '../domain/content';
+import type { PracticeAppearancePreferences } from '../domain/policies';
 
 export interface PracticeSetupDraftSnapshot {
   contentRecipe: ContentRecipe;
@@ -20,6 +21,7 @@ export interface PracticeSetupConfiguration {
   selectedRange: SourceRange;
   plan: Omit<PracticePlan, 'contentRecipe'>;
   startPosition?: PracticeStartPosition;
+  appearance?: PracticeAppearancePreferences;
 }
 
 export class PracticeSetupDraft {

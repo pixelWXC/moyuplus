@@ -6,7 +6,6 @@ export interface TypingPracticePanelAppearance {
   lineHeight: number;
   fontFamily: 'editor' | 'interface';
   showVirtualKeyboard: boolean;
-  colorKeyboardHands: boolean;
 }
 
 export function createTypingPracticePanelHtml(input: {
@@ -41,7 +40,6 @@ export function createTypingPracticePanelHtml(input: {
   data-practice-line-height="${input.appearance?.lineHeight ?? 1.6}"
   data-practice-font-family="${input.appearance?.fontFamily ?? 'editor'}"
   data-show-virtual-keyboard="${input.appearance?.showVirtualKeyboard ?? true}"
-  data-color-keyboard-hands="${input.appearance?.colorKeyboardHands ?? true}"
 >
   <div id="app"></div>
   <script nonce="${nonce}" src="${input.scriptUri.toString()}"></script>

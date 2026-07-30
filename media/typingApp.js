@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/typing/adapters/view/typingViewProtocol.ts
-  var TYPING_VIEW_PROTOCOL_VERSION = 15;
+  var TYPING_VIEW_PROTOCOL_VERSION = 16;
   var TYPING_VIEW_PAGES = [
     "materials",
     "recent",
@@ -138,9 +138,10 @@
       "ranges",
       "selectedRange",
       "plan",
+      "appearance",
       ...value.startPosition === void 0 ? [] : ["startPosition"],
       ...value.continuations === void 0 ? [] : ["continuations"]
-    ]) || !isRecord(value.source) || !hasOnlyKeys(value.source, ["title", "profileKey", "counts"]) || !isNonEmptyString(value.source.title) || !isNonEmptyString(value.source.profileKey) || !isTypingViewMaterialCounts(value.source.counts) || !Array.isArray(value.ranges) || value.ranges.length === 0 || !value.ranges.every(isTypingViewSetupRange) || !isTypingViewSourceRange(selectedRange) || value.startPosition !== void 0 && !isTypingViewStartPosition(value.startPosition) || value.continuations !== void 0 && (!Array.isArray(value.continuations) || !value.continuations.every(isTypingViewContinuation)) || !isTypingViewSetupPlan(value.plan)) {
+    ]) || !isRecord(value.source) || !hasOnlyKeys(value.source, ["title", "profileKey", "counts"]) || !isNonEmptyString(value.source.title) || !isNonEmptyString(value.source.profileKey) || !isTypingViewMaterialCounts(value.source.counts) || !Array.isArray(value.ranges) || value.ranges.length === 0 || !value.ranges.every(isTypingViewSetupRange) || !isTypingViewSourceRange(selectedRange) || value.startPosition !== void 0 && !isTypingViewStartPosition(value.startPosition) || value.continuations !== void 0 && (!Array.isArray(value.continuations) || !value.continuations.every(isTypingViewContinuation)) || !isTypingViewSetupPlan(value.plan) || !isTypingViewAppearancePreferences(value.appearance)) {
       return false;
     }
     return value.ranges.some((item) => isRecord(item) && sameRange(item.range, selectedRange));
@@ -211,6 +212,14 @@
       "flowPolicy",
       "displayPolicy"
     ]) && isTypingViewCompletion(value.completion) && isRecord(value.evaluation) && hasOnlyKeys(value.evaluation, ["errorPolicy"]) && (value.evaluation.errorPolicy === "allowSkip" || value.evaluation.errorPolicy === "block") && isTypingViewTextPolicy(value.textPolicy) && isRecord(value.flowPolicy) && hasOnlyKeys(value.flowPolicy, ["lineAdvance", "presentation"]) && (value.flowPolicy.lineAdvance === "automatic" || value.flowPolicy.lineAdvance === "enter") && (value.flowPolicy.presentation === "continuous" || value.flowPolicy.presentation === "lineFocus") && isRecord(value.displayPolicy) && hasOnlyKeys(value.displayPolicy, ["showLiveMetrics", "showWhitespace"]) && typeof value.displayPolicy.showLiveMetrics === "boolean" && typeof value.displayPolicy.showWhitespace === "boolean";
+  }
+  function isTypingViewAppearancePreferences(value) {
+    return isRecord(value) && hasOnlyKeys(value, [
+      "fontSize",
+      "lineHeight",
+      "fontFamily",
+      "showVirtualKeyboard"
+    ]) && isFiniteBetween(value.fontSize, 18, 64) && isFiniteBetween(value.lineHeight, 1.2, 2.4) && (value.fontFamily === "editor" || value.fontFamily === "interface") && typeof value.showVirtualKeyboard === "boolean";
   }
   function isTypingViewCompletion(value) {
     if (!isRecord(value)) return false;
@@ -836,12 +845,31 @@
           ${checkbox("showLiveMetrics", "\u5728\u7EC3\u4E60\u7A97\u53E3\u663E\u793A\u5C40\u5185\u6307\u6807", content.plan.displayPolicy.showLiveMetrics)}
           ${checkbox("showWhitespace", "\u663E\u793A\u7A7A\u767D\u7B26", content.plan.displayPolicy.showWhitespace)}
         </fieldset>
+        <fieldset class="setup-appearance">
+          <legend>\u754C\u9762\u4E0E\u952E\u76D8</legend>
+          <label>
+            \u7EC3\u4E60\u5B57\u53F7\uFF0818\u201364 px\uFF09
+            <input name="fontSize" type="number" min="18" max="64" step="1" value="${content.appearance.fontSize}">
+          </label>
+          <label>
+            \u7EC3\u4E60\u884C\u9AD8\uFF081.2\u20132.4\uFF09
+            <input name="lineHeight" type="number" min="1.2" max="2.4" step="0.1" value="${content.appearance.lineHeight}">
+          </label>
+          <label>
+            \u7EC3\u4E60\u5B57\u4F53
+            <select name="fontFamily">
+              ${option("editor", "VS Code \u7F16\u8F91\u5668\u5B57\u4F53", content.appearance.fontFamily)}
+              ${option("interface", "VS Code \u754C\u9762\u5B57\u4F53", content.appearance.fontFamily)}
+            </select>
+          </label>
+          ${checkbox("showVirtualKeyboard", "\u663E\u793A\u865A\u62DF\u952E\u76D8\u4E0E\u4E0B\u4E00\u6309\u952E\u63D0\u793A", content.appearance.showVirtualKeyboard)}
+          <p class="setup-field-help">\u754C\u9762\u9009\u9879\u4F1A\u4FDD\u5B58\u5230 MoyuPlus \u6253\u5B57\u7EC3\u4E60\u914D\u7F6E\uFF0C\u5E76\u5E94\u7528\u5230\u4E4B\u540E\u6253\u5F00\u7684\u7EC3\u4E60\u7A97\u53E3\u3002</p>
+        </fieldset>
         <div class="setup-actions" role="group" aria-label="\u7EC3\u4E60\u8BBE\u7F6E\u64CD\u4F5C">
           <button class="material-action is-primary" type="submit" data-start-practice>\u4FDD\u5B58\u5E76\u5F00\u59CB\u7EC3\u4E60</button>
           <button class="material-action" type="button" data-save-setup-defaults>\u8BBE\u4E3A\u9ED8\u8BA4</button>
-          <button class="material-action" type="button" data-open-practice-editor-settings>\u7F16\u8F91\u7EC3\u4E60\u5B57\u4F53\u4E0E\u5916\u89C2</button>
         </div>
-        <p class="setup-defaults-note">\u201C\u8BBE\u4E3A\u9ED8\u8BA4\u201D\u53EA\u4FDD\u5B58\u5224\u5B9A\u3001\u6587\u672C\u3001\u63A8\u8FDB\u4E0E\u663E\u793A\u7B56\u7565\uFF1B\u672C\u6B21\u7D20\u6750\u8303\u56F4\u548C\u5B8C\u6210\u6761\u4EF6\u4E0D\u4F1A\u5199\u5165\u5168\u5C40\u9ED8\u8BA4\u3002</p>
+        <p class="setup-defaults-note">\u201C\u8BBE\u4E3A\u9ED8\u8BA4\u201D\u4FDD\u5B58\u5224\u5B9A\u3001\u6587\u672C\u3001\u63A8\u8FDB\u3001\u663E\u793A\u4EE5\u53CA\u754C\u9762\u4E0E\u952E\u76D8\u8BBE\u7F6E\uFF1B\u672C\u6B21\u7D20\u6750\u8303\u56F4\u548C\u5B8C\u6210\u6761\u4EF6\u4E0D\u4F1A\u5199\u5165\u9ED8\u8BA4\u503C\u3002</p>
       </form>
     </section>`;
   }
@@ -1038,6 +1066,12 @@
           showLiveMetrics: values.showLiveMetrics ?? content.plan.displayPolicy.showLiveMetrics,
           showWhitespace: values.showWhitespace ?? content.plan.displayPolicy.showWhitespace
         }
+      },
+      appearance: {
+        fontSize: numberBetween(values.fontSize, 18, 64, content.appearance.fontSize),
+        lineHeight: numberBetween(values.lineHeight, 1.2, 2.4, content.appearance.lineHeight),
+        fontFamily: values.fontFamily === "interface" ? "interface" : values.fontFamily === "editor" ? "editor" : content.appearance.fontFamily,
+        showVirtualKeyboard: values.showVirtualKeyboard ?? content.appearance.showVirtualKeyboard
       }
     };
   }
@@ -1089,6 +1123,10 @@
   function positiveInteger(value, fallback) {
     const parsed = Number(value);
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+  function numberBetween(value, minimum, maximum, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
   }
   function whitespaceMode(value, fallback) {
     return value === "strict" || value === "collapse" || value === "ignore" || value === "trimLineEdges" ? value : fallback;
@@ -1398,7 +1436,11 @@
           lineAdvance: String(data.get("lineAdvance")),
           presentation: String(data.get("presentation")),
           showLiveMetrics: data.has("showLiveMetrics"),
-          showWhitespace: data.has("showWhitespace")
+          showWhitespace: data.has("showWhitespace"),
+          fontSize: String(data.get("fontSize")),
+          lineHeight: String(data.get("lineHeight")),
+          fontFamily: String(data.get("fontFamily")),
+          showVirtualKeyboard: data.has("showVirtualKeyboard")
         });
       };
       setupForm.addEventListener("submit", (event) => {
@@ -1417,9 +1459,6 @@
           type: "saveSetupAsDefault",
           ...configuration
         });
-      });
-      setupForm.querySelector("[data-open-practice-editor-settings]")?.addEventListener("click", () => {
-        postRequest({ type: "openPracticeEditorSettings" });
       });
     }
     app.querySelectorAll("[data-conflict-resolution]").forEach((button) => {

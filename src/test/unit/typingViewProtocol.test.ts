@@ -12,11 +12,17 @@ const envelope = {
   protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
   instanceId: 'typing-view-1'
 } as const;
+const appearance = {
+  fontSize: 34,
+  lineHeight: 1.6,
+  fontFamily: 'editor',
+  showVirtualKeyboard: true
+} as const;
 
 describe('Typing View protocol', () => {
   it('owns a distinct view id, protocol version and complete page set', () => {
     expect(TYPING_VIEW_ID).toBe('moyuplus.typingView');
-    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(15);
+    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(16);
     expect(TYPING_VIEW_PAGES).toEqual([
       'materials',
       'recent',
@@ -239,24 +245,26 @@ describe('Typing View protocol', () => {
       ...message,
       type: 'saveSetupAsDefault',
       requestId: 'save-defaults-1',
-      clientRevision: 5
+      clientRevision: 5,
+      appearance
     })).toBe(true);
     expect(isTypingViewToHostMessage({
       ...message,
       type: 'saveSetupAsDefault',
       requestId: 'save-defaults-extra',
       clientRevision: 6,
+      appearance,
       editorFontSize: 18
     })).toBe(false);
   });
 
-  it('opens only the host-owned practice language settings target', () => {
+  it('rejects the removed VS Code practice settings bridge', () => {
     expect(isTypingViewToHostMessage({
       ...envelope,
       type: 'openPracticeEditorSettings',
       requestId: 'open-language-settings',
       clientRevision: 7
-    })).toBe(true);
+    })).toBe(false);
     expect(isTypingViewToHostMessage({
       ...envelope,
       type: 'openPracticeEditorSettings',
@@ -337,7 +345,8 @@ describe('Typing View protocol', () => {
           showLiveMetrics: true,
           showWhitespace: false
         }
-      }
+      },
+      appearance
     } as const;
     expect(isTypingViewToHostMessage(start)).toBe(true);
     expect(isTypingViewToHostMessage({
@@ -713,7 +722,8 @@ describe('Typing View protocol', () => {
               showLiveMetrics: true,
               showWhitespace: false
             }
-          }
+          },
+          appearance
         }
       }
     } as const;

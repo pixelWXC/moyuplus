@@ -2,47 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDefaultReaderPreferences } from '../../domain/readerPreferences';
 import { createDefaultImmersiveReaderPreferences } from '../../domain/immersiveReaderPreferences';
 import { createDefaultGitLogPreferences } from '../../git/gitLogModels';
-import {
-  SettingsAuthority,
-  type ConfigurationInspection,
-  type SettingsConfigurationBridge
-} from '../../settings/settingsAuthority';
-
-function configurationBridge(): SettingsConfigurationBridge & {
-  updates: Array<{ key: string; value: unknown; target: 'global' }>;
-} {
-  const inspections = new Map<string, ConfigurationInspection>([
-    ['moyuplus.shortcuts.enableEnterRouter', { defaultValue: false, workspaceValue: true }],
-    ['moyuplus.enter.insertNewLine', { defaultValue: true }],
-    ['moyuplus.enter.nextReaderPage', { defaultValue: false }]
-  ]);
-  const updates: Array<{ key: string; value: unknown; target: 'global' }> = [];
-  return {
-    updates,
-    workspaceFolders: () => [{ name: 'alpha', resource: 'alpha-uri' }, { name: 'beta', resource: 'beta-uri' }],
-    activeResource: () => 'beta-file-uri',
-    workspaceFolderFor: resource => resource === 'beta-file-uri' ? { name: 'beta', resource: 'beta-uri' } : undefined,
-    inspect: (key, resource) => {
-      if (resource === 'alpha-uri' && key === 'moyuplus.shortcuts.enableEnterRouter') {
-        return { ...inspections.get(key)!, workspaceFolderValue: false };
-      }
-      if (resource === 'beta-uri' && key === 'moyuplus.shortcuts.enableEnterRouter') {
-        return { ...inspections.get(key)!, workspaceFolderValue: true };
-      }
-      return inspections.get(key)!;
-    },
-    effectiveValue: (key, resource) => {
-      const inspected = resource ? (resource === 'alpha-uri'
-        ? { ...inspections.get(key)!, workspaceFolderValue: key.endsWith('enableEnterRouter') ? false : undefined }
-        : { ...inspections.get(key)!, workspaceFolderValue: key.endsWith('enableEnterRouter') ? true : undefined }) : inspections.get(key)!;
-      return inspected.workspaceFolderValue ?? inspected.workspaceValue ?? inspected.globalValue ?? inspected.defaultValue;
-    },
-    updateGlobal: async (key, value) => {
-      updates.push({ key, value, target: 'global' });
-      inspections.set(key, { ...inspections.get(key)!, globalValue: value });
-    }
-  };
-}
+import { SettingsAuthority } from '../../settings/settingsAuthority';
 
 function authority() {
   let reader = createDefaultReaderPreferences();
@@ -51,7 +11,6 @@ function authority() {
   const onReaderSaved = vi.fn();
   const onImmersiveSaved = vi.fn();
   const onGitLogSaved = vi.fn();
-  const configuration = configurationBridge();
   const value = new SettingsAuthority({
     readerStore: {
       get: () => reader,
@@ -65,31 +24,22 @@ function authority() {
       get: () => gitLog,
       save: async next => (gitLog = next)
     },
-    configuration,
     onReaderSaved,
     onImmersiveSaved,
     onGitLogSaved
   });
-  return { value, configuration, onReaderSaved, onImmersiveSaved, onGitLogSaved };
+  return { value, onReaderSaved, onImmersiveSaved, onGitLogSaved };
 }
 
 describe('settings authority', () => {
-  it('builds all 26 settings and keeps global values separate from narrower overrides', () => {
+  it('builds only plugin-owned preference sections', () => {
     const { value } = authority();
-    const snapshot = value.snapshot('typing');
+    const snapshot = value.snapshot('reader');
     expect(Object.keys(snapshot.reader)).toHaveLength(10);
     expect(Object.keys(snapshot.gitLog)).toHaveLength(6);
     expect(Object.keys(snapshot.immersive)).toHaveLength(7);
-    expect(snapshot.configuration).toHaveLength(3);
-    expect(snapshot.section).toBe('typing');
-
-    const enter = snapshot.configuration.find(item => item.key === 'moyuplus.shortcuts.enableEnterRouter')!;
-    expect(enter).toMatchObject({ globalValue: false, globalIsDefault: true, workspaceValue: true, overridden: true });
-    expect(enter.folders).toEqual([
-      expect.objectContaining({ name: 'alpha', workspaceFolderValue: false, effectiveValue: false }),
-      expect.objectContaining({ name: 'beta', workspaceFolderValue: true, effectiveValue: true })
-    ]);
-    expect(enter.activeResource).toEqual({ folderName: 'beta', effectiveValue: true });
+    expect(snapshot).not.toHaveProperty('configuration');
+    expect(snapshot.section).toBe('reader');
   });
 
   it('persists normalized reader and Git Log changes and notifies the active view', async () => {
@@ -103,14 +53,6 @@ describe('settings authority', () => {
       expect.objectContaining({ maxCommits: 200 })
     );
     expect(onImmersiveSaved).toHaveBeenCalledWith(expect.objectContaining({ visualLines: 5 }));
-  });
-
-  it('writes configuration only to the global target and returns the global authority', async () => {
-    const { value, configuration } = authority();
-    expect(await value.change('configuration', 'moyuplus.shortcuts.enableEnterRouter', true)).toBe(true);
-    expect(configuration.updates).toEqual([
-      { key: 'moyuplus.shortcuts.enableEnterRouter', value: true, target: 'global' }
-    ]);
   });
 
   it('resets a whole preference section as one store transaction', async () => {

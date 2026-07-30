@@ -4,6 +4,7 @@ import {
   TYPING_VIEW_PROTOCOL_VERSION,
   isTypingViewToHostMessage,
   type TypingViewPage,
+  type TypingViewAppearancePreferences,
   type TypingViewMaterialOrigin,
   type TypingViewSetupPlan,
   type TypingViewStartPosition,
@@ -36,12 +37,13 @@ export interface TypingViewCommandPort {
     selectedRange: TypingViewSourceRange;
     startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
+    appearance: TypingViewAppearancePreferences;
   }): PromiseLike<void>;
-  openPracticeEditorSettings(): PromiseLike<void>;
   startPractice(input: {
     selectedRange: TypingViewSourceRange;
     startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
+    appearance: TypingViewAppearancePreferences;
   }): PromiseLike<TypingViewPage>;
   startMasteryPractice(): PromiseLike<TypingViewPage>;
   adjustMasteryPractice(): PromiseLike<TypingViewPage>;
@@ -69,7 +71,6 @@ const NOOP_COMMANDS: TypingViewCommandPort = {
   importEpub: async () => undefined,
   configureSetup: async () => undefined,
   saveSetupAsDefault: async () => undefined,
-  openPracticeEditorSettings: async () => undefined,
   startPractice: async () => 'setup',
   startMasteryPractice: async () => 'mastery',
   adjustMasteryPractice: async () => 'mastery',
@@ -234,7 +235,8 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
       page = await this.commands.startPractice({
         selectedRange: message.selectedRange,
         startPosition: message.startPosition,
-        plan: message.plan
+        plan: message.plan,
+        appearance: message.appearance
       });
       applied = true;
     } else if (message.type === 'startMasteryPractice') {
@@ -277,14 +279,11 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
       await this.commands.saveSetupAsDefault({
         selectedRange: message.selectedRange,
         startPosition: message.startPosition,
-        plan: message.plan
+        plan: message.plan,
+        appearance: message.appearance
       });
       applied = true;
       page = 'setup';
-    } else if (message.type === 'openPracticeEditorSettings') {
-      await this.commands.openPracticeEditorSettings();
-      applied = true;
-      page = this.activePage;
     } else if (message.type === 'removeMaterial') {
       applied = await this.commands.removeMaterial(message.materialId);
       page = 'materials';

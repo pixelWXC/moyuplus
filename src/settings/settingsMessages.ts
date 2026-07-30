@@ -1,7 +1,7 @@
 export const SETTINGS_PROTOCOL_VERSION = 2 as const;
 
-export type SettingsSection = 'reader' | 'immersive' | 'gitLog' | 'typing' | 'shortcuts';
-export type SettingsDomain = 'reader' | 'immersive' | 'gitLog' | 'configuration';
+export type SettingsSection = 'reader' | 'immersive' | 'gitLog' | 'shortcuts';
+export type SettingsDomain = 'reader' | 'immersive' | 'gitLog';
 
 export type SettingsToHostMessage =
   | { type: 'settingsReady'; protocolVersion: typeof SETTINGS_PROTOCOL_VERSION; instanceId: string }
@@ -50,12 +50,6 @@ const immersiveValidators: Record<string, (value: unknown) => boolean> = {
   leftMargin: numberBetween(0, 64)
 };
 
-const configurationValidators: Record<string, (value: unknown) => boolean> = {
-  'moyuplus.shortcuts.enableEnterRouter': boolean,
-  'moyuplus.enter.insertNewLine': boolean,
-  'moyuplus.enter.nextReaderPage': boolean
-};
-
 export function isSettingsToHostMessage(value: unknown): value is SettingsToHostMessage {
   if (!isRecord(value) || value.protocolVersion !== SETTINGS_PROTOCOL_VERSION || !isInstanceId(value.instanceId)) {
     return false;
@@ -80,7 +74,7 @@ export function isSettingsToHostMessage(value: unknown): value is SettingsToHost
   const validators = value.domain === 'reader'
     ? readerValidators
     : value.domain === 'immersive' ? immersiveValidators
-      : value.domain === 'gitLog' ? gitLogValidators : configurationValidators;
+      : gitLogValidators;
   return Object.prototype.hasOwnProperty.call(validators, value.key) && validators[value.key](value.value);
 }
 
@@ -113,11 +107,11 @@ function isInstanceId(value: unknown): value is string {
 }
 
 function isSection(value: unknown): value is SettingsSection {
-  return value === 'reader' || value === 'immersive' || value === 'gitLog' || value === 'typing' || value === 'shortcuts';
+  return value === 'reader' || value === 'immersive' || value === 'gitLog' || value === 'shortcuts';
 }
 
 function isDomain(value: unknown): value is SettingsDomain {
-  return value === 'reader' || value === 'immersive' || value === 'gitLog' || value === 'configuration';
+  return value === 'reader' || value === 'immersive' || value === 'gitLog';
 }
 
 function boolean(value: unknown): boolean {

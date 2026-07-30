@@ -111,18 +111,6 @@ export class MoyuPlusSettingsPanel implements vscode.Disposable {
   private async applyChange(message: Extract<SettingsToHostMessage, { type: 'changeSetting' }>): Promise<void> {
     if (message.instanceId !== this.currentInstance) return;
     const oldValue = this.authoritativeValue(message.domain, message.key);
-    if (isRiskEnablement(message)) {
-      const confirmed = await vscode.window.showWarningMessage(
-        `${message.key.includes('Enter') ? 'Enter' : 'Tab'} 是高频编辑按键，启用路由可能与现有按键映射冲突。`,
-        { modal: true },
-        '启用'
-      );
-      if (!confirmed) {
-        await this.postChangeResult('changeFailed', message, oldValue ?? false, '已取消启用。');
-        return;
-      }
-    }
-    if (message.instanceId !== this.currentInstance) return;
     try {
       const saved = await this.authority.change(message.domain, message.key, message.value);
       await this.postChangeResult('changeSaved', message, saved);
@@ -181,8 +169,7 @@ export class MoyuPlusSettingsPanel implements vscode.Disposable {
     const snapshot = this.authority.snapshot(this.section);
     if (domain === 'reader') return snapshot.reader[key as keyof typeof snapshot.reader];
     if (domain === 'immersive') return snapshot.immersive[key as keyof typeof snapshot.immersive];
-    if (domain === 'gitLog') return snapshot.gitLog[key as keyof typeof snapshot.gitLog];
-    return snapshot.configuration.find(item => item.key === key)?.globalValue;
+    return snapshot.gitLog[key as keyof typeof snapshot.gitLog];
   }
 
   private async postChangeResult(
@@ -250,11 +237,6 @@ export function getSettingsWebviewHtml(_webview: vscode.Webview, scriptUri: vsco
   <script nonce="${nonce}" src="${scriptUri.toString()}"></script>
 </body>
 </html>`;
-}
-
-function isRiskEnablement(message: Extract<SettingsToHostMessage, { type: 'changeSetting' }>): boolean {
-  return message.domain === 'configuration' && message.value === true
-    && message.key === 'moyuplus.shortcuts.enableEnterRouter';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

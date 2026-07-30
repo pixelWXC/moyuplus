@@ -1,6 +1,5 @@
 import './settingsStyles.css';
 import { SETTINGS_PROTOCOL_VERSION, type SettingsDomain, type SettingsSection } from '../settings/settingsMessages';
-import type { ConfigurationSettingSnapshot } from '../settings/settingsAuthority';
 import { createShortcutSettingsState } from '../shortcuts/shortcutSettings';
 import {
   createInitialSettingsState,
@@ -42,7 +41,6 @@ const sections: Array<{ id: SettingsSection; label: string }> = [
   { id: 'reader', label: '阅读' },
   { id: 'immersive', label: '沉浸阅读' },
   { id: 'gitLog', label: 'Git Log' },
-  { id: 'typing', label: '打字练习（实验性）' },
   { id: 'shortcuts', label: '快捷键' }
 ];
 
@@ -250,7 +248,6 @@ function renderSection(): HTMLElement {
   if (state.section === 'reader') return renderReader();
   if (state.section === 'immersive') return renderImmersive();
   if (state.section === 'gitLog') return renderGitLog();
-  if (state.section === 'typing') return renderTyping();
   return renderShortcuts();
 }
 
@@ -322,62 +319,26 @@ function renderGitLog(): HTMLElement {
   return root;
 }
 
-function renderTyping(): HTMLElement {
-  const root = sectionRoot('打字练习（实验性）', '这些功能仍处于实验阶段，练习输入会真实写入当前编辑器文件。');
-  const warning = node('div', 'risk-notice'); warning.setAttribute('role', 'note');
-  warning.append(node('strong', undefined, '实验性 · 请使用专门的练习文件'),
-    node('p', undefined, '建议仅在临时文件、草稿或专门练习文件中使用。Tab 仍优先交给补全菜单与 snippet；Enter 和 Tab 可能与现有按键映射冲突。'));
-  const fields = node('div', 'settings-fields');
-  for (const item of state.configuration) fields.append(configurationField(item));
-  root.append(warning, fields); return root;
-}
-
 function renderShortcuts(): HTMLElement {
   const root = sectionRoot('快捷键', '按键配置、冲突检查和删除由 VS Code 的键盘快捷方式界面负责。');
-  const config = Object.fromEntries(state.configuration.map(item => [item.key, item.globalValue]));
-  const shortcuts = createShortcutSettingsState({
-    enableEnterRouter: config['moyuplus.shortcuts.enableEnterRouter'] === true
-  });
-  const groups: Array<{ title: string; test: (command: string) => boolean; experimental?: boolean }> = [
+  const shortcuts = createShortcutSettingsState();
+  const groups: Array<{ title: string; test: (command: string) => boolean }> = [
     { title: '阅读', test: command => command.startsWith('moyuplus.reader.') },
-    { title: 'Git Log', test: command => command.includes('gitLog') },
-    { title: '打字练习（实验性）', test: command => !command.startsWith('moyuplus.reader.') && !command.includes('gitLog'), experimental: true }
+    { title: 'Git Log', test: command => command.includes('gitLog') }
   ];
   for (const group of groups) {
     const list = node('div', 'shortcut-list');
     for (const shortcut of shortcuts.filter(item => group.test(item.commandId))) {
       const row = node('div', 'shortcut-row');
       const copy = node('div');
-      copy.append(node('strong', undefined, `${shortcut.label}${group.experimental ? '（实验性）' : ''}`), node('p', undefined, shortcut.description));
+      copy.append(node('strong', undefined, shortcut.label), node('p', undefined, shortcut.description));
       row.append(copy);
-      if (shortcut.conflictWarning) row.append(node('p', 'shortcut-warning', `${group.experimental ? '实验性 · ' : ''}${shortcut.conflictWarning}`));
       list.append(row);
     }
     if (list.childElementCount) root.append(node('h3', undefined, group.title), list);
   }
   root.append(actionButton('在键盘快捷方式中配置 MoyuPlus', openKeyboardShortcuts, 'primary-button'));
   return root;
-}
-
-function configurationField(item: ConfigurationSettingSnapshot): HTMLElement {
-  const labels: Record<string, string> = {
-    'moyuplus.shortcuts.enableEnterRouter': 'Enter 路由总开关（实验性）',
-    'moyuplus.enter.insertNewLine': '插入真实换行（实验性）',
-    'moyuplus.enter.nextReaderPage': '阅读器下一页（实验性）'
-  };
-  const wrapper = node('div', 'configuration-setting');
-  const key = item.key;
-  wrapper.append(toggleField(labels[key], 'configuration', key, item.globalValue === true));
-  wrapper.append(node('p', 'scope-note', item.globalIsDefault ? '全局值：使用默认值' : '全局值：已显式设置'));
-  if (item.overridden) {
-    const override = node('div', 'override-note');
-    override.append(node('strong', undefined, '当前工作区存在覆盖'), node('p', undefined, '此处保存的只是全局值；现有覆盖会继续决定对应资源的运行行为。'));
-    if (item.workspaceValue !== undefined) override.append(node('p', undefined, `工作区值：${formatValue(item.workspaceValue)}`));
-    for (const folder of item.folders) override.append(node('p', undefined, `${folder.name}：覆盖 ${formatValue(folder.workspaceFolderValue)}，实际 ${formatValue(folder.effectiveValue)}`));
-    if (item.activeResource) override.append(node('p', undefined, `活动编辑器${item.activeResource.folderName ? `（${item.activeResource.folderName}）` : ''}：${formatValue(item.activeResource.effectiveValue)}`));
-    wrapper.append(override);
-  }
-  return wrapper;
 }
 
 function selectField(labelText: string, domain: SettingsDomain, key: string, value: string, options: string[][]): HTMLElement {
@@ -589,17 +550,16 @@ function isControlPending(domain: SettingsDomain, key: string): boolean {
   if (domain === 'gitLog' && state.resettingSection === 'gitLog') return true;
   return state.pending[`${domain}.${key}`] !== undefined;
 }
-function formatValue(value: unknown): string { return typeof value === 'boolean' ? (value ? '开启' : '关闭') : String(value); }
 function isRecord(value: unknown): value is Record<string, any> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 function isSnapshot(value: Record<string, any>): value is SettingsSnapshot {
   return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId
     && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0
     && sections.some(section => section.id === value.section)
-    && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog) && Array.isArray(value.configuration);
+    && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog);
 }
 function isChangeResponse(value: Record<string, any>): value is Extract<Parameters<typeof settingsReducer>[1], { type: 'changeSaved' | 'changeFailed' }> {
   return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion)
     && typeof value.requestId === 'string' && Number.isSafeInteger(value.clientRevision)
-    && (value.domain === 'reader' || value.domain === 'immersive' || value.domain === 'gitLog' || value.domain === 'configuration')
+    && (value.domain === 'reader' || value.domain === 'immersive' || value.domain === 'gitLog')
     && typeof value.key === 'string';
 }

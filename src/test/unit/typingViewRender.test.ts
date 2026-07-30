@@ -176,6 +176,12 @@ describe('Typing View page rendering', () => {
           showLiveMetrics: false,
           showWhitespace: false
         }
+      },
+      appearance: {
+        fontSize: 42,
+        lineHeight: 1.8,
+        fontFamily: 'interface',
+        showVirtualKeyboard: false
       }
     });
 
@@ -201,8 +207,16 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('data-start-practice');
     expect(html).toContain('设为默认');
     expect(html).toContain('data-save-setup-defaults');
-    expect(html).toContain('编辑练习字体与外观');
-    expect(html).toContain('data-open-practice-editor-settings');
+    expect(html).toContain('界面与键盘');
+    expect(html).toContain('name="fontSize"');
+    expect(html).toContain('value="42"');
+    expect(html).toContain('name="lineHeight"');
+    expect(html).toContain('name="fontFamily"');
+    expect(html).toContain('value="interface" selected');
+    expect(html).toContain('name="showVirtualKeyboard"');
+    expect(html).not.toContain('name="showVirtualKeyboard" checked');
+    expect(html).not.toContain('name="colorKeyboardHands"');
+    expect(html).not.toContain('data-open-practice-editor-settings');
   });
 
   it('renders free practice without irrelevant time or unit controls', () => {
@@ -239,6 +253,12 @@ describe('Typing View page rendering', () => {
           showLiveMetrics: true,
           showWhitespace: false
         }
+      },
+      appearance: {
+        fontSize: 34,
+        lineHeight: 1.6,
+        fontFamily: 'editor',
+        showVirtualKeyboard: true
       }
     });
 

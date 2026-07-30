@@ -44,16 +44,11 @@ test('switches to the native top selector at 680px without hiding settings', asy
   await expect(page.locator('.settings-fields .setting-field')).toHaveCount(6);
 });
 
-test('marks every typing setting experimental and explains workspace overrides', async ({ page }) => {
-  await page.evaluate(() => window.settingsHarness.select('typing'));
-  await expect(page.getByRole('heading', { name: '打字练习（实验性）' })).toBeVisible();
-  await expect(page.locator('.configuration-setting')).toHaveCount(3);
-  await expect(page.locator('.configuration-setting .setting-field')).toHaveText([
-    /实验性/, /实验性/, /实验性/
-  ]);
-  await expect(page.getByText('当前工作区存在覆盖')).toBeVisible();
-  await expect(page.getByText(/alpha：覆盖 关闭，实际 关闭/)).toBeVisible();
-  await expect(page.getByText(/活动编辑器（beta）：开启/)).toBeVisible();
+test('does not expose the retired typing or extension-configuration sections', async ({ page }) => {
+  await expect(page.locator('.section-link')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: /打字练习/ })).toHaveCount(0);
+  await expect(page.locator('.configuration-setting')).toHaveCount(0);
+  await expect(page.getByText(/实验性/)).toHaveCount(0);
 });
 
 test('opens VS Code keyboard shortcuts through the correlated host request', async ({ page }) => {
@@ -134,9 +129,9 @@ test('remains readable in forced-colors mode and makes no external requests', as
 declare global {
   interface Window {
     settingsHarness: {
-      sendSnapshot(section: 'reader' | 'gitLog' | 'typing' | 'shortcuts'): void;
+      sendSnapshot(section: 'reader' | 'immersive' | 'gitLog' | 'shortcuts'): void;
       sent(): Record<string, unknown>[];
-      select(section: 'reader' | 'gitLog' | 'typing' | 'shortcuts'): void;
+      select(section: 'reader' | 'immersive' | 'gitLog' | 'shortcuts'): void;
       rememberRange(id: string): void;
       rememberedRangeIsConnected(id: string): boolean;
     };

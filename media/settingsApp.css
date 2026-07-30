@@ -137,8 +137,7 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.setting-field,
-.configuration-setting {
+.setting-field {
   min-height: 54px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
@@ -234,31 +233,6 @@ select:focus-visible {
 .secondary-button:hover {
   background: var(--vscode-button-secondaryHoverBackground);
 }
-.risk-notice,
-.override-note {
-  margin: 0 0 22px;
-  padding: 10px 12px;
-  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border));
-  background: var(--vscode-inputValidation-warningBackground, var(--vscode-editor-background));
-  color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
-}
-.risk-notice p,
-.override-note p,
-.scope-note,
-.shortcut-row p {
-  margin: 5px 0 0;
-  line-height: 1.45;
-}
-.scope-note {
-  color: var(--muted);
-}
-.override-note {
-  margin: 10px 0 0;
-}
-.configuration-setting > .setting-field {
-  padding-top: 0;
-  border-bottom: 0;
-}
 .shortcut-list {
   border-top: 1px solid var(--border);
 }
@@ -270,11 +244,9 @@ select:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 .shortcut-row p {
+  margin: 5px 0 0;
+  line-height: 1.45;
   color: var(--muted);
-}
-.shortcut-warning {
-  grid-column: 1 / -1;
-  color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)) !important;
 }
 .blocking-state {
   max-width: 560px;
@@ -329,9 +301,7 @@ select:focus-visible {
 @media (forced-colors: active) {
   button,
   input,
-  select,
-  .risk-notice,
-  .override-note {
+  select {
     border: 1px solid CanvasText;
   }
   .section-link[aria-current=page] {

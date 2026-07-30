@@ -66,7 +66,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 }
 .preview-code { flex: 0 0 auto; }
 .preview-after { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.setting-field, .configuration-setting {
+.setting-field {
   min-height: 54px; padding: 12px 0; border-bottom: 1px solid var(--border);
 }
 .setting-field { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr); align-items: center; gap: 18px; }
@@ -94,20 +94,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 .secondary-button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
 .secondary-button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 
-.risk-notice, .override-note {
-  margin: 0 0 22px; padding: 10px 12px; border: 1px solid var(--vscode-inputValidation-warningBorder, var(--border));
-  background: var(--vscode-inputValidation-warningBackground, var(--vscode-editor-background));
-  color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground));
-}
-.risk-notice p, .override-note p, .scope-note, .shortcut-row p { margin: 5px 0 0; line-height: 1.45; }
-.scope-note { color: var(--muted); }
-.override-note { margin: 10px 0 0; }
-.configuration-setting > .setting-field { padding-top: 0; border-bottom: 0; }
-
 .shortcut-list { border-top: 1px solid var(--border); }
 .shortcut-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 24px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.shortcut-row p { color: var(--muted); }
-.shortcut-warning { grid-column: 1 / -1; color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)) !important; }
+.shortcut-row p { margin: 5px 0 0; line-height: 1.45; color: var(--muted); }
 
 .blocking-state { max-width: 560px; margin: 15vh auto; padding: 0 24px; }
 .blocking-state h1 { font-size: 20px; }
@@ -126,6 +115,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 }
 
 @media (forced-colors: active) {
-  button, input, select, .risk-notice, .override-note { border: 1px solid CanvasText; }
+  button, input, select { border: 1px solid CanvasText; }
   .section-link[aria-current="page"] { outline: 2px solid Highlight; }
 }

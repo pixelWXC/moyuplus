@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_PRACTICE_PREFERENCES,
   PracticeSetupDraft,
   TypingViewPracticeCommands
 } from '../../typing';
@@ -85,6 +86,7 @@ function createHarness(activeSession: {
     focus: vi.fn(async () => undefined)
   };
   const preferences = {
+    load: vi.fn(async () => structuredClone(DEFAULT_PRACTICE_PREFERENCES)),
     save: vi.fn(async () => undefined)
   };
   const continuations = {
@@ -156,7 +158,8 @@ describe('TypingViewPracticeCommands', () => {
       evaluation: setup.plan.evaluation,
       textPolicy: setup.plan.textPolicy,
       flowPolicy: setup.plan.flowPolicy,
-      displayPolicy: setup.plan.displayPolicy
+      displayPolicy: setup.plan.displayPolicy,
+      appearance: DEFAULT_PRACTICE_PREFERENCES.appearance
     });
     expect(harness.coordinator.prepare).not.toHaveBeenCalled();
     expect(harness.coordinator.start).not.toHaveBeenCalled();

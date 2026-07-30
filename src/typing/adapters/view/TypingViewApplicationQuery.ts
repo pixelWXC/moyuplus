@@ -7,7 +7,10 @@ import {
   type PracticeMaterialRecord,
   type SourceRange
 } from '../../domain/content';
-import type { PracticePreferences } from '../../domain/policies';
+import {
+  DEFAULT_PRACTICE_PREFERENCES,
+  type PracticePreferences
+} from '../../domain/policies';
 import type { PracticeSetupDraftSnapshot } from '../../application';
 import type { PracticeSnapshot } from '../../domain/content';
 import type { PracticeSessionState } from '../../domain/session';
@@ -578,7 +581,11 @@ export class TypingViewApplicationQuery {
         textPolicy: structuredClone(plan.textPolicy),
         flowPolicy: structuredClone(plan.flowPolicy),
         displayPolicy: structuredClone(plan.displayPolicy)
-      }
+      },
+      appearance: structuredClone(
+        preferences?.appearance
+        ?? DEFAULT_PRACTICE_PREFERENCES.appearance
+      )
     };
   }
 }

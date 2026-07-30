@@ -271,7 +271,8 @@ describe('TypingViewApplicationQuery', () => {
               showLiveMetrics: false,
               showWhitespace: false
             }
-          }
+          },
+          appearance: DEFAULT_PRACTICE_PREFERENCES.appearance
         }
       })
     );

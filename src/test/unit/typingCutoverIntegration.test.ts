@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -181,16 +181,19 @@ describe('typing architecture cutover', () => {
     );
   });
 
-  it('keeps extension and shortcut composition free of the old controller', async () => {
-    const [extensionSource, shortcutSource] = await Promise.all([
-      readFile(path.resolve(__dirname, '../../extension.ts'), 'utf8'),
-      readFile(path.resolve(__dirname, '../../commands/shortcutRouter.ts'), 'utf8')
-    ]);
+  it('keeps extension composition free of the old controller and editor router', async () => {
+    const extensionSource = await readFile(
+      path.resolve(__dirname, '../../extension.ts'),
+      'utf8'
+    );
 
     expect(extensionSource).not.toContain('TypingPracticeController');
     expect(extensionSource).not.toContain('registerTypingPractice');
     expect(extensionSource).not.toContain('TypingSourceCatalog');
-    expect(shortcutSource).not.toContain('TypingPracticeController');
-    expect(shortcutSource).not.toContain('getTabCompletion');
+    expect(extensionSource).not.toContain('registerShortcutRouter');
+    await expect(access(path.resolve(
+      __dirname,
+      '../../commands/shortcutRouter.ts'
+    ))).rejects.toThrow();
   });
 });

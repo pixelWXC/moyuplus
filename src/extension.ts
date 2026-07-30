@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import {
-  registerShortcutRouter,
-  ROUTE_ENTER_COMMAND_ID
-} from './commands/shortcutRouter';
 import { READER_VIEW_ID, registerReaderView } from './reader/ReaderViewProvider';
 import { BookLibraryStore } from './storage/bookLibraryStore';
 import { TxtAdapter } from './adapters/txt/txtAdapter';
@@ -27,9 +23,8 @@ import {
   registerLibraryCommands
 } from './commands/libraryCommands';
 import { registerMoyuplusImagePreviewService } from './reader/imagePreviewService';
-import { SettingsAuthority, SETTINGS_CONFIGURATION_KEYS } from './settings/settingsAuthority';
+import { SettingsAuthority } from './settings/settingsAuthority';
 import { MoyuPlusSettingsPanel, OPEN_SETTINGS_COMMAND_ID } from './settings/MoyuPlusSettingsPanel';
-import { createVSCodeSettingsConfigurationBridge } from './settings/vscodeSettingsConfiguration';
 import {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -100,7 +95,6 @@ export const SMOKE_COMMAND_ID = 'moyuplus.smokeTest';
 export const SMOKE_MESSAGE = 'MoyuPlus extension is active.';
 export { READER_VIEW_ID };
 export { IMPORT_BOOK_COMMAND_ID, REMOVE_BOOK_COMMAND_ID, RELOCATE_BOOK_COMMAND_ID };
-export { ROUTE_ENTER_COMMAND_ID };
 export {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
@@ -158,6 +152,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const typingSetupDraft = new PracticeSetupDraft();
   const typingPracticePreferences = new PracticePreferencesStore(typingStorageDirectory);
+  const loadedTypingPracticePreferences = await typingPracticePreferences.load();
+  let currentTypingPracticePreferences =
+    loadedTypingPracticePreferences.preferences;
+  const typingPracticePreferenceAuthority = {
+    load: async () => structuredClone(currentTypingPracticePreferences),
+    save: async (value: typeof currentTypingPracticePreferences) => {
+      await typingPracticePreferences.save(value);
+      currentTypingPracticePreferences = structuredClone(value);
+    }
+  };
+  for (const diagnostic of loadedTypingPracticePreferences.diagnostics) {
+    output?.appendLine(`[typing.preferences] ${diagnostic}`);
+  }
   const typingContinuations = new PracticeContinuationStore(
     typingStorageDirectory
   );
@@ -408,6 +415,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     },
     timeout: finishTimedPractice,
+    appearance: () => structuredClone(
+      currentTypingPracticePreferences.appearance
+    ),
     reportError: error => {
       output?.appendLine(`[typing.panel] ${safeError(error)}`);
       void vscode.window.showErrorMessage(
@@ -430,7 +440,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const typingPracticeCommands = new TypingViewPracticeCommands({
     draft: typingSetupDraft,
     coordinator: typingApplication,
-    preferences: typingPracticePreferences,
+    preferences: typingPracticePreferenceAuthority,
     mastery: {
       list: async () => (await typingMastery.read()).entries,
       nextSeed: () => `mastery-${randomUUID()}`
@@ -495,9 +505,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       return provider.inspect(recipe);
     },
-    practicePreferences: async () => (
-      await typingPracticePreferences.load()
-    ).preferences,
+    practicePreferences: async () => structuredClone(
+      currentTypingPracticePreferences
+    ),
     continuations: typingContinuations,
     activeSessionStatus: async () => (
       await typingRuntimeState.current()
@@ -611,12 +621,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ) => {
       await typingPracticeCommands.saveSetupAsDefault(configuration);
       await vscode.window.showInformationMessage('已保存为新的打字练习默认设置。');
-    },
-    openPracticeEditorSettings: async () => {
-      await vscode.commands.executeCommand(
-        'workbench.action.openSettings',
-        '@ext:local.moyuplus moyuplus.typing'
-      );
     },
     startPractice: typingPracticeCommands.startPractice.bind(typingPracticeCommands),
     startMasteryPractice:
@@ -758,7 +762,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     readerStore: preferences,
     immersiveStore: immersivePreferences,
     gitLogStore: gitLogPreferences,
-    configuration: createVSCodeSettingsConfigurationBridge(),
     onReaderSaved: value => readerViewProvider?.applyReaderPreferences(value),
     onImmersiveSaved: value => immersivePresenter.applyPreferences(value),
     onGitLogSaved: (value, previous) => readerViewProvider?.applyGitLogPreferences(value, previous)
@@ -772,9 +775,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand(OPEN_SETTINGS_COMMAND_ID, () => {
       readerController.suspendImmersive();
       settingsPanel.open(readerController.presentationMode === 'immersive' ? 'immersive' : 'reader');
-    }),
-    vscode.workspace.onDidChangeConfiguration(event => {
-      if (SETTINGS_CONFIGURATION_KEYS.some(key => event.affectsConfiguration(key))) settingsPanel.refresh();
     })
   );
   readerViewProvider = registerReaderView(context, readerController, {
@@ -833,7 +833,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await typingRuntimeState.current()
     ) !== undefined
   });
-  registerShortcutRouter(context, readerViewProvider);
 }
 
 export function deactivate(): void {}

@@ -10,6 +10,7 @@ import type {
   PracticePreferences,
   TextPolicy
 } from '../domain/policies';
+import { DEFAULT_PRACTICE_PREFERENCES } from '../domain/policies';
 import type {
   InputAttempt,
   PracticeCheckpoint,
@@ -23,7 +24,8 @@ export function migratePracticePreferences(value: unknown): PracticePreferences 
     evaluation: migrateEvaluation(source.evaluation),
     textPolicy: cloneRequired<TextPolicy>(source.textPolicy, 'text policy'),
     flowPolicy: cloneRequired<FlowPolicy>(source.flowPolicy, 'flow policy'),
-    displayPolicy: cloneRequired<DisplayPolicy>(source.displayPolicy, 'display policy')
+    displayPolicy: cloneRequired<DisplayPolicy>(source.displayPolicy, 'display policy'),
+    appearance: structuredClone(DEFAULT_PRACTICE_PREFERENCES.appearance)
   };
 }
 

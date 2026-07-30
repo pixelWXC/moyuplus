@@ -7,6 +7,7 @@ import {
   type SettingsPanelAuthority
 } from '../../settings/MoyuPlusSettingsPanel';
 import { createDefaultReaderPreferences } from '../../domain/readerPreferences';
+import { createDefaultImmersiveReaderPreferences } from '../../domain/immersiveReaderPreferences';
 import { createDefaultGitLogPreferences } from '../../git/gitLogModels';
 
 function authority(): SettingsPanelAuthority {
@@ -14,8 +15,8 @@ function authority(): SettingsPanelAuthority {
     snapshot: vi.fn(section => ({
       section,
       reader: createDefaultReaderPreferences(),
-      gitLog: createDefaultGitLogPreferences(),
-      configuration: []
+      immersive: createDefaultImmersiveReaderPreferences(),
+      gitLog: createDefaultGitLogPreferences()
     })),
     change: vi.fn(async (_domain, _key, value) => value),
     reset: vi.fn(async section => section === 'reader'
@@ -97,25 +98,18 @@ describe('MoyuPlus settings panel', () => {
     });
   });
 
-  it('confirms high-risk enablement but not disablement', async () => {
+  it('ignores removed extension-configuration messages', async () => {
     const target = authority();
     const controller = new MoyuPlusSettingsPanel(Uri.file('/extension'), target);
-    controller.open('typing');
+    controller.open('reader');
     const panel = window.createdWebviewPanels[0];
     await panel.webview.receiveMessage(ready());
-    window.nextWarningMessageResult = false;
     await panel.webview.receiveMessage({
       type: 'changeSetting', protocolVersion: SETTINGS_PROTOCOL_VERSION, instanceId: 'settings-instance-a', requestId: 'r1', clientRevision: 1,
       domain: 'configuration', key: 'moyuplus.shortcuts.enableEnterRouter', value: true
     });
-    await panel.webview.receiveMessage({
-      type: 'changeSetting', protocolVersion: SETTINGS_PROTOCOL_VERSION, instanceId: 'settings-instance-a', requestId: 'r2', clientRevision: 2,
-      domain: 'configuration', key: 'moyuplus.shortcuts.enableEnterRouter', value: false
-    });
-    expect(window.warningMessages).toHaveLength(1);
-    expect(target.change).toHaveBeenCalledOnce();
-    expect(target.change).toHaveBeenCalledWith('configuration', 'moyuplus.shortcuts.enableEnterRouter', false);
-    expect(panel.webview.postedMessages).toContainEqual(expect.objectContaining({ type: 'changeFailed', requestId: 'r1', value: false }));
+    expect(window.warningMessages).toHaveLength(0);
+    expect(target.change).not.toHaveBeenCalled();
   });
 
   it('refreshes from authority when becoming visible and opens native shortcuts with the query', async () => {

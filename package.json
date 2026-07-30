@@ -2,7 +2,7 @@
   "name": "moyuplus",
   "displayName": "moyuplus",
   "description": "Local TXT reader and typing practice tools for VS Code.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "local",
   "private": true,
   "repository": {
@@ -26,7 +26,6 @@
     "onCommand:moyuplus.resetTypingPracticeProgress",
     "onCommand:moyuplus.jumpToTypingPracticeLine",
     "onCommand:moyuplus.toggleTypingPracticeLineEdgeTrim",
-    "onCommand:moyuplus.routeEnter",
     "onCommand:moyuplus.reader.nextPage",
     "onCommand:moyuplus.reader.previousPage",
     "onCommand:moyuplus.reader.undoLocation",
@@ -75,10 +74,6 @@
       {
         "command": "moyuplus.resetTypingPracticeProgress",
         "title": "MoyuPlus: Reset Typing Practice Progress"
-      },
-      {
-        "command": "moyuplus.routeEnter",
-        "title": "MoyuPlus: Route Enter"
       },
       {
         "command": "moyuplus.reader.nextPage",
@@ -146,11 +141,6 @@
       {
         "command": "moyuplus.gitLog.toggle",
         "key": "alt+q"
-      },
-      {
-        "command": "moyuplus.routeEnter",
-        "key": "enter",
-        "when": "editorTextFocus && !editorReadonly && config.moyuplus.shortcuts.enableEnterRouter"
       }
     ],
     "menus": {
@@ -171,63 +161,6 @@
           "when": "false"
         }
       ]
-    },
-    "configuration": {
-      "title": "MoyuPlus",
-      "properties": {
-        "moyuplus.shortcuts.enableEnterRouter": {
-          "type": "boolean",
-          "default": false,
-          "description": "启用 Enter 路由。关闭时，Enter 完全保持 VS Code 原生行为；开启后会按下面的 Enter 设置执行组合动作。"
-        },
-        "moyuplus.enter.insertNewLine": {
-          "type": "boolean",
-          "default": true,
-          "description": "路由 Enter 时先插入真实换行。建议保持开启，避免改变编辑器的基本输入习惯。"
-        },
-        "moyuplus.enter.nextReaderPage": {
-          "type": "boolean",
-          "default": false,
-          "description": "路由 Enter 后请求阅读器翻到下一页；阅读器视图需要已打开并选中文件。"
-        },
-        "moyuplus.typing.practiceFontSize": {
-          "type": "number",
-          "default": 34,
-          "minimum": 18,
-          "maximum": 64,
-          "description": "打字练习对照行与输入行的字号（像素）。"
-        },
-        "moyuplus.typing.practiceLineHeight": {
-          "type": "number",
-          "default": 1.6,
-          "minimum": 1.2,
-          "maximum": 2.4,
-          "description": "打字练习对照行与输入行的行高。"
-        },
-        "moyuplus.typing.practiceFontFamily": {
-          "type": "string",
-          "enum": [
-            "editor",
-            "interface"
-          ],
-          "enumDescriptions": [
-            "使用 VS Code 编辑器字体",
-            "使用 VS Code 界面字体"
-          ],
-          "default": "editor",
-          "description": "打字练习对照文章使用的字体。"
-        },
-        "moyuplus.typing.showVirtualKeyboard": {
-          "type": "boolean",
-          "default": true,
-          "description": "在练习面板显示虚拟键盘和下一个按键提示。"
-        },
-        "moyuplus.typing.colorKeyboardHands": {
-          "type": "boolean",
-          "default": true,
-          "description": "用不同颜色标记虚拟键盘上左手与右手负责的按键区域。"
-        }
-      }
     },
     "customEditors": [
       {

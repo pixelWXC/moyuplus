@@ -465,6 +465,12 @@ describe('TypingViewProvider', () => {
           showLiveMetrics: true,
           showWhitespace: false
         }
+      },
+      appearance: {
+        fontSize: 40,
+        lineHeight: 1.8,
+        fontFamily: 'interface',
+        showVirtualKeyboard: false
       }
     });
     await view.webview.receiveMessage({
@@ -609,7 +615,7 @@ describe('TypingViewProvider', () => {
     ]);
   });
 
-  it('routes explicit default saving and the host-owned language settings entry', async () => {
+  it('routes explicit default saving with plugin-owned appearance settings', async () => {
     const query = {
       shellSnapshot: vi.fn(async (page: TypingViewPage) => snapshot(page))
     };
@@ -619,8 +625,7 @@ describe('TypingViewProvider', () => {
       importTxt: vi.fn(async () => undefined),
       importEpub: vi.fn(async () => undefined),
       configureSetup: vi.fn(async () => undefined),
-      saveSetupAsDefault: vi.fn(async () => undefined),
-      openPracticeEditorSettings: vi.fn(async () => undefined)
+      saveSetupAsDefault: vi.fn(async () => undefined)
     };
     const provider = new TypingViewProvider(Uri.file('/extension'), query, commands);
     const view = createWebviewView();
@@ -648,6 +653,12 @@ describe('TypingViewProvider', () => {
           showLiveMetrics: true,
           showWhitespace: false
         }
+      },
+      appearance: {
+        fontSize: 38,
+        lineHeight: 1.7,
+        fontFamily: 'editor' as const,
+        showVirtualKeyboard: true
       }
     };
     await view.webview.receiveMessage({
@@ -658,19 +669,9 @@ describe('TypingViewProvider', () => {
       clientRevision: 1,
       ...setup
     });
-    await view.webview.receiveMessage({
-      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
-      instanceId: 'typing-view-1',
-      type: 'openPracticeEditorSettings',
-      requestId: 'open-language-settings-1',
-      clientRevision: 2
-    });
-
     expect(commands.saveSetupAsDefault).toHaveBeenCalledWith(setup);
-    expect(commands.openPracticeEditorSettings).toHaveBeenCalledOnce();
     expect(query.shellSnapshot.mock.calls).toEqual([
       ['materials'],
-      ['setup'],
       ['setup']
     ]);
   });

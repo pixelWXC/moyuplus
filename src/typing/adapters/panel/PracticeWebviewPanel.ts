@@ -30,6 +30,7 @@ export interface PracticeWebviewPanelOptions {
   resume(sessionId: string): PromiseLike<void>;
   timeout(sessionId: string): PromiseLike<void>;
   reportError(error: unknown): void;
+  appearance?(): TypingPracticePanelAppearance;
 }
 
 interface PanelBinding {
@@ -43,19 +44,19 @@ interface PanelBinding {
   disposing: boolean;
 }
 
+export const DEFAULT_TYPING_PRACTICE_PANEL_APPEARANCE:
+Readonly<TypingPracticePanelAppearance> = Object.freeze({
+  fontSize: 34,
+  lineHeight: 1.6,
+  fontFamily: 'editor',
+  showVirtualKeyboard: true
+});
+
 export class PracticeWebviewPanel implements vscode.Disposable {
   private readonly bindings = new Map<string, PanelBinding>();
-  private readonly configurationSubscription: vscode.Disposable;
   private disposed = false;
 
-  constructor(private readonly options: PracticeWebviewPanelOptions) {
-    this.configurationSubscription = vscode.workspace.onDidChangeConfiguration(event => {
-      if (!event.affectsConfiguration('moyuplus.typing')) return;
-      for (const binding of this.bindings.values()) {
-        this.renderHtml(binding);
-      }
-    });
-  }
+  constructor(private readonly options: PracticeWebviewPanelOptions) {}
 
   open(sessionId: string): vscode.WebviewPanel | undefined {
     if (this.disposed) return undefined;
@@ -107,7 +108,6 @@ export class PracticeWebviewPanel implements vscode.Disposable {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.configurationSubscription.dispose();
     for (const binding of [...this.bindings.values()]) {
       binding.panel.dispose();
     }
@@ -124,7 +124,8 @@ export class PracticeWebviewPanel implements vscode.Disposable {
       styleUri: binding.panel.webview.asWebviewUri(
         vscode.Uri.joinPath(mediaRoot, 'typingPracticePanelApp.css')
       ),
-      appearance: readAppearance()
+      appearance: this.options.appearance?.()
+        ?? DEFAULT_TYPING_PRACTICE_PANEL_APPEARANCE
     });
   }
 
@@ -278,21 +279,4 @@ export class PracticeWebviewPanel implements vscode.Disposable {
     });
     return run;
   }
-}
-
-function readAppearance(): TypingPracticePanelAppearance {
-  const configuration = vscode.workspace.getConfiguration('moyuplus.typing');
-  return {
-    fontSize: clamp(configuration.get('practiceFontSize', 34), 18, 64),
-    lineHeight: clamp(configuration.get('practiceLineHeight', 1.6), 1.2, 2.4),
-    fontFamily: configuration.get<string>('practiceFontFamily', 'editor') === 'interface'
-      ? 'interface'
-      : 'editor',
-    showVirtualKeyboard: configuration.get('showVirtualKeyboard', true),
-    colorKeyboardHands: configuration.get('colorKeyboardHands', true)
-  };
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : minimum));
 }

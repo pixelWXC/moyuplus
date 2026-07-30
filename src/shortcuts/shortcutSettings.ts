@@ -1,5 +1,3 @@
-const ROUTE_ENTER_COMMAND_ID = 'moyuplus.routeEnter';
-const TOGGLE_TYPING_PRACTICE_COMMAND_ID = 'moyuplus.toggleTypingPractice';
 const TOGGLE_GIT_LOG_COMMAND_ID = 'moyuplus.gitLog.toggle';
 
 export const NEXT_READER_PAGE_COMMAND_ID = 'moyuplus.reader.nextPage';
@@ -14,24 +12,13 @@ export const OPEN_READER_TOC_COMMAND_ID = 'moyuplus.reader.openToc';
 export const OPEN_READER_SETTINGS_COMMAND_ID = 'moyuplus.reader.openSettings';
 export const STOP_IMMERSIVE_READING_COMMAND_ID = 'moyuplus.immersive.stop';
 
-export type ShortcutRisk = 'low' | 'high';
-export type ShortcutEnablement = 'enter';
-
 export interface ShortcutSettingItem {
   commandId: string;
   label: string;
   description: string;
-  enabled: boolean;
-  configurableEnablement?: ShortcutEnablement;
-  risk: ShortcutRisk;
-  conflictWarning?: string;
 }
 
-export interface ShortcutSettingsStateInput {
-  enableEnterRouter: boolean;
-}
-
-export function createShortcutSettingsState(input: ShortcutSettingsStateInput): ShortcutSettingItem[] {
+export function createShortcutSettingsState(): ShortcutSettingItem[] {
   return [
     action(NEXT_READER_PAGE_COMMAND_ID, '阅读器：下一页', '将阅读器翻到下一页。'),
     action(PREVIOUS_READER_PAGE_COMMAND_ID, '阅读器：上一页', '返回阅读器历史中的上一页。'),
@@ -44,17 +31,7 @@ export function createShortcutSettingsState(input: ShortcutSettingsStateInput): 
     action(FOCUS_READER_COMMAND_ID, '阅读器：打开', '打开并聚焦 MoyuPlus Reader。'),
     action(CLOSE_READER_COMMAND_ID, '阅读器：关闭', '关闭当前侧边栏。'),
     action(STOP_IMMERSIVE_READING_COMMAND_ID, '沉浸阅读：结束', '保存当前页首并结束沉浸阅读。'),
-    action(TOGGLE_GIT_LOG_COMMAND_ID, 'Git Log：打开或退出', '通过专用快捷键切换分页式当前分支 Git Log。'),
-    action(TOGGLE_TYPING_PRACTICE_COMMAND_ID, '打字练习：开启或关闭', '根据当前练习状态开启或关闭打字练习。'),
-    {
-      commandId: ROUTE_ENTER_COMMAND_ID,
-      label: '编辑器：Enter 组合动作',
-      description: '插入真实换行，并可按设置推进阅读器页面。',
-      enabled: input.enableEnterRouter,
-      configurableEnablement: 'enter',
-      risk: 'high',
-      conflictWarning: 'Enter 是高频编辑按键；仅在明确需要组合动作时启用。'
-    }
+    action(TOGGLE_GIT_LOG_COMMAND_ID, 'Git Log：打开或退出', '通过专用快捷键切换分页式当前分支 Git Log。')
   ];
 }
 
@@ -62,8 +39,6 @@ function action(commandId: string, label: string, description: string): Shortcut
   return {
     commandId,
     label,
-    description,
-    enabled: true,
-    risk: 'low'
+    description
   };
 }

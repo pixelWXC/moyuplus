@@ -6,7 +6,6 @@ import {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
   RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
-  ROUTE_ENTER_COMMAND_ID,
   START_TYPING_PRACTICE_COMMAND_ID,
   STOP_TYPING_PRACTICE_COMMAND_ID,
   TOGGLE_TYPING_PRACTICE_COMMAND_ID,
@@ -114,22 +113,9 @@ describe('package contributions', () => {
     });
   });
 
-  it('exposes a persistent virtual-keyboard switch in VS Code settings', async () => {
+  it('does not expose any configuration in VS Code extension settings', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
-    const properties = packageJson.contributes.configuration.properties;
-
-    expect(properties).toMatchObject({
-      'moyuplus.typing.showVirtualKeyboard': {
-        type: 'boolean',
-        default: true,
-        description: expect.stringContaining('虚拟键盘')
-      },
-      'moyuplus.typing.colorKeyboardHands': {
-        type: 'boolean',
-        default: true,
-        description: expect.stringContaining('左手与右手')
-      }
-    });
+    expect(packageJson.contributes).not.toHaveProperty('configuration');
   });
 
   it('keeps meaningful typing aliases visible and legacy activation compatibility', async () => {
@@ -143,8 +129,7 @@ describe('package contributions', () => {
         `onCommand:${NEXT_TYPING_PRACTICE_LINE_COMMAND_ID}`,
         `onCommand:${RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID}`,
         `onCommand:${JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID}`,
-        `onCommand:${TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID}`,
-        `onCommand:${ROUTE_ENTER_COMMAND_ID}`
+        `onCommand:${TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID}`
       ])
     );
     expect(packageJson.activationEvents).not.toContain('onCommand:moyuplus.routeTab');
@@ -153,8 +138,7 @@ describe('package contributions', () => {
         START_TYPING_PRACTICE_COMMAND_ID,
         STOP_TYPING_PRACTICE_COMMAND_ID,
         RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
-        TOGGLE_TYPING_PRACTICE_COMMAND_ID,
-        ROUTE_ENTER_COMMAND_ID
+        TOGGLE_TYPING_PRACTICE_COMMAND_ID
       ])
     );
     expect(commandIds).not.toEqual(expect.arrayContaining([
@@ -165,51 +149,25 @@ describe('package contributions', () => {
     ]));
   });
 
-  it('keeps the reader Enter router without old global typing Tab settings', async () => {
+  it('removes global editor routers and extension settings', async () => {
     const packageJson = JSON.parse(await readFile(path.resolve(__dirname, '../../../package.json'), 'utf8'));
 
-    expect(packageJson.contributes.keybindings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          command: ROUTE_ENTER_COMMAND_ID,
-          key: 'enter',
-          when: expect.stringContaining('config.moyuplus.shortcuts.enableEnterRouter')
-        }),
-        {
-          command: STOP_IMMERSIVE_READING_COMMAND_ID,
-          key: 'alt+shift+q',
-          when: 'moyuplus.immersiveReadingActive'
-        }
-      ])
-    );
+    expect(packageJson.contributes.keybindings).toContainEqual({
+      command: STOP_IMMERSIVE_READING_COMMAND_ID,
+      key: 'alt+shift+q',
+      when: 'moyuplus.immersiveReadingActive'
+    });
     expect(packageJson.contributes.keybindings).not.toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ command: 'moyuplus.routeEnter' }),
         expect.objectContaining({ command: 'moyuplus.routeTab' })
       ])
     );
-
-    expect(packageJson.contributes.configuration.properties).toMatchObject({
-      'moyuplus.shortcuts.enableEnterRouter': { type: 'boolean', default: false },
-      'moyuplus.enter.insertNewLine': { type: 'boolean', default: true },
-      'moyuplus.enter.nextReaderPage': { type: 'boolean', default: false }
-    });
-    expect(packageJson.contributes.configuration.properties).toMatchObject({
-      'moyuplus.shortcuts.enableEnterRouter': {
-        description: expect.stringContaining('启用 Enter 路由')
-      },
-      'moyuplus.enter.insertNewLine': {
-        description: expect.stringContaining('插入真实换行')
-      },
-      'moyuplus.enter.nextReaderPage': {
-        description: expect.stringContaining('阅读器翻到下一页')
-      }
-    });
-    expect(packageJson.contributes.configuration.properties)
-      .not.toHaveProperty('moyuplus.shortcuts.enableTabRouter');
-    expect(packageJson.contributes.configuration.properties)
-      .not.toHaveProperty('moyuplus.typing.tabMode');
-    expect(packageJson.contributes.configuration.properties)
-      .not.toHaveProperty('moyuplus.enter.nextPracticeLine');
+    expect(packageJson.activationEvents).not.toContain('onCommand:moyuplus.routeEnter');
+    expect(packageJson.contributes.commands).not.toContainEqual(
+      expect.objectContaining({ command: 'moyuplus.routeEnter' })
+    );
+    expect(packageJson.contributes).not.toHaveProperty('configuration');
   });
 
   it('does not contribute retired practice-editor commands or keybindings', async () => {
@@ -263,8 +221,7 @@ describe('package contributions', () => {
       FOCUS_READER_COMMAND_ID,
       CLOSE_READER_COMMAND_ID,
       STOP_IMMERSIVE_READING_COMMAND_ID,
-      TOGGLE_GIT_LOG_COMMAND_ID,
-      TOGGLE_TYPING_PRACTICE_COMMAND_ID
+      TOGGLE_GIT_LOG_COMMAND_ID
     ];
 
     expect(commandIds).toEqual(expect.arrayContaining(settingsCommands));

@@ -24,6 +24,11 @@ describe('PracticeWebviewPanel', () => {
     expect(panel.revealCalls).toHaveLength(1);
     expect(panel.webview.html).toContain("default-src 'none'");
     expect(panel.webview.html).toMatch(/script-src 'nonce-[^']+'/);
+    expect(panel.webview.html).toContain('data-practice-font-size="34"');
+    expect(panel.webview.html).toContain('data-practice-line-height="1.6"');
+    expect(panel.webview.html).toContain('data-practice-font-family="editor"');
+    expect(panel.webview.html).toContain('data-show-virtual-keyboard="true"');
+    expect(panel.webview.html).not.toContain('data-color-keyboard-hands');
   });
 
   it('publishes authority on ready and routes submit through the coordinator', async () => {
@@ -68,6 +73,24 @@ describe('PracticeWebviewPanel', () => {
       sequence: 1,
       transactionId: 'transaction-1'
     });
+  });
+
+  it('renders the plugin-owned appearance and keyboard preferences', () => {
+    const owner = createOwner(false, {
+      fontSize: 46,
+      lineHeight: 2,
+      fontFamily: 'interface',
+      showVirtualKeyboard: false
+    });
+
+    owner.panel.open('session-1');
+
+    const html = window.createdWebviewPanels[0].webview.html;
+    expect(html).toContain('data-practice-font-size="46"');
+    expect(html).toContain('data-practice-line-height="2"');
+    expect(html).toContain('data-practice-font-family="interface"');
+    expect(html).toContain('data-show-virtual-keyboard="false"');
+    expect(html).not.toContain('data-color-keyboard-hands');
   });
 
   it('rejects messages from a replaced panel instance and pauses after accepted work', async () => {
@@ -135,7 +158,12 @@ describe('PracticeWebviewPanel', () => {
   });
 });
 
-function createOwner(timed = false) {
+function createOwner(timed = false, appearance?: {
+  fontSize: number;
+  lineHeight: number;
+  fontFamily: 'editor' | 'interface';
+  showVirtualKeyboard: boolean;
+}) {
   const snapshotValue = {
     sessionId: 'session-1',
     revision: 0,
@@ -196,6 +224,7 @@ function createOwner(timed = false) {
       pause,
       resume,
       timeout,
+      appearance: appearance ? () => appearance : undefined,
       reportError: vi.fn()
     })
   };

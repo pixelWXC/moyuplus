@@ -40,24 +40,9 @@
       visualLines: 3, graphemesPerLine: 40, textColor: 'theme', backgroundColor: 'transparent',
       fontWeight: 'normal', italic: false, leftMargin: 12
     };
-    const configValues = [
-      ['moyuplus.shortcuts.enableEnterRouter', false],
-      ['moyuplus.enter.insertNewLine', true],
-      ['moyuplus.enter.nextReaderPage', false]
-    ];
-    const configuration = configValues.map(([key, value], index) => ({
-      key, defaultValue: value, globalValue: value, globalIsDefault: true,
-      workspaceValue: index === 0 ? true : undefined,
-      folders: index === 0 ? [
-        { name: 'alpha', workspaceFolderValue: false, effectiveValue: false },
-        { name: 'beta', workspaceFolderValue: true, effectiveValue: true }
-      ] : [],
-      activeResource: index === 0 ? { folderName: 'beta', effectiveValue: true } : undefined,
-      overridden: index === 0
-    }));
     const sendSnapshot = section => window.dispatchEvent(new MessageEvent('message', { data: {
       type: 'settingsSnapshot', protocolVersion: 2, instanceId, stateVersion: ++stateVersion,
-      section, reader, immersive, gitLog, configuration
+      section, reader, immersive, gitLog
     }}));
     window.acquireVsCodeApi = () => ({ postMessage(message) {
       window.sentMessages.push(message);
@@ -78,7 +63,7 @@
     window.settingsHarness = {
       sendSnapshot,
       sent: () => window.sentMessages,
-      select: section => document.querySelector(`.section-link:nth-child(${['reader','immersive','gitLog','typing','shortcuts'].indexOf(section) + 1})`)?.click(),
+      select: section => document.querySelector(`.section-link:nth-child(${['reader','immersive','gitLog','shortcuts'].indexOf(section) + 1})`)?.click(),
       rememberRange: id => { rememberedRange = document.getElementById(id); },
       rememberedRangeIsConnected: id => rememberedRange === document.getElementById(id) && rememberedRange?.isConnected
     };

@@ -30,12 +30,20 @@ export interface DisplayPolicy {
   showWhitespace: boolean;
 }
 
+export interface PracticeAppearancePreferences {
+  fontSize: number;
+  lineHeight: number;
+  fontFamily: 'editor' | 'interface';
+  showVirtualKeyboard: boolean;
+}
+
 export interface PracticePreferences {
   schemaVersion: 1;
   evaluation: EvaluationPolicy;
   textPolicy: TextPolicy;
   flowPolicy: FlowPolicy;
   displayPolicy: DisplayPolicy;
+  appearance: PracticeAppearancePreferences;
 }
 
 export const DEFAULT_PRACTICE_PREFERENCES: PracticePreferences = deepFreeze({
@@ -55,6 +63,12 @@ export const DEFAULT_PRACTICE_PREFERENCES: PracticePreferences = deepFreeze({
   displayPolicy: {
     showLiveMetrics: true,
     showWhitespace: false
+  },
+  appearance: {
+    fontSize: 34,
+    lineHeight: 1.6,
+    fontFamily: 'editor',
+    showVirtualKeyboard: true
   }
 });
 

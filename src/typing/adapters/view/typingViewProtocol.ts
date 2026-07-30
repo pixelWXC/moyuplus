@@ -1,5 +1,5 @@
 export const TYPING_VIEW_ID = 'moyuplus.typingView';
-export const TYPING_VIEW_PROTOCOL_VERSION = 15 as const;
+export const TYPING_VIEW_PROTOCOL_VERSION = 16 as const;
 
 export const TYPING_VIEW_PAGES = [
   'materials',
@@ -117,6 +117,13 @@ export interface TypingViewSetupPlan {
   };
 }
 
+export interface TypingViewAppearancePreferences {
+  fontSize: number;
+  lineHeight: number;
+  fontFamily: 'editor' | 'interface';
+  showVirtualKeyboard: boolean;
+}
+
 export interface TypingViewSetupContent {
   kind: 'setup';
   source: {
@@ -138,6 +145,7 @@ export interface TypingViewSetupContent {
     updatedAt: number;
   }[];
   plan: TypingViewSetupPlan;
+  appearance: TypingViewAppearancePreferences;
 }
 
 export interface TypingViewSessionConflictContent {
@@ -373,15 +381,14 @@ export type TypingViewToHostMessage =
     selectedRange: TypingViewSourceRange;
     startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
-  })
-  | (TypingViewRequestEnvelope & {
-    type: 'openPracticeEditorSettings';
+    appearance: TypingViewAppearancePreferences;
   })
   | (TypingViewRequestEnvelope & {
     type: 'startPractice';
     selectedRange: TypingViewSourceRange;
     startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
+    appearance: TypingViewAppearancePreferences;
   })
   | (TypingViewRequestEnvelope & {
     type: 'resolveSessionConflict';
@@ -483,10 +490,12 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
     || value.type === 'saveSetupAsDefault'
     || value.type === 'startPractice'
   ) {
+    const includesAppearance = value.type !== 'configureSetup';
     return hasOnlyKeys(value, [
       ...requestKeys,
       'selectedRange',
       'plan',
+      ...(includesAppearance ? ['appearance'] : []),
       ...(value.startPosition === undefined ? [] : ['startPosition'])
     ])
     && isTypingViewSourceRange(value.selectedRange)
@@ -494,7 +503,11 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
       value.startPosition === undefined
       || isTypingViewStartPosition(value.startPosition)
     )
-    && isTypingViewSetupPlan(value.plan);
+    && isTypingViewSetupPlan(value.plan)
+    && (
+      !includesAppearance
+      || isTypingViewAppearancePreferences(value.appearance)
+    );
   }
   if (value.type === 'resolveSessionConflict') {
     return hasOnlyKeys(value, [
@@ -512,7 +525,6 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
     || value.type === 'dismissRecovery'
     || value.type === 'resumeLegacyPractice'
     || value.type === 'dismissLegacyResumeHint'
-    || value.type === 'openPracticeEditorSettings'
     || value.type === 'clearPracticeHistory'
     || value.type === 'startMasteryPractice'
     || value.type === 'adjustMasteryPractice'
@@ -797,6 +809,7 @@ function isTypingViewPageContent(
       'ranges',
       'selectedRange',
       'plan',
+      'appearance',
       ...(value.startPosition === undefined ? [] : ['startPosition']),
       ...(value.continuations === undefined ? [] : ['continuations'])
     ])
@@ -821,6 +834,7 @@ function isTypingViewPageContent(
       )
     )
     || !isTypingViewSetupPlan(value.plan)
+    || !isTypingViewAppearancePreferences(value.appearance)
   ) {
     return false;
   }
@@ -956,6 +970,22 @@ function isTypingViewSetupPlan(value: unknown): value is TypingViewSetupPlan {
     && hasOnlyKeys(value.displayPolicy, ['showLiveMetrics', 'showWhitespace'])
     && typeof value.displayPolicy.showLiveMetrics === 'boolean'
     && typeof value.displayPolicy.showWhitespace === 'boolean';
+}
+
+function isTypingViewAppearancePreferences(
+  value: unknown
+): value is TypingViewAppearancePreferences {
+  return isRecord(value)
+    && hasOnlyKeys(value, [
+      'fontSize',
+      'lineHeight',
+      'fontFamily',
+      'showVirtualKeyboard'
+    ])
+    && isFiniteBetween(value.fontSize, 18, 64)
+    && isFiniteBetween(value.lineHeight, 1.2, 2.4)
+    && (value.fontFamily === 'editor' || value.fontFamily === 'interface')
+    && typeof value.showVirtualKeyboard === 'boolean';
 }
 
 function isTypingViewCompletion(value: unknown): value is TypingViewCompletionConstraint {

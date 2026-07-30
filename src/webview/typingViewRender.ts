@@ -511,12 +511,31 @@ function renderSetup(
           ${checkbox('showLiveMetrics', '在练习窗口显示局内指标', content.plan.displayPolicy.showLiveMetrics)}
           ${checkbox('showWhitespace', '显示空白符', content.plan.displayPolicy.showWhitespace)}
         </fieldset>
+        <fieldset class="setup-appearance">
+          <legend>界面与键盘</legend>
+          <label>
+            练习字号（18–64 px）
+            <input name="fontSize" type="number" min="18" max="64" step="1" value="${content.appearance.fontSize}">
+          </label>
+          <label>
+            练习行高（1.2–2.4）
+            <input name="lineHeight" type="number" min="1.2" max="2.4" step="0.1" value="${content.appearance.lineHeight}">
+          </label>
+          <label>
+            练习字体
+            <select name="fontFamily">
+              ${option('editor', 'VS Code 编辑器字体', content.appearance.fontFamily)}
+              ${option('interface', 'VS Code 界面字体', content.appearance.fontFamily)}
+            </select>
+          </label>
+          ${checkbox('showVirtualKeyboard', '显示虚拟键盘与下一按键提示', content.appearance.showVirtualKeyboard)}
+          <p class="setup-field-help">界面选项会保存到 MoyuPlus 打字练习配置，并应用到之后打开的练习窗口。</p>
+        </fieldset>
         <div class="setup-actions" role="group" aria-label="练习设置操作">
           <button class="material-action is-primary" type="submit" data-start-practice>保存并开始练习</button>
           <button class="material-action" type="button" data-save-setup-defaults>设为默认</button>
-          <button class="material-action" type="button" data-open-practice-editor-settings>编辑练习字体与外观</button>
         </div>
-        <p class="setup-defaults-note">“设为默认”只保存判定、文本、推进与显示策略；本次素材范围和完成条件不会写入全局默认。</p>
+        <p class="setup-defaults-note">“设为默认”保存判定、文本、推进、显示以及界面与键盘设置；本次素材范围和完成条件不会写入默认值。</p>
       </form>
     </section>`;
 }

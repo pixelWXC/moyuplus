@@ -60,6 +60,12 @@ const setupContent: TypingViewSetupContent = {
       showLiveMetrics: true,
       showWhitespace: false
     }
+  },
+  appearance: {
+    fontSize: 34,
+    lineHeight: 1.6,
+    fontFamily: 'editor',
+    showVirtualKeyboard: true
   }
 };
 
@@ -77,7 +83,11 @@ describe('Typing setup form', () => {
       lineAdvance: 'enter',
       presentation: 'lineFocus',
       showLiveMetrics: false,
-      showWhitespace: true
+      showWhitespace: true,
+      fontSize: '42',
+      lineHeight: '1.8',
+      fontFamily: 'interface',
+      showVirtualKeyboard: false
     })).toEqual({
       selectedRange: {
         kind: 'chapter',
@@ -112,6 +122,12 @@ describe('Typing setup form', () => {
           showLiveMetrics: false,
           showWhitespace: true
         }
+      },
+      appearance: {
+        fontSize: 42,
+        lineHeight: 1.8,
+        fontFamily: 'interface',
+        showVirtualKeyboard: false
       }
     });
   });

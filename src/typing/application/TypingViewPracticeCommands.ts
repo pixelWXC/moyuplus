@@ -41,6 +41,7 @@ export interface TypingViewPracticeCommandsOptions {
   coordinator: TypingViewPracticeCoordinatorPort;
   active: TypingViewActivePracticePort;
   preferences: {
+    load(): PromiseLike<PracticePreferences>;
     save(preferences: PracticePreferences): PromiseLike<void>;
   };
   mastery?: {
@@ -83,6 +84,7 @@ export class TypingViewPracticeCommands {
     configuration: PracticeSetupConfiguration
   ): Promise<TypingViewPracticeDestination> {
     this.options.draft.configure(configuration);
+    await this.saveAppearance(configuration);
     const active = await this.options.active.current();
     if (active) {
       this.conflict = structuredClone(active);
@@ -123,12 +125,27 @@ export class TypingViewPracticeCommands {
     if (!plan) {
       throw new Error('Practice setup must be configured before saving defaults.');
     }
+    const current = await this.options.preferences.load();
     await this.options.preferences.save({
       schemaVersion: 1,
       evaluation: structuredClone(plan.evaluation),
       textPolicy: structuredClone(plan.textPolicy),
       flowPolicy: structuredClone(plan.flowPolicy),
-      displayPolicy: structuredClone(plan.displayPolicy)
+      displayPolicy: structuredClone(plan.displayPolicy),
+      appearance: structuredClone(
+        configuration.appearance ?? current.appearance
+      )
+    });
+  }
+
+  private async saveAppearance(
+    configuration: PracticeSetupConfiguration
+  ): Promise<void> {
+    if (!configuration.appearance) return;
+    const current = await this.options.preferences.load();
+    await this.options.preferences.save({
+      ...structuredClone(current),
+      appearance: structuredClone(configuration.appearance)
     });
   }
 

@@ -18,8 +18,7 @@ function snapshot(instanceId: string, stateVersion: number, section: SettingsSna
     section,
     reader: createDefaultReaderPreferences(),
     immersive: createDefaultImmersiveReaderPreferences(),
-    gitLog: createDefaultGitLogPreferences(),
-    configuration: []
+    gitLog: createDefaultGitLogPreferences()
   };
 }
 
@@ -37,7 +36,7 @@ describe('settings Webview state', () => {
       createInitialSettingsState('instance-a'),
       { type: 'snapshotReceived', snapshot: snapshot('instance-a', 4, 'gitLog') }
     );
-    const stale = settingsReducer(state, { type: 'snapshotReceived', snapshot: snapshot('instance-a', 3, 'typing') });
+    const stale = settingsReducer(state, { type: 'snapshotReceived', snapshot: snapshot('instance-a', 3, 'reader') });
     expect(stale).toBe(state);
     state = settingsReducer(state, { type: 'snapshotReceived', snapshot: snapshot('instance-a', 5, 'shortcuts') });
     expect(state).toMatchObject({ section: 'shortcuts', stateVersion: 5 });

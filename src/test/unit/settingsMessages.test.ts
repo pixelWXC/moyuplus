@@ -16,7 +16,7 @@ describe('settings message protocol', () => {
     expect(SETTINGS_PROTOCOL_VERSION).toBe(2);
   });
 
-  it('accepts the handshake and the four explicit setting domains', () => {
+  it('accepts the handshake and the three plugin-owned setting domains', () => {
     expect(isSettingsToHostMessage({
       type: 'settingsReady',
       protocolVersion: SETTINGS_PROTOCOL_VERSION,
@@ -42,13 +42,6 @@ describe('settings message protocol', () => {
       domain: 'gitLog',
       key: 'showAuthor',
       value: false
-    })).toBe(true);
-    expect(isSettingsToHostMessage({
-      ...envelope,
-      type: 'changeSetting',
-      domain: 'configuration',
-      key: 'moyuplus.shortcuts.enableEnterRouter',
-      value: true
     })).toBe(true);
   });
 
@@ -101,9 +94,11 @@ describe('settings message protocol', () => {
       { ...envelope, type: 'changeSetting', domain: 'gitLog', key: 'maxCommits', value: 1001 },
       { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.unknown', value: true },
       { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.shortcuts.enableEnterRouter', value: 'yes' },
+      { ...envelope, type: 'changeSetting', domain: 'configuration', key: 'moyuplus.shortcuts.enableEnterRouter', value: true },
       { ...envelope, type: 'changeSetting', domain: 'reader', key: 'fontSize', value: 18, extra: true },
       { ...envelope, type: 'unknown' },
       { ...envelope, type: 'resetSection', section: 'typing' },
+      { type: 'selectSection', protocolVersion: SETTINGS_PROTOCOL_VERSION, instanceId: envelope.instanceId, section: 'typing' },
       { type: 'settingsReady', protocolVersion: 999, instanceId: envelope.instanceId },
       { type: 'settingsReady', protocolVersion: SETTINGS_PROTOCOL_VERSION, instanceId: '../bad' }
     ];

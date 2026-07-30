@@ -7,7 +7,6 @@ import {
   JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
   NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
   RESET_TYPING_PRACTICE_PROGRESS_COMMAND_ID,
-  ROUTE_ENTER_COMMAND_ID,
   SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
   SMOKE_COMMAND_ID,
   SMOKE_MESSAGE,
@@ -126,8 +125,7 @@ describe('extension activation', () => {
       NEXT_TYPING_PRACTICE_LINE_COMMAND_ID,
       JUMP_TO_TYPING_PRACTICE_LINE_COMMAND_ID,
       TOGGLE_TYPING_PRACTICE_LINE_EDGE_TRIM_COMMAND_ID,
-      SHOW_TYPING_PRACTICE_MENU_COMMAND_ID,
-      ROUTE_ENTER_COMMAND_ID
+      SHOW_TYPING_PRACTICE_MENU_COMMAND_ID
     ]);
     expect(window.registeredWebviewViewProviderIds()).toEqual([READER_VIEW_ID, TYPING_VIEW_ID]);
     expect(window.registeredCustomEditorProviderIds()).toEqual([IMAGE_PREVIEW_VIEW_TYPE]);
@@ -219,7 +217,9 @@ describe('extension activation', () => {
     await activate({
       globalState,
       workspaceState: new MemoryMemento(),
-      globalStorageUri: Uri.file(path.join(root, 'global-storage')),
+      globalStorageUri: {
+        fsPath: path.join(root, 'global-storage')
+      } as Uri,
       storageUri: {
         fsPath: path.join(root, 'workspace-storage')
       } as Uri,
@@ -270,9 +270,11 @@ describe('extension activation', () => {
       requestId: 'start-reader-source',
       clientRevision: 1,
       selectedRange: setup?.selectedRange,
-      plan: setup?.plan
+      plan: setup?.plan,
+      appearance: setup?.appearance
     });
 
+    expect(window.errorMessages).toEqual([]);
     expect(typingView.webview.postedMessages.at(-1)).toEqual(
       expect.objectContaining({
         snapshot: expect.objectContaining({
@@ -459,7 +461,7 @@ describe('extension activation', () => {
 
   });
 
-  it('saves setup defaults explicitly and opens the native practice language settings', async () => {
+  it('saves policy and appearance defaults inside the typing module', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-defaults-'));
     temporaryRoots.push(root);
     const globalStorage = path.join(root, 'global-storage');
@@ -508,7 +510,13 @@ describe('extension activation', () => {
       requestId: 'save-defaults',
       clientRevision: 2,
       selectedRange: setup?.selectedRange,
-      plan
+      plan,
+      appearance: {
+        fontSize: 42,
+        lineHeight: 1.8,
+        fontFamily: 'interface',
+        showVirtualKeyboard: false
+      }
     });
 
     const saved = JSON.parse(await readFile(
@@ -523,6 +531,12 @@ describe('extension activation', () => {
       displayPolicy: {
         showLiveMetrics: false,
         showWhitespace: true
+      },
+      appearance: {
+        fontSize: 42,
+        lineHeight: 1.8,
+        fontFamily: 'interface',
+        showVirtualKeyboard: false
       }
     });
     expect(saved).not.toHaveProperty('completion');
@@ -530,17 +544,9 @@ describe('extension activation', () => {
       '已保存为新的打字练习默认设置。'
     );
 
-    await view.webview.receiveMessage({
-      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
-      instanceId: 'typing-view-defaults',
-      type: 'openPracticeEditorSettings',
-      requestId: 'open-practice-settings',
-      clientRevision: 3
-    });
-    expect(commands.executedBuiltinCommands()).toContainEqual({
-      commandId: 'workbench.action.openSettings',
-      args: ['@ext:local.moyuplus moyuplus.typing']
-    });
+    expect(commands.executedBuiltinCommands()).not.toContainEqual(
+      expect.objectContaining({ commandId: 'workbench.action.openSettings' })
+    );
   });
 
   it('starts the configured Typing View draft through the real application coordinator', async () => {
@@ -585,7 +591,8 @@ describe('extension activation', () => {
       requestId: 'start-configured-source',
       clientRevision: 2,
       selectedRange: setup?.selectedRange,
-      plan: setup?.plan
+      plan: setup?.plan,
+      appearance: setup?.appearance
     });
 
     expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
@@ -636,7 +643,8 @@ describe('extension activation', () => {
       requestId: 'start-with-active-session',
       clientRevision: 4,
       selectedRange: setup?.selectedRange,
-      plan: setup?.plan
+      plan: setup?.plan,
+      appearance: setup?.appearance
     });
     expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
       snapshot: expect.objectContaining({
@@ -889,7 +897,8 @@ describe('extension activation', () => {
       clientRevision: 5,
       selectedRange: setup?.selectedRange,
       startPosition: { kind: 'beginning' },
-      plan: setup?.plan
+      plan: setup?.plan,
+      appearance: setup?.appearance
     });
 
     const workspaceSessions = new TypingWorkspaceSessionStore(
@@ -1013,7 +1022,8 @@ describe('extension activation', () => {
       requestId: 'start-free-content',
       clientRevision: 2,
       selectedRange: setup?.selectedRange,
-      plan: setup?.plan
+      plan: setup?.plan,
+      appearance: setup?.appearance
     });
 
     expect(view.webview.postedMessages.at(-1)).toEqual(

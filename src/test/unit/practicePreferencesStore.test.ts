@@ -64,7 +64,11 @@ describe('PracticePreferencesStore', () => {
       evaluation: { mode: 'committedBatch', errorPolicy: 'allowSkip' },
       textPolicy: DEFAULT_PRACTICE_PREFERENCES.textPolicy,
       flowPolicy: DEFAULT_PRACTICE_PREFERENCES.flowPolicy,
-      displayPolicy: DEFAULT_PRACTICE_PREFERENCES.displayPolicy
+      displayPolicy: DEFAULT_PRACTICE_PREFERENCES.displayPolicy,
+      appearance: {
+        ...DEFAULT_PRACTICE_PREFERENCES.appearance,
+        colorKeyboardHands: false
+      }
     }), 'utf8');
     const store = new PracticePreferencesStore(root);
 
@@ -78,7 +82,11 @@ describe('PracticePreferencesStore', () => {
     ) as Record<string, unknown>;
 
     expect(loaded.preferences.evaluation).toEqual({ errorPolicy: 'allowSkip' });
+    expect(loaded.preferences.appearance).toEqual(
+      DEFAULT_PRACTICE_PREFERENCES.appearance
+    );
     expect(persisted.evaluation).toEqual({ errorPolicy: 'allowSkip' });
+    expect(persisted.appearance).toEqual(DEFAULT_PRACTICE_PREFERENCES.appearance);
   });
 });
 

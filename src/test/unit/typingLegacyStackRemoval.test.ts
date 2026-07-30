@@ -21,7 +21,9 @@ describe('typing legacy-stack removal', () => {
     'src/typing/assets/builtInPack.ts',
     'src/typing/assets/index.ts',
     'src/typing/adapters/sources/BuiltInPackProvider.ts',
-    'src/test/unit/typingBuiltInContent.test.ts'
+    'src/test/unit/typingBuiltInContent.test.ts',
+    'src/commands/shortcutRouter.ts',
+    'src/settings/vscodeSettingsConfiguration.ts'
   ])('removes %s', async relativePath => {
     await expect(access(path.join(projectRoot, relativePath)))
       .rejects.toThrow();
@@ -30,7 +32,6 @@ describe('typing legacy-stack removal', () => {
   it('removes the obsolete global Tab route and settings surface', async () => {
     const files = [
       'package.json',
-      'src/commands/shortcutRouter.ts',
       'src/shortcuts/shortcutSettings.ts',
       'src/settings/settingsMessages.ts',
       'src/settings/settingsAuthority.ts',
@@ -42,6 +43,7 @@ describe('typing legacy-stack removal', () => {
     )))).join('\n');
 
     expect(combined).not.toContain('moyuplus.routeTab');
+    expect(combined).not.toContain('moyuplus.routeEnter');
     expect(combined).not.toContain('enableTabRouter');
     expect(combined).not.toContain('moyuplus.typing.tabMode');
     expect(combined).not.toContain('nextPracticeLine');

@@ -48,8 +48,6 @@
   }
 
   // src/shortcuts/shortcutSettings.ts
-  var ROUTE_ENTER_COMMAND_ID = "moyuplus.routeEnter";
-  var TOGGLE_TYPING_PRACTICE_COMMAND_ID = "moyuplus.toggleTypingPractice";
   var TOGGLE_GIT_LOG_COMMAND_ID = "moyuplus.gitLog.toggle";
   var NEXT_READER_PAGE_COMMAND_ID = "moyuplus.reader.nextPage";
   var PREVIOUS_READER_PAGE_COMMAND_ID = "moyuplus.reader.previousPage";
@@ -62,7 +60,7 @@
   var OPEN_READER_TOC_COMMAND_ID = "moyuplus.reader.openToc";
   var OPEN_READER_SETTINGS_COMMAND_ID = "moyuplus.reader.openSettings";
   var STOP_IMMERSIVE_READING_COMMAND_ID = "moyuplus.immersive.stop";
-  function createShortcutSettingsState(input) {
+  function createShortcutSettingsState() {
     return [
       action(NEXT_READER_PAGE_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u4E0B\u4E00\u9875", "\u5C06\u9605\u8BFB\u5668\u7FFB\u5230\u4E0B\u4E00\u9875\u3002"),
       action(PREVIOUS_READER_PAGE_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u4E0A\u4E00\u9875", "\u8FD4\u56DE\u9605\u8BFB\u5668\u5386\u53F2\u4E2D\u7684\u4E0A\u4E00\u9875\u3002"),
@@ -75,26 +73,14 @@
       action(FOCUS_READER_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u6253\u5F00", "\u6253\u5F00\u5E76\u805A\u7126 MoyuPlus Reader\u3002"),
       action(CLOSE_READER_COMMAND_ID, "\u9605\u8BFB\u5668\uFF1A\u5173\u95ED", "\u5173\u95ED\u5F53\u524D\u4FA7\u8FB9\u680F\u3002"),
       action(STOP_IMMERSIVE_READING_COMMAND_ID, "\u6C89\u6D78\u9605\u8BFB\uFF1A\u7ED3\u675F", "\u4FDD\u5B58\u5F53\u524D\u9875\u9996\u5E76\u7ED3\u675F\u6C89\u6D78\u9605\u8BFB\u3002"),
-      action(TOGGLE_GIT_LOG_COMMAND_ID, "Git Log\uFF1A\u6253\u5F00\u6216\u9000\u51FA", "\u901A\u8FC7\u4E13\u7528\u5FEB\u6377\u952E\u5207\u6362\u5206\u9875\u5F0F\u5F53\u524D\u5206\u652F Git Log\u3002"),
-      action(TOGGLE_TYPING_PRACTICE_COMMAND_ID, "\u6253\u5B57\u7EC3\u4E60\uFF1A\u5F00\u542F\u6216\u5173\u95ED", "\u6839\u636E\u5F53\u524D\u7EC3\u4E60\u72B6\u6001\u5F00\u542F\u6216\u5173\u95ED\u6253\u5B57\u7EC3\u4E60\u3002"),
-      {
-        commandId: ROUTE_ENTER_COMMAND_ID,
-        label: "\u7F16\u8F91\u5668\uFF1AEnter \u7EC4\u5408\u52A8\u4F5C",
-        description: "\u63D2\u5165\u771F\u5B9E\u6362\u884C\uFF0C\u5E76\u53EF\u6309\u8BBE\u7F6E\u63A8\u8FDB\u9605\u8BFB\u5668\u9875\u9762\u3002",
-        enabled: input.enableEnterRouter,
-        configurableEnablement: "enter",
-        risk: "high",
-        conflictWarning: "Enter \u662F\u9AD8\u9891\u7F16\u8F91\u6309\u952E\uFF1B\u4EC5\u5728\u660E\u786E\u9700\u8981\u7EC4\u5408\u52A8\u4F5C\u65F6\u542F\u7528\u3002"
-      }
+      action(TOGGLE_GIT_LOG_COMMAND_ID, "Git Log\uFF1A\u6253\u5F00\u6216\u9000\u51FA", "\u901A\u8FC7\u4E13\u7528\u5FEB\u6377\u952E\u5207\u6362\u5206\u9875\u5F0F\u5F53\u524D\u5206\u652F Git Log\u3002")
     ];
   }
   function action(commandId, label, description) {
     return {
       commandId,
       label,
-      description,
-      enabled: true,
-      risk: "low"
+      description
     };
   }
 
@@ -149,7 +135,6 @@
       reader: createDefaultReaderPreferences(),
       immersive: createDefaultImmersiveReaderPreferences(),
       gitLog: createDefaultGitLogPreferences(),
-      configuration: [],
       pending: {}
     };
   }
@@ -191,7 +176,6 @@
         reader: snapshot.reader,
         immersive: snapshot.immersive,
         gitLog: snapshot.gitLog,
-        configuration: snapshot.configuration,
         error: void 0
       };
     }
@@ -223,11 +207,7 @@
   function setDomainValue(state2, domain, key, value) {
     if (domain === "reader") return { ...state2, reader: { ...state2.reader, [key]: value } };
     if (domain === "immersive") return { ...state2, immersive: { ...state2.immersive, [key]: value } };
-    if (domain === "gitLog") return { ...state2, gitLog: { ...state2.gitLog, [key]: value } };
-    return {
-      ...state2,
-      configuration: state2.configuration.map((item) => item.key === key ? { ...item, globalValue: value, globalIsDefault: false } : item)
-    };
+    return { ...state2, gitLog: { ...state2.gitLog, [key]: value } };
   }
 
   // src/webview/settingsApp.ts
@@ -245,7 +225,6 @@
     { id: "reader", label: "\u9605\u8BFB" },
     { id: "immersive", label: "\u6C89\u6D78\u9605\u8BFB" },
     { id: "gitLog", label: "Git Log" },
-    { id: "typing", label: "\u6253\u5B57\u7EC3\u4E60\uFF08\u5B9E\u9A8C\u6027\uFF09" },
     { id: "shortcuts", label: "\u5FEB\u6377\u952E" }
   ];
   vscode?.postMessage({ type: "settingsReady", protocolVersion: SETTINGS_PROTOCOL_VERSION, instanceId });
@@ -443,7 +422,6 @@
     if (state.section === "reader") return renderReader();
     if (state.section === "immersive") return renderImmersive();
     if (state.section === "gitLog") return renderGitLog();
-    if (state.section === "typing") return renderTyping();
     return renderShortcuts();
   }
   function renderImmersive() {
@@ -511,64 +489,26 @@
     root.append(fields, resetButton("gitLog", "\u6062\u590D Git Log \u9ED8\u8BA4\u503C"));
     return root;
   }
-  function renderTyping() {
-    const root = sectionRoot("\u6253\u5B57\u7EC3\u4E60\uFF08\u5B9E\u9A8C\u6027\uFF09", "\u8FD9\u4E9B\u529F\u80FD\u4ECD\u5904\u4E8E\u5B9E\u9A8C\u9636\u6BB5\uFF0C\u7EC3\u4E60\u8F93\u5165\u4F1A\u771F\u5B9E\u5199\u5165\u5F53\u524D\u7F16\u8F91\u5668\u6587\u4EF6\u3002");
-    const warning = node("div", "risk-notice");
-    warning.setAttribute("role", "note");
-    warning.append(
-      node("strong", void 0, "\u5B9E\u9A8C\u6027 \xB7 \u8BF7\u4F7F\u7528\u4E13\u95E8\u7684\u7EC3\u4E60\u6587\u4EF6"),
-      node("p", void 0, "\u5EFA\u8BAE\u4EC5\u5728\u4E34\u65F6\u6587\u4EF6\u3001\u8349\u7A3F\u6216\u4E13\u95E8\u7EC3\u4E60\u6587\u4EF6\u4E2D\u4F7F\u7528\u3002Tab \u4ECD\u4F18\u5148\u4EA4\u7ED9\u8865\u5168\u83DC\u5355\u4E0E snippet\uFF1BEnter \u548C Tab \u53EF\u80FD\u4E0E\u73B0\u6709\u6309\u952E\u6620\u5C04\u51B2\u7A81\u3002")
-    );
-    const fields = node("div", "settings-fields");
-    for (const item of state.configuration) fields.append(configurationField(item));
-    root.append(warning, fields);
-    return root;
-  }
   function renderShortcuts() {
     const root = sectionRoot("\u5FEB\u6377\u952E", "\u6309\u952E\u914D\u7F6E\u3001\u51B2\u7A81\u68C0\u67E5\u548C\u5220\u9664\u7531 VS Code \u7684\u952E\u76D8\u5FEB\u6377\u65B9\u5F0F\u754C\u9762\u8D1F\u8D23\u3002");
-    const config = Object.fromEntries(state.configuration.map((item) => [item.key, item.globalValue]));
-    const shortcuts = createShortcutSettingsState({
-      enableEnterRouter: config["moyuplus.shortcuts.enableEnterRouter"] === true
-    });
+    const shortcuts = createShortcutSettingsState();
     const groups = [
       { title: "\u9605\u8BFB", test: (command) => command.startsWith("moyuplus.reader.") },
-      { title: "Git Log", test: (command) => command.includes("gitLog") },
-      { title: "\u6253\u5B57\u7EC3\u4E60\uFF08\u5B9E\u9A8C\u6027\uFF09", test: (command) => !command.startsWith("moyuplus.reader.") && !command.includes("gitLog"), experimental: true }
+      { title: "Git Log", test: (command) => command.includes("gitLog") }
     ];
     for (const group of groups) {
       const list = node("div", "shortcut-list");
       for (const shortcut of shortcuts.filter((item) => group.test(item.commandId))) {
         const row = node("div", "shortcut-row");
         const copy = node("div");
-        copy.append(node("strong", void 0, `${shortcut.label}${group.experimental ? "\uFF08\u5B9E\u9A8C\u6027\uFF09" : ""}`), node("p", void 0, shortcut.description));
+        copy.append(node("strong", void 0, shortcut.label), node("p", void 0, shortcut.description));
         row.append(copy);
-        if (shortcut.conflictWarning) row.append(node("p", "shortcut-warning", `${group.experimental ? "\u5B9E\u9A8C\u6027 \xB7 " : ""}${shortcut.conflictWarning}`));
         list.append(row);
       }
       if (list.childElementCount) root.append(node("h3", void 0, group.title), list);
     }
     root.append(actionButton("\u5728\u952E\u76D8\u5FEB\u6377\u65B9\u5F0F\u4E2D\u914D\u7F6E MoyuPlus", openKeyboardShortcuts, "primary-button"));
     return root;
-  }
-  function configurationField(item) {
-    const labels = {
-      "moyuplus.shortcuts.enableEnterRouter": "Enter \u8DEF\u7531\u603B\u5F00\u5173\uFF08\u5B9E\u9A8C\u6027\uFF09",
-      "moyuplus.enter.insertNewLine": "\u63D2\u5165\u771F\u5B9E\u6362\u884C\uFF08\u5B9E\u9A8C\u6027\uFF09",
-      "moyuplus.enter.nextReaderPage": "\u9605\u8BFB\u5668\u4E0B\u4E00\u9875\uFF08\u5B9E\u9A8C\u6027\uFF09"
-    };
-    const wrapper = node("div", "configuration-setting");
-    const key = item.key;
-    wrapper.append(toggleField(labels[key], "configuration", key, item.globalValue === true));
-    wrapper.append(node("p", "scope-note", item.globalIsDefault ? "\u5168\u5C40\u503C\uFF1A\u4F7F\u7528\u9ED8\u8BA4\u503C" : "\u5168\u5C40\u503C\uFF1A\u5DF2\u663E\u5F0F\u8BBE\u7F6E"));
-    if (item.overridden) {
-      const override = node("div", "override-note");
-      override.append(node("strong", void 0, "\u5F53\u524D\u5DE5\u4F5C\u533A\u5B58\u5728\u8986\u76D6"), node("p", void 0, "\u6B64\u5904\u4FDD\u5B58\u7684\u53EA\u662F\u5168\u5C40\u503C\uFF1B\u73B0\u6709\u8986\u76D6\u4F1A\u7EE7\u7EED\u51B3\u5B9A\u5BF9\u5E94\u8D44\u6E90\u7684\u8FD0\u884C\u884C\u4E3A\u3002"));
-      if (item.workspaceValue !== void 0) override.append(node("p", void 0, `\u5DE5\u4F5C\u533A\u503C\uFF1A${formatValue(item.workspaceValue)}`));
-      for (const folder of item.folders) override.append(node("p", void 0, `${folder.name}\uFF1A\u8986\u76D6 ${formatValue(folder.workspaceFolderValue)}\uFF0C\u5B9E\u9645 ${formatValue(folder.effectiveValue)}`));
-      if (item.activeResource) override.append(node("p", void 0, `\u6D3B\u52A8\u7F16\u8F91\u5668${item.activeResource.folderName ? `\uFF08${item.activeResource.folderName}\uFF09` : ""}\uFF1A${formatValue(item.activeResource.effectiveValue)}`));
-      wrapper.append(override);
-    }
-    return wrapper;
   }
   function selectField(labelText, domain, key, value, options) {
     const field = fieldShell(labelText, domain, key);
@@ -814,17 +754,14 @@
     if (domain === "gitLog" && state.resettingSection === "gitLog") return true;
     return state.pending[`${domain}.${key}`] !== void 0;
   }
-  function formatValue(value) {
-    return typeof value === "boolean" ? value ? "\u5F00\u542F" : "\u5173\u95ED" : String(value);
-  }
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
   function isSnapshot(value) {
-    return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0 && sections.some((section) => section.id === value.section) && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog) && Array.isArray(value.configuration);
+    return value.protocolVersion === SETTINGS_PROTOCOL_VERSION && value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && value.stateVersion > 0 && sections.some((section) => section.id === value.section) && isRecord(value.reader) && isRecord(value.immersive) && isRecord(value.gitLog);
   }
   function isChangeResponse(value) {
-    return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && typeof value.requestId === "string" && Number.isSafeInteger(value.clientRevision) && (value.domain === "reader" || value.domain === "immersive" || value.domain === "gitLog" || value.domain === "configuration") && typeof value.key === "string";
+    return value.instanceId === instanceId && Number.isSafeInteger(value.stateVersion) && typeof value.requestId === "string" && Number.isSafeInteger(value.clientRevision) && (value.domain === "reader" || value.domain === "immersive" || value.domain === "gitLog") && typeof value.key === "string";
   }
 })();
 //# sourceMappingURL=settingsApp.js.map
