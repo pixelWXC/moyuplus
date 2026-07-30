@@ -114,6 +114,32 @@
           }
         });
       },
+      ackLast(snapshot) {
+        const transaction = [...window.sentMessages].reverse().find(message =>
+          message.type === 'practice/submit' || message.type === 'practice/correct'
+        );
+        if (!transaction) throw new Error('No practice transaction to acknowledge.');
+        currentSnapshot = {
+          ...baseSnapshot,
+          ...snapshot,
+          metrics: {
+            ...baseSnapshot.metrics,
+            ...(snapshot.metrics || {})
+          }
+        };
+        window.dispatchEvent(new MessageEvent('message', {
+          data: {
+            protocolVersion: 1,
+            type: 'practice/ack',
+            panelInstanceId: transaction.panelInstanceId,
+            sequence: transaction.sequence,
+            transactionId: transaction.transactionId,
+            outcome: 'applied',
+            currentRevision: currentSnapshot.revision,
+            snapshot: currentSnapshot
+          }
+        }));
+      },
       setTheme(theme) {
         const root = document.documentElement;
         root.style.setProperty(

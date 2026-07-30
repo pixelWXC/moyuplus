@@ -64,7 +64,7 @@ test('composition updates stay local and compositionend posts once', async ({ pa
   })]);
 });
 
-test('direct input and paste use browser-produced text without editable history', async ({ page }) => {
+test('direct input and paste retain native IME context', async ({ page }) => {
   const input = page.getByRole('textbox', { name: '练习输入' });
   await input.evaluate(element => {
     const target = element as HTMLInputElement;
@@ -89,7 +89,210 @@ test('direct input and paste use browser-produced text without editable history'
       inputKind: 'direct',
       text: 'a'
     })]);
+  await expect(input).toHaveValue('a主题');
+});
+
+test('holds an opening quote locally and submits only the closing quote', async ({ page }) => {
+  await page.evaluate(() => {
+    window.practiceHarness.sendSnapshot({
+      revision: 0,
+      targetIndex: 0,
+      totalUnits: 2,
+      window: {
+        start: 0,
+        end: 2,
+        units: [
+          { index: 0, text: '”', display: '”', state: 'target' },
+          { index: 1, text: '云', display: '云', state: 'remaining' }
+        ]
+      }
+    });
+    window.practiceHarness.clear();
+  });
+  const input = page.getByRole('textbox', { name: '练习输入' });
+
+  await input.dispatchEvent('keydown', {
+    key: '"',
+    code: 'Quote',
+    shiftKey: true
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '“';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '“',
+      inputType: 'insertText'
+    }));
+  });
+  expect(await page.evaluate(() => window.practiceHarness.sent())).toEqual([]);
+  await expect(input).toHaveValue('“');
+
+  await page.keyboard.press('Backspace');
+  expect(await page.evaluate(() => window.practiceHarness.sent())).toEqual([]);
   await expect(input).toHaveValue('');
+
+  await input.dispatchEvent('keydown', {
+    key: '"',
+    code: 'Quote',
+    shiftKey: true
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '“';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '“',
+      inputType: 'insertText'
+    }));
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '“”';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '”',
+      inputType: 'insertText'
+    }));
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '””';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '”',
+      inputType: 'insertText'
+    }));
+  });
+  await input.dispatchEvent('keyup', {
+    key: '"',
+    code: 'Quote',
+    shiftKey: true
+  });
+  expect(await page.evaluate(() => window.practiceHarness.sent()))
+    .toEqual([expect.objectContaining({
+      type: 'practice/submit',
+      text: '”'
+    })]);
+  await expect(input).toHaveValue('”');
+
+  await page.evaluate(() => {
+    window.practiceHarness.ackLast({
+      revision: 1,
+      targetIndex: 1,
+      totalUnits: 2,
+      window: {
+        start: 0,
+        end: 2,
+        units: [
+          { index: 0, text: '”', display: '”', state: 'correct' },
+          { index: 1, text: '云', display: '云', state: 'target' }
+        ]
+      }
+    });
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '”云';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '云',
+      inputType: 'insertText'
+    }));
+  });
+  expect(await page.evaluate(() =>
+    window.practiceHarness.sent()
+      .filter(message => message.type === 'practice/submit')
+      .map(message => message.text)
+  )).toEqual(['”', '云']);
+});
+
+test('discards an IME auto-closing quote before the next Han target', async ({ page }) => {
+  await page.evaluate(() => {
+    window.practiceHarness.sendSnapshot({
+      revision: 0,
+      targetIndex: 0,
+      totalUnits: 2,
+      window: {
+        start: 0,
+        end: 2,
+        units: [
+          { index: 0, text: '“', display: '“', state: 'target' },
+          { index: 1, text: '云', display: '云', state: 'remaining' }
+        ]
+      }
+    });
+    window.practiceHarness.clear();
+  });
+  const input = page.getByRole('textbox', { name: '练习输入' });
+
+  await input.dispatchEvent('keydown', {
+    key: '"',
+    code: 'Quote',
+    shiftKey: true
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '“';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '“',
+      inputType: 'insertText'
+    }));
+    target.value = '“”';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '”',
+      inputType: 'insertText'
+    }));
+  });
+  await input.dispatchEvent('keyup', {
+    key: '"',
+    code: 'Quote',
+    shiftKey: true
+  });
+
+  expect(await page.evaluate(() => window.practiceHarness.sent()))
+    .toEqual([expect.objectContaining({
+      type: 'practice/submit',
+      text: '“'
+    })]);
+  await expect(input).toHaveValue('“');
+
+  await page.evaluate(() => {
+    window.practiceHarness.ackLast({
+      revision: 1,
+      targetIndex: 1,
+      totalUnits: 2,
+      window: {
+        start: 0,
+        end: 2,
+        units: [
+          { index: 0, text: '“', display: '“', state: 'correct' },
+          { index: 1, text: '云', display: '云', state: 'target' }
+        ]
+      }
+    });
+  });
+  await input.evaluate(element => {
+    const target = element as HTMLInputElement;
+    target.value = '“云';
+    target.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '云',
+      inputType: 'insertText'
+    }));
+  });
+
+  expect(await page.evaluate(() =>
+    window.practiceHarness.sent()
+      .filter(message => message.type === 'practice/submit')
+      .map(message => message.text)
+  )).toEqual(['“', '云']);
+  expect(await page.evaluate(() =>
+    window.practiceHarness.sent()
+      .filter(message => message.type === 'practice/correct')
+  )).toEqual([]);
 });
 
 test('blocked Backspace posts one correction and exposes a text error', async ({ page }) => {
@@ -98,15 +301,9 @@ test('blocked Backspace posts one correction and exposes a text error', async ({
     window.practiceHarness.clear();
   });
   const input = page.getByRole('textbox', { name: '练习输入' });
-  await input.evaluate(element => {
-    for (let index = 0; index < 2; index += 1) {
-      element.dispatchEvent(new InputEvent('beforeinput', {
-        bubbles: true,
-        cancelable: true,
-        inputType: 'deleteContentBackward'
-      }));
-    }
-  });
+  await input.focus();
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace');
 
   expect(await page.evaluate(() => window.practiceHarness.sent()))
     .toEqual([expect.objectContaining({ type: 'practice/correct' })]);
@@ -134,6 +331,7 @@ declare global {
       clear(): void;
       sendSnapshot(snapshot: unknown): void;
       sendBlocked(): void;
+      ackLast(snapshot: unknown): void;
     };
   }
 }

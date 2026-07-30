@@ -1,16 +1,19 @@
 "use strict";
 (() => {
   // src/typing/adapters/view/typingViewProtocol.ts
-  var TYPING_VIEW_PROTOCOL_VERSION = 13;
+  var TYPING_VIEW_PROTOCOL_VERSION = 15;
   var TYPING_VIEW_PAGES = [
     "materials",
     "recent",
-    "setup",
     "live",
     "result",
     "history",
-    "mastery"
+    "mastery",
+    "setup"
   ];
+  var TYPING_VIEW_PRIMARY_PAGES = TYPING_VIEW_PAGES.filter(
+    (page) => page !== "setup"
+  );
   function isHostToTypingViewMessage(value) {
     if (!isRecord(value) || value.protocolVersion !== TYPING_VIEW_PROTOCOL_VERSION || !isInstanceId(value.instanceId) || value.type !== "shellSnapshot" || !isPositiveSafeInteger(value.snapshotRevision) || !hasOnlyKeys(value, [
       "type",
@@ -102,7 +105,15 @@
       ]) && isPositiveSafeInteger(value.page) && value.pageSize === 50 && isNonNegativeSafeInteger(value.totalItems) && Array.isArray(value.items) && value.items.length <= value.pageSize && value.items.every(isTypingViewHistoryItem) && Array.isArray(value.days) && value.days.every(isTypingViewHistoryDay);
     }
     if (value.kind === "mastery") {
-      return activePage === "mastery" && hasOnlyKeys(value, ["kind", "totalEntries", "entries"]) && isNonNegativeSafeInteger(value.totalEntries) && Array.isArray(value.entries) && value.entries.length <= value.totalEntries && value.entries.every(isTypingViewMasteryEntry);
+      return activePage === "mastery" && hasOnlyKeys(value, [
+        "kind",
+        "hasPracticeHistory",
+        "totalEntries",
+        "batchSize",
+        "remainingAfterBatch",
+        "latestBatch",
+        "entries"
+      ]) && typeof value.hasPracticeHistory === "boolean" && isNonNegativeSafeInteger(value.totalEntries) && isNonNegativeSafeInteger(value.batchSize) && value.batchSize <= 20 && value.batchSize <= value.totalEntries && isNonNegativeSafeInteger(value.remainingAfterBatch) && value.remainingAfterBatch === value.totalEntries - value.batchSize && (value.latestBatch === null || isTypingViewLatestMasteryBatch(value.latestBatch)) && Array.isArray(value.entries) && value.entries.length <= value.totalEntries && value.entries.every(isTypingViewMasteryEntry);
     }
     if (value.kind === "unavailable") {
       return activePage !== "materials" && hasOnlyKeys(value, ["kind", "page"]) && value.page === activePage;
@@ -110,8 +121,14 @@
     if (activePage === "materials") {
       return value.kind === "materials" && hasOnlyKeys(
         value,
-        value.pendingRemovals === void 0 ? ["kind", "library", "actions"] : ["kind", "library", "pendingRemovals", "actions"]
-      ) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && (value.pendingRemovals === void 0 || Array.isArray(value.pendingRemovals) && value.pendingRemovals.every(isTypingViewPendingMaterialRemoval)) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
+        [
+          "kind",
+          "library",
+          "actions",
+          ...value.pendingRemovals === void 0 ? [] : ["pendingRemovals"],
+          ...value.notice === void 0 ? [] : ["notice"]
+        ]
+      ) && Array.isArray(value.library) && value.library.every(isTypingViewMaterialSummary) && (value.pendingRemovals === void 0 || Array.isArray(value.pendingRemovals) && value.pendingRemovals.every(isTypingViewPendingMaterialRemoval)) && (value.notice === void 0 || isNonEmptyString(value.notice)) && isRecord(value.actions) && hasOnlyKeys(value.actions, ["paste", "importTxt", "importEpub"]) && typeof value.actions.paste === "boolean" && typeof value.actions.importTxt === "boolean" && typeof value.actions.importEpub === "boolean";
     }
     if (activePage !== "setup" || value.kind !== "setup") return false;
     const selectedRange = value.selectedRange;
@@ -318,10 +335,15 @@
       "key",
       "kind",
       "wrongCount",
-      "reinforcementCorrectStreak",
-      "lastErrorAt",
-      "score"
-    ]) && isNonEmptyString(value.key) && (value.kind === "grapheme" || value.kind === "word" || value.kind === "codeToken") && isNonNegativeSafeInteger(value.wrongCount) && isNonNegativeSafeInteger(value.reinforcementCorrectStreak) && isNonNegativeFinite(value.lastErrorAt) && isNonNegativeFinite(value.score);
+      "lastErrorAt"
+    ]) && isNonEmptyString(value.key) && (value.kind === "word" || value.kind === "codeToken") && isNonNegativeSafeInteger(value.wrongCount) && isNonNegativeFinite(value.lastErrorAt);
+  }
+  function isTypingViewLatestMasteryBatch(value) {
+    return isRecord(value) && hasOnlyKeys(value, [
+      "endedAt",
+      "stableCount",
+      "retryCount"
+    ]) && isNonNegativeFinite(value.endedAt) && isNonNegativeSafeInteger(value.stableCount) && isNonNegativeSafeInteger(value.retryCount);
   }
   function isPracticeOutcome(value) {
     return value === "completed" || value === "timedOut" || value === "abandoned" || value === "restarted";
@@ -372,7 +394,7 @@
     return {
       instanceId: instanceId2,
       activePage: "materials",
-      availablePages: [...TYPING_VIEW_PAGES],
+      availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
       activeSessionStatus: null,
       pendingResultCount: 0,
       recovery: null,
@@ -463,7 +485,7 @@
       </div>
     </aside>`;
   }
-  function renderTypingPageContent(content) {
+  function renderTypingPageContent(content, activeSessionStatus = null) {
     if (content.kind === "unavailable") {
       return '<p class="empty-guidance">\u8BE5\u9875\u9762\u7684\u6570\u636E\u67E5\u8BE2\u5C1A\u672A\u52A0\u8F7D\u3002</p>';
     }
@@ -492,13 +514,14 @@
       return renderHistory(content);
     }
     if (content.kind === "mastery") {
-      return renderMastery(content);
+      return renderMastery(content, activeSessionStatus);
     }
     if (content.kind === "setup") {
       return renderSetup(content);
     }
     return `
     <section class="materials-page" aria-label="\u7EC3\u4E60\u7D20\u6750">
+      ${content.notice ? `<p class="empty-guidance materials-guidance" role="status">${escapeHtml(content.notice)}</p>` : ""}
       ${renderPendingMaterialRemovals(content.pendingRemovals ?? [])}
       ${renderMaterialActions(content.actions)}
       ${renderMaterialSection(
@@ -628,24 +651,58 @@
       </section>
     </section>`;
   }
-  function renderMastery(content) {
+  function renderMastery(content, activeSessionStatus) {
     if (content.totalEntries === 0) {
-      return '<p class="empty-guidance">\u8FD8\u6CA1\u6709\u9700\u8981\u5F3A\u5316\u7684\u9519\u5B57\u6216\u9519\u8BCD\u3002</p>';
+      const message = content.hasPracticeHistory ? "\u5F53\u524D\u9519\u8BCD\u5DF2\u5168\u90E8\u7A33\u5B9A\u3002\u65B0\u7684\u7EC3\u4E60\u4E2D\u518D\u6B21\u51FA\u9519\u65F6\uFF0C\u5B83\u4EEC\u4F1A\u91CD\u65B0\u8FDB\u5165\u5F3A\u5316\u961F\u5217\u3002" : "\u5B8C\u6210\u4E00\u6B21\u5305\u542B\u9519\u8BCD\u7684\u7EC3\u4E60\u540E\uFF0C\u8FD9\u91CC\u4F1A\u81EA\u52A8\u751F\u6210\u5F3A\u5316\u961F\u5217\u3002";
+      const action = content.hasPracticeHistory ? "\u518D\u7EC3\u4E00\u7EC4" : "\u9009\u62E9\u7EC3\u4E60\u5185\u5BB9";
+      const latest = renderLatestMasteryBatch(content.latestBatch);
+      return `
+      <section class="mastery-page mastery-empty" aria-label="\u4E13\u9879\u5F3A\u5316">
+        ${latest}
+        <p class="empty-guidance">${message}</p>
+        <button class="material-action is-primary" type="button" data-page="materials">${action}</button>
+      </section>`;
     }
+    const active = activeSessionStatus !== null && activeSessionStatus !== "completed" && activeSessionStatus !== "abandoned";
+    const visibleEntries = content.entries.slice(0, content.batchSize);
+    const remaining = content.remainingAfterBatch > 0 ? `\u53E6\u6709 ${content.remainingAfterBatch} \u8BCD\u5F85\u7EC3` : "\u672C\u6279\u8986\u76D6\u5F53\u524D\u5168\u90E8\u9519\u8BCD";
     return `
-    <section class="mastery-page" aria-label="\u9519\u5B57\u4E0E\u9519\u8BCD\u5F3A\u5316">
-      <p class="fact-note">\u6309\u5F53\u524D\u638C\u63E1\u5EA6\u5206\u6570\u6392\u5217\uFF0C\u5171 ${content.totalEntries} \u9879\u3002</p>
-      <ol class="mastery-list">${content.entries.map(
+    <section class="mastery-page" aria-label="\u4E13\u9879\u5F3A\u5316">
+      ${renderLatestMasteryBatch(content.latestBatch)}
+      <div class="mastery-summary">
+        <strong>\u672C\u8F6E\u5F85\u7EC3 ${content.totalEntries} \u8BCD</strong>
+        <span>\u672C\u6279 ${content.batchSize} \u8BCD \xB7 ${remaining}</span>
+      </div>
+      <div class="material-actions mastery-actions" role="group" aria-label="\u5F3A\u5316\u7EC3\u4E60\u64CD\u4F5C">
+        <button class="material-action is-primary" type="button" data-mastery-action="start">
+          ${active ? "\u8FD4\u56DE\u5F53\u524D\u7EC3\u4E60" : `\u5F00\u59CB\u672C\u6279 \xB7 ${content.batchSize} \u8BCD`}
+        </button>
+        ${active ? "" : '<button class="material-action" type="button" data-mastery-action="adjust">\u8C03\u6574\u672C\u6B21\u7EC3\u4E60</button>'}
+      </div>
+      ${active ? '<p class="fact-note">\u5DF2\u6709\u6D3B\u52A8\u7EC3\u4E60\uFF0CMoyuPlus \u4E0D\u4F1A\u81EA\u52A8\u8986\u76D6\u5B83\u3002</p>' : '<p class="fact-note">\u9ED8\u8BA4\u5FC5\u987B\u4FEE\u6B63\u3001\u81EA\u52A8\u63A8\u8FDB\u3001\u9010\u8BCD\u805A\u7126\uFF1B\u672C\u6B21\u8BBE\u7F6E\u53EF\u4EE5\u5355\u72EC\u8C03\u6574\u3002</p>'}
+      <div class="mastery-queue-heading">
+        <h3>\u672C\u6279\u5F85\u7EC3</h3>
+        <span>${visibleEntries.length} \u8BCD</span>
+      </div>
+      <ol class="mastery-list">${visibleEntries.map(
       (entry) => `
         <li>
           <div>
             <strong>${escapeHtml(entry.key)}</strong>
             <span>${escapeHtml(masteryKindLabel(entry.kind))}</span>
           </div>
-          <span>\u9519\u8BEF ${entry.wrongCount} \u6B21 \xB7 \u5F3A\u5316\u8FDE\u7EED\u6B63\u786E ${entry.reinforcementCorrectStreak} \u6B21</span>
+          <span>\u7D2F\u8BA1\u9519\u8BEF ${entry.wrongCount} \u6B21 \xB7 \u6700\u8FD1 ${formatDateTime(entry.lastErrorAt)}</span>
         </li>`
     ).join("")}</ol>
     </section>`;
+  }
+  function renderLatestMasteryBatch(batch) {
+    if (!batch) return "";
+    return `
+    <aside class="mastery-batch-result" aria-label="\u6700\u8FD1\u5F3A\u5316\u7ED3\u679C">
+      <strong>\u6700\u8FD1\u4E00\u6279\uFF1A\u5DF2\u7A33\u5B9A ${batch.stableCount} \u8BCD</strong>
+      <span>${batch.retryCount > 0 ? `${batch.retryCount} \u8BCD\u8FDB\u5165\u4E0B\u4E00\u8F6E` : "\u6CA1\u6709\u9519\u8BCD\u8FDB\u5165\u4E0B\u4E00\u8F6E"} \xB7 ${formatDateTime(batch.endedAt)}</span>
+    </aside>`;
   }
   function renderSetup(content) {
     const completion = content.plan.completion;
@@ -930,7 +987,6 @@
     return "\u5DF2\u7ED3\u675F";
   }
   function masteryKindLabel(kind) {
-    if (kind === "grapheme") return "\u5B57\u7B26";
     if (kind === "word") return "\u8BCD\u8BED";
     return "\u4EE3\u7801\u8BCD\u5143";
   }
@@ -1049,6 +1105,7 @@
   var clientRevision = 0;
   var pasteComposerOpen = false;
   var pasteDraft = "";
+  var shouldFocusActiveHeading = false;
   var pageCopy = {
     materials: {
       label: "\u7D20\u6750",
@@ -1061,7 +1118,7 @@
       description: "\u6700\u8FD1\u7ED3\u679C\u548C\u4F7F\u7528\u8FC7\u7684\u6765\u6E90\u4F1A\u6309\u65F6\u95F4\u6392\u5217\u3002"
     },
     setup: {
-      label: "\u8BBE\u7F6E",
+      label: "\u672C\u6B21\u8BBE\u7F6E",
       title: "\u8BBE\u7F6E\u672C\u6B21\u7EC3\u4E60",
       description: "\u9009\u62E9\u8303\u56F4\u3001\u5B8C\u6210\u6761\u4EF6\u3001\u5224\u5B9A\u65B9\u5F0F\u548C\u63A8\u8FDB\u7B56\u7565\u3002"
     },
@@ -1082,8 +1139,8 @@
     },
     mastery: {
       label: "\u5F3A\u5316",
-      title: "\u9519\u5B57\u4E0E\u9519\u8BCD",
-      description: "\u4ECE\u53CD\u590D\u51FA\u9519\u7684\u5185\u5BB9\u751F\u6210\u53EF\u590D\u73B0\u7684\u5F3A\u5316\u7EC3\u4E60\u3002"
+      title: "\u4E13\u9879\u5F3A\u5316",
+      description: "\u6BCF\u4E2A\u9519\u8BCD\u6B63\u786E\u901A\u8FC7\u4E00\u6B21\u5373\u7A33\u5B9A\uFF0C\u4ECD\u7136\u51FA\u9519\u5219\u8FDB\u5165\u4E0B\u4E00\u8F6E\u3002"
     }
   };
   var sessionLabels = {
@@ -1103,6 +1160,7 @@
   window.addEventListener("message", (event) => {
     const next = reduceTypingViewMessage(state, event.data);
     if (next === state) return;
+    shouldFocusActiveHeading = next.activePage !== state.activePage;
     state = next;
     if (state.activePage !== "materials") {
       pasteComposerOpen = false;
@@ -1119,9 +1177,19 @@
     const session = state.activeSessionStatus ? `<span class="session-state" role="status" aria-live="polite">${sessionLabels[state.activeSessionStatus]}</span>` : '<span class="session-state is-idle" role="status" aria-live="polite">\u65E0\u6D3B\u52A8\u7EC3\u4E60</span>';
     const pending = state.pendingResultCount > 0 ? `<p class="pending-notice" role="status">\u5F85\u4FDD\u5B58\u6210\u7EE9\uFF1A${state.pendingResultCount}</p>` : "";
     const loading = state.snapshotRevision === 0 ? '<p class="loading-state" role="status">\u6B63\u5728\u8BFB\u53D6\u7EC3\u4E60\u72B6\u6001\u2026</p>' : "";
-    const content = state.content ? renderTypingPageContent(state.content) : '<p class="empty-guidance">\u6B63\u5728\u51C6\u5907\u9875\u9762\u5185\u5BB9\u2026</p>';
+    const content = state.content ? renderTypingPageContent(state.content, state.activeSessionStatus) : '<p class="empty-guidance">\u6B63\u5728\u51C6\u5907\u9875\u9762\u5185\u5BB9\u2026</p>';
     const recovery = state.recovery ? renderTypingRecoveryBanner(state.recovery) : "";
     const legacyResume = state.legacyResumeHint ? renderTypingLegacyResumeHintBanner(state.legacyResumeHint) : "";
+    const primaryNavigation = state.availablePages.filter((page) => page !== "setup").map((page) => {
+      const current = page === state.activePage;
+      return `<button
+        class="page-tab${current ? " is-current" : ""}"
+        type="button"
+        data-page="${page}"
+        ${current ? 'aria-current="page"' : ""}
+      >${pageCopy[page].label}</button>`;
+    }).join("");
+    const setupNavigation = state.activePage === "setup" && state.availablePages.includes("setup") ? `<span class="setup-context" aria-current="page">${pageCopy.setup.label}</span>` : "";
     app.innerHTML = `
     <section class="typing-shell" aria-label="MoyuPlus \u6253\u5B57\u7EC3\u4E60">
       <header class="typing-header">
@@ -1132,22 +1200,13 @@
         ${session}
       </header>
       <nav class="page-navigation" aria-label="\u6253\u5B57\u7EC3\u4E60\u9875\u9762">
-        ${TYPING_VIEW_PAGES.map((page) => {
-      const available = state.availablePages.includes(page);
-      const current = page === state.activePage;
-      return `<button
-            class="page-tab${current ? " is-current" : ""}"
-            type="button"
-            data-page="${page}"
-            ${current ? 'aria-current="page"' : ""}
-            ${available ? "" : "disabled"}
-          >${pageCopy[page].label}</button>`;
-    }).join("")}
+        ${primaryNavigation}
+        ${setupNavigation}
       </nav>
-      <main class="typing-content" id="typing-content" tabindex="-1">
+      <main class="typing-content" id="typing-content" aria-labelledby="typing-page-title">
         ${loading}
         <p class="page-kicker">${copy.label}</p>
-        <h2>${copy.title}</h2>
+        <h2 id="typing-page-title" tabindex="-1">${copy.title}</h2>
         <p class="page-description">${copy.description}</p>
         <div class="content-rule" aria-hidden="true"></div>
         ${recovery}
@@ -1406,11 +1465,24 @@
     app.querySelector("[data-clear-practice-history]")?.addEventListener("click", () => {
       postRequest({ type: "clearPracticeHistory" });
     });
+    app.querySelectorAll("[data-mastery-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.masteryAction;
+        if (action === "start") {
+          postRequest({ type: "startMasteryPractice" });
+        } else if (action === "adjust") {
+          postRequest({ type: "adjustMasteryPractice" });
+        }
+      });
+    });
     if (focusedPage) {
       app.querySelector(
         `.page-tab[data-page="${focusedPage}"]`
       )?.focus();
+    } else if (shouldFocusActiveHeading) {
+      app.querySelector("#typing-page-title")?.focus();
     }
+    shouldFocusActiveHeading = false;
   }
   function postRequest(request) {
     vscode?.postMessage({

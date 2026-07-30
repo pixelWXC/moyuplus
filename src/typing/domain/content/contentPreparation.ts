@@ -173,6 +173,18 @@ function assignWordKeys(
   profile: ContentProfile
 ): void {
   const spans = createUnitSpans(units);
+  if (profile.kind === 'mastery') {
+    let offset = 0;
+    for (const line of text.split('\n')) {
+      const start = offset;
+      const end = start + line.length;
+      if (line.length > 0) {
+        assignSpanWordKey(spans, units, start, end, line);
+      }
+      offset = end + 1;
+    }
+    return;
+  }
   if (profile.kind === 'code') {
     const tokenPattern = /[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|===|!==|=>|==|!=|<=|>=|&&|\|\||[^\s]/gu;
     for (const match of text.matchAll(tokenPattern)) {

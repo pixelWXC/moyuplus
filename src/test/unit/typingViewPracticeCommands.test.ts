@@ -90,17 +90,34 @@ function createHarness(activeSession: {
   const continuations = {
     get: vi.fn(async () => continuation)
   };
+  const mastery = {
+    list: vi.fn(async () => Array.from({ length: 25 }, (_, index) => ({
+      schemaVersion: 1,
+      key: `错词-${index + 1}`,
+      kind: 'word' as const,
+      contentProfile: { kind: 'chinese' as const, category: 'modernArticle' as const },
+      wrongCount: 1,
+      reinforcementCorrectStreak: 0,
+      lastErrorAt: index + 1,
+      lastPracticedAt: index + 1,
+      score: 1,
+      algorithmVersion: 'mastery-v1'
+    }))),
+    nextSeed: vi.fn(() => 'mastery-seed')
+  };
   return {
     draft,
     coordinator,
     active,
     preferences,
+    mastery,
     commands: new TypingViewPracticeCommands({
       draft,
       coordinator,
       active,
       preferences,
-      continuations
+      continuations,
+      mastery
     })
   };
 }
@@ -313,5 +330,53 @@ describe('TypingViewPracticeCommands', () => {
     expect(harness.coordinator.finish).not.toHaveBeenCalled();
     expect(harness.coordinator.pause).not.toHaveBeenCalled();
     expect(harness.coordinator.restart).not.toHaveBeenCalled();
+  });
+
+  it('starts a 20-word mastery batch with focused, low-distraction defaults', async () => {
+    const harness = createHarness();
+
+    await expect(harness.commands.startMasteryPractice()).resolves.toBe('live');
+
+    expect(harness.draft.snapshot()).toMatchObject({
+      contentRecipe: {
+        kind: 'mastery',
+        seed: 'mastery-seed',
+        length: 20
+      },
+      selectedRange: { kind: 'whole' },
+      plan: {
+        completion: { kind: 'free' },
+        evaluation: { errorPolicy: 'block' },
+        flowPolicy: {
+          lineAdvance: 'automatic',
+          presentation: 'lineFocus'
+        },
+        displayPolicy: {
+          showLiveMetrics: false,
+          showWhitespace: false
+        }
+      }
+    });
+    expect(harness.coordinator.prepare).toHaveBeenCalledTimes(1);
+    expect(harness.coordinator.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('prepares mastery settings without starting and returns to an active practice', async () => {
+    const adjustable = createHarness();
+    await expect(adjustable.commands.adjustMasteryPractice()).resolves.toBe('setup');
+    expect(adjustable.coordinator.prepare).not.toHaveBeenCalled();
+    expect(adjustable.draft.snapshot()?.contentRecipe).toMatchObject({
+      kind: 'mastery',
+      length: 20
+    });
+
+    const active = createHarness({
+      id: 'session-current',
+      status: 'running'
+    });
+    await expect(active.commands.startMasteryPractice()).resolves.toBe('live');
+    expect(active.active.focus).toHaveBeenCalledWith('session-current');
+    expect(active.mastery.list).not.toHaveBeenCalled();
+    expect(active.coordinator.prepare).not.toHaveBeenCalled();
   });
 });

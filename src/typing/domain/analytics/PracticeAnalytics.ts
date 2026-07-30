@@ -100,6 +100,9 @@ function buildMasteryObservations(
   session: PracticeSessionState,
   snapshot: PracticeSnapshot
 ): MasteryObservation[] {
+  if (snapshot.contentProfile.kind === 'mastery') {
+    return buildReinforcementObservations(session, snapshot);
+  }
   const values = new Map<string, MasteryObservation>();
   for (const attempt of session.inputAttempts) {
     const target = snapshot.targetUnits[attempt.targetIndex];
@@ -111,7 +114,7 @@ function buildMasteryObservations(
       key: target.wordKey && primaryKind === 'codeToken' ? target.wordKey : target.value,
       kind: primaryKind,
       wrong: !attempt.correct,
-      reinforcementCorrect: attempt.correct && snapshot.contentProfile.kind === 'mastery'
+      reinforcementCorrect: false
     });
     if (target.wordKey && primaryKind === 'grapheme' && !attempt.correct) {
       addMasteryObservation(values, {
@@ -125,6 +128,65 @@ function buildMasteryObservations(
   return [...values.values()]
     .filter(value => value.wrongCount > 0 || value.reinforcementCorrectCount > 0)
     .sort((left, right) => left.kind.localeCompare(right.kind) || left.key.localeCompare(right.key));
+}
+
+function buildReinforcementObservations(
+  session: PracticeSessionState,
+  snapshot: PracticeSnapshot
+): MasteryObservation[] {
+  const targets = new Map<string, Set<number>>();
+  for (const target of snapshot.targetUnits) {
+    if (!target.wordKey || target.kind !== 'grapheme') continue;
+    const indexes = targets.get(target.wordKey) ?? new Set<number>();
+    indexes.add(target.index);
+    targets.set(target.wordKey, indexes);
+  }
+
+  const attempts = new Map<string, {
+    correctIndexes: Set<number>;
+    wrongCount: number;
+  }>();
+  for (const attempt of session.inputAttempts) {
+    const target = snapshot.targetUnits[attempt.targetIndex];
+    if (!target?.wordKey || target.kind !== 'grapheme') continue;
+    const state = attempts.get(target.wordKey) ?? {
+      correctIndexes: new Set<number>(),
+      wrongCount: 0
+    };
+    if (attempt.correct) {
+      state.correctIndexes.add(target.index);
+    } else {
+      state.wrongCount += 1;
+    }
+    attempts.set(target.wordKey, state);
+  }
+
+  const kind = snapshot.contentProfile.kind === 'mastery'
+    && snapshot.contentProfile.category === 'codeToken'
+    ? 'codeToken'
+    : 'word';
+  const observations: MasteryObservation[] = [];
+  for (const [key, state] of attempts) {
+    const expectedIndexes = targets.get(key);
+    const completed = expectedIndexes
+      && [...expectedIndexes].every(index => state.correctIndexes.has(index));
+    if (state.wrongCount > 0) {
+      observations.push({
+        key,
+        kind,
+        wrongCount: state.wrongCount,
+        reinforcementCorrectCount: 0
+      });
+    } else if (completed) {
+      observations.push({
+        key,
+        kind,
+        wrongCount: 0,
+        reinforcementCorrectCount: 1
+      });
+    }
+  }
+  return observations.sort((left, right) => left.key.localeCompare(right.key));
 }
 
 function addMasteryObservation(

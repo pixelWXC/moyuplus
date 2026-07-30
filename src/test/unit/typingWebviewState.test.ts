@@ -4,7 +4,7 @@ import {
   reduceTypingViewMessage
 } from '../../webview/typingState';
 import {
-  TYPING_VIEW_PAGES,
+  TYPING_VIEW_PRIMARY_PAGES,
   TYPING_VIEW_PROTOCOL_VERSION
 } from '../../typing/adapters/view';
 
@@ -13,7 +13,7 @@ describe('Typing Webview state', () => {
     expect(createTypingViewState('typing-view-1')).toEqual({
       instanceId: 'typing-view-1',
       activePage: 'materials',
-      availablePages: [...TYPING_VIEW_PAGES],
+      availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
       activeSessionStatus: null,
       pendingResultCount: 0,
       recovery: null,
@@ -32,7 +32,7 @@ describe('Typing Webview state', () => {
       snapshotRevision: 2,
       snapshot: {
         activePage: 'live',
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus: 'running',
         pendingResultCount: 1,
         recovery: {

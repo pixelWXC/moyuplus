@@ -95,6 +95,22 @@ export interface TypingPracticeInputTransition {
   effects: TypingPracticeInputEffect[];
 }
 
+export interface PendingSmartQuoteProbe {
+  opening: '“' | '‘';
+  closing: '”' | '’';
+}
+
+export interface SmartQuoteInputResolution {
+  probe?: PendingSmartQuoteProbe;
+  submitText?: string;
+  discard:
+    | 'none'
+    | 'previousOpening'
+    | 'insertedOpening'
+    | 'insertedClosing';
+  suppressTrailingClosing?: PendingSmartQuoteProbe['closing'];
+}
+
 export interface TypingPracticeInputStateMachineOptions {
   sessionId: string;
   nextCompositionId(): string;
@@ -132,6 +148,97 @@ export function restoreTypingPracticeInputState(
       resyncing: false
     },
     authority: { kind: 'loading' }
+  };
+}
+
+const SMART_QUOTE_PAIRS: readonly PendingSmartQuoteProbe[] = [
+  { opening: '“', closing: '”' },
+  { opening: '‘', closing: '’' }
+];
+
+/**
+ * Resolves only the local IME scaffolding needed to produce a closing smart
+ * quote. The opening probe is never submitted as an attempt. All other text is
+ * returned unchanged for the authoritative transaction engine to evaluate.
+ */
+export function resolveSmartQuoteInput(
+  expected: string,
+  followingExpected: string | undefined,
+  text: string,
+  probe?: PendingSmartQuoteProbe
+): SmartQuoteInputResolution {
+  if (probe) {
+    if (expected !== probe.closing) {
+      return {
+        ...resolveSmartQuoteInput(expected, followingExpected, text),
+        discard: 'previousOpening'
+      };
+    }
+    if (text === probe.closing) {
+      return {
+        submitText: text,
+        discard: 'previousOpening',
+        suppressTrailingClosing: probe.closing
+      };
+    }
+    if (text === probe.opening) {
+      return { probe, discard: 'previousOpening' };
+    }
+    return {
+      ...(text.length === 0 ? {} : { submitText: text }),
+      discard: 'previousOpening'
+    };
+  }
+
+  const closingPair = SMART_QUOTE_PAIRS.find(value => value.closing === expected);
+  if (closingPair) {
+    if (text === closingPair.opening) {
+      return { probe: closingPair, discard: 'none' };
+    }
+    if (text === `${closingPair.opening}${closingPair.closing}`) {
+      return {
+        submitText: closingPair.closing,
+        discard: 'insertedOpening',
+        suppressTrailingClosing: closingPair.closing
+      };
+    }
+    if (text === closingPair.closing) {
+      return {
+        submitText: text,
+        discard: 'none',
+        suppressTrailingClosing: closingPair.closing
+      };
+    }
+    return {
+      ...(text.length === 0 ? {} : { submitText: text }),
+      discard: 'none'
+    };
+  }
+
+  const openingPair = SMART_QUOTE_PAIRS.find(value => value.opening === expected);
+  if (openingPair) {
+    if (text === `${openingPair.opening}${openingPair.closing}`) {
+      return followingExpected === openingPair.closing
+        ? { submitText: text, discard: 'none' }
+        : {
+          submitText: openingPair.opening,
+          discard: 'insertedClosing'
+        };
+    }
+    if (text === openingPair.opening) {
+      return {
+        submitText: text,
+        discard: 'none',
+        ...(followingExpected === openingPair.closing
+          ? {}
+          : { suppressTrailingClosing: openingPair.closing })
+      };
+    }
+  }
+
+  return {
+    ...(text.length === 0 ? {} : { submitText: text }),
+    discard: 'none'
   };
 }
 
@@ -375,7 +482,13 @@ function flush(
 
 function canCaptureSubmit(state: TypingPracticeInputState): boolean {
   return !state.transport.resyncing
-    && state.authority.kind === 'ready';
+    && (
+      state.authority.kind === 'ready'
+      || (
+        state.authority.kind === 'blocked'
+        && state.transport.pending.some(value => value.type === 'correct')
+      )
+    );
 }
 
 function authorityRevisionForSend(

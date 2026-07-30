@@ -19,12 +19,14 @@ import type {
 import type { MasteryEntry } from '../../domain/mastery';
 import {
   TYPING_VIEW_PAGES,
+  TYPING_VIEW_PRIMARY_PAGES,
   type TypingViewHistoryContent,
   type TypingViewLegacyResumeHint,
   type TypingViewMaterialSummary,
   type TypingViewLiveContent,
   type TypingViewMasteryContent,
   type TypingViewPage,
+  type TypingViewPageContent,
   type TypingViewRecentContent,
   type TypingViewResultContent,
   type TypingViewRecoverySnapshot,
@@ -161,7 +163,25 @@ export class TypingViewApplicationQuery {
           }
         };
       }
-      const content = await this.setupContent();
+      let content: TypingViewSetupContent | undefined;
+      try {
+        content = await this.setupContent();
+      } catch {
+        content = undefined;
+      }
+      if (!content) {
+        return {
+          activePage: 'materials',
+          availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
+          activeSessionStatus,
+          pendingResultCount,
+          recovery: recovery ? structuredClone(recovery) : null,
+          ...legacyResumeField,
+          content: await this.materialsContent(
+            '请先选择有效的练习素材，再设置本次练习。'
+          )
+        };
+      }
       return {
         activePage: page,
         availablePages: [...TYPING_VIEW_PAGES],
@@ -169,17 +189,14 @@ export class TypingViewApplicationQuery {
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
         ...legacyResumeField,
-        content: content ?? {
-          kind: 'unavailable',
-          page
-        }
+        content
       };
     }
     if (page === 'live') {
       const active = await this.options.activePractice?.();
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -196,7 +213,7 @@ export class TypingViewApplicationQuery {
       const content = await this.resultContent();
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -211,7 +228,7 @@ export class TypingViewApplicationQuery {
       const content = await this.recentContent();
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -226,7 +243,7 @@ export class TypingViewApplicationQuery {
       const content = await this.historyContent();
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -241,7 +258,7 @@ export class TypingViewApplicationQuery {
       const content = await this.masteryContent();
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -255,7 +272,7 @@ export class TypingViewApplicationQuery {
     if (page !== 'materials') {
       return {
         activePage: page,
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus,
         pendingResultCount,
         recovery: recovery ? structuredClone(recovery) : null,
@@ -267,30 +284,37 @@ export class TypingViewApplicationQuery {
       };
     }
 
+    return {
+      activePage: page,
+      availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
+      activeSessionStatus,
+      pendingResultCount,
+      recovery: recovery ? structuredClone(recovery) : null,
+      ...legacyResumeField,
+      content: await this.materialsContent()
+    };
+  }
+
+  private async materialsContent(
+    notice?: string
+  ): Promise<Extract<TypingViewPageContent, { kind: 'materials' }>> {
     const [records, pendingRemovals] = await Promise.all([
       this.options.catalog.list(),
       this.options.pendingMaterialRemovals?.() ?? []
     ]);
     return {
-      activePage: page,
-      availablePages: [...TYPING_VIEW_PAGES],
-      activeSessionStatus,
-      pendingResultCount,
-      recovery: recovery ? structuredClone(recovery) : null,
-      ...legacyResumeField,
-      content: {
-        kind: 'materials',
-        library: [...records]
-          .sort((left, right) => (
-            right.updatedAt - left.updatedAt || left.title.localeCompare(right.title)
-          ))
-          .map(projectCatalogMaterial),
-        pendingRemovals: pendingRemovals.map(item => structuredClone(item)),
-        actions: {
-          paste: true,
-          importTxt: true,
-          importEpub: true
-        }
+      kind: 'materials',
+      library: [...records]
+        .sort((left, right) => (
+          right.updatedAt - left.updatedAt || left.title.localeCompare(right.title)
+        ))
+        .map(projectCatalogMaterial),
+      pendingRemovals: pendingRemovals.map(item => structuredClone(item)),
+      ...(notice ? { notice } : {}),
+      actions: {
+        paste: true,
+        importTxt: true,
+        importEpub: true
       }
     };
   }
@@ -423,24 +447,58 @@ export class TypingViewApplicationQuery {
 
   private async masteryContent(): Promise<TypingViewMasteryContent | undefined> {
     if (!this.options.mastery) return undefined;
-    const projection = await this.options.mastery.read();
+    const [projection, results] = await Promise.all([
+      this.options.mastery.read(),
+      this.options.results?.list() ?? []
+    ]);
+    const entries = [...projection.entries]
+      .filter((entry): entry is MasteryEntry & {
+        kind: 'word' | 'codeToken';
+      } => entry.kind === 'word' || entry.kind === 'codeToken')
+      .sort((left, right) => (
+        left.lastPracticedAt - right.lastPracticedAt
+          || right.score - left.score
+          || left.key.localeCompare(right.key)
+      ));
+    const batchKind = entries[0]?.kind;
+    const batchSize = batchKind
+      ? Math.min(20, entries.filter(entry => entry.kind === batchKind).length)
+      : 0;
+    const orderedEntries = batchKind
+      ? [
+        ...entries.filter(entry => entry.kind === batchKind),
+        ...entries.filter(entry => entry.kind !== batchKind)
+      ]
+      : entries;
+    const latestResult = [...results]
+      .reverse()
+      .find(result => result.contentProfile.kind === 'mastery');
+    const latestBatch = latestResult
+      ? {
+        endedAt: latestResult.endedAt,
+        stableCount: latestResult.masteryObservations.filter(observation => (
+          observation.wrongCount === 0
+          && observation.reinforcementCorrectCount > 0
+        )).length,
+        retryCount: latestResult.masteryObservations.filter(
+          observation => observation.wrongCount > 0
+        ).length
+      }
+      : null;
     return {
       kind: 'mastery',
-      totalEntries: projection.entries.length,
-      entries: [...projection.entries]
-        .sort((left, right) => (
-          right.score - left.score
-            || right.wrongCount - left.wrongCount
-            || left.key.localeCompare(right.key)
-        ))
+      hasPracticeHistory: results.length > 0,
+      totalEntries: entries.length,
+      batchSize,
+      remainingAfterBatch: entries.length - batchSize,
+      latestBatch,
+      entries: orderedEntries
         .slice(0, 100)
         .map(entry => ({
           key: entry.key,
           kind: entry.kind,
           wrongCount: entry.wrongCount,
-          reinforcementCorrectStreak: entry.reinforcementCorrectStreak,
-          lastErrorAt: entry.lastErrorAt,
-          score: entry.score
+          lastErrorAt: entry.lastErrorAt
         }))
     };
   }

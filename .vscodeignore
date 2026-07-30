@@ -14,6 +14,7 @@ tests/
 test-results/
 playwright-report/
 node_modules/
+.pnpm-store/
 **/*.map
 package-lock.json
 task_plan.md

@@ -141,7 +141,15 @@
         };
       }
       if (page === 'mastery') {
-        return { kind: 'mastery', totalEntries: 0, entries: [] };
+        return {
+          kind: 'mastery',
+          hasPracticeHistory: false,
+          totalEntries: 0,
+          batchSize: 0,
+          remainingAfterBatch: 0,
+          latestBatch: null,
+          entries: []
+        };
       }
       return { kind: 'unavailable', page };
     };
@@ -157,11 +165,11 @@
           availablePages: [
             'materials',
             'recent',
-            'setup',
             'live',
             'result',
             'history',
-            'mastery'
+            'mastery',
+            ...(page === 'setup' ? ['setup'] : [])
           ],
           activeSessionStatus: options.activeSessionStatus ?? null,
           pendingResultCount: options.pendingResultCount ?? 0,
@@ -178,6 +186,8 @@
           instanceId = message.instanceId;
           protocolVersion = message.protocolVersion;
           setTimeout(() => send('materials'));
+        } else if (message.type === 'selectMaterial') {
+          setTimeout(() => send('setup'));
         } else if (message.type === 'navigate') {
           setTimeout(() => send(message.page));
         }
@@ -189,6 +199,26 @@
       send,
       sendPending() {
         send('materials', materials, { pendingResultCount: 2 });
+      },
+      sendMastery() {
+        send('mastery', {
+          kind: 'mastery',
+          hasPracticeHistory: true,
+          totalEntries: 22,
+          batchSize: 20,
+          remainingAfterBatch: 2,
+          latestBatch: {
+            endedAt: Date.UTC(2026, 6, 30, 12),
+            stableCount: 16,
+            retryCount: 4
+          },
+          entries: Array.from({ length: 22 }, (_, index) => ({
+            key: `错词-${index + 1}`,
+            kind: 'word',
+            wrongCount: index + 1,
+            lastErrorAt: Date.UTC(2026, 6, 30, 12) - index
+          }))
+        });
       },
       setTheme(theme) {
         const root = document.documentElement;

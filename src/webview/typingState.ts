@@ -1,5 +1,5 @@
 import {
-  TYPING_VIEW_PAGES,
+  TYPING_VIEW_PRIMARY_PAGES,
   isHostToTypingViewMessage,
   type TypingViewPage,
   type TypingViewPageContent,
@@ -24,7 +24,7 @@ export function createTypingViewState(instanceId: string): TypingViewState {
   return {
     instanceId,
     activePage: 'materials',
-    availablePages: [...TYPING_VIEW_PAGES],
+    availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
     activeSessionStatus: null,
     pendingResultCount: 0,
     recovery: null,

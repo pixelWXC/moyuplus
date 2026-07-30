@@ -70,6 +70,7 @@ import {
   AdHocContentProvider,
   CustomMaterialProvider,
   EpubMaterialImporter,
+  MasteryContentProvider,
   TxtMaterialImporter
 } from './typing/adapters/sources';
 import {
@@ -180,6 +181,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const typingContentProviders = [
     new CustomMaterialProvider(typingContentCatalog),
     new ReaderBookSourceProvider(books, adapters),
+    new MasteryContentProvider({
+      list: async () => (await typingMastery.read()).entries
+    }),
     new AdHocContentProvider()
   ];
   const typingRuntimeState = new ActivePracticeStateStore();
@@ -336,8 +340,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
     await typingResultCommitter.commit(result);
   };
+  const typingResultPage = async (): Promise<'mastery' | 'result'> => {
+    const latest = (await typingResults.list()).at(-1);
+    return latest?.contentProfile.kind === 'mastery' ? 'mastery' : 'result';
+  };
   const syncTypingResult = async (): Promise<void> => {
-    await typingViewProvider?.syncPage('result');
+    await typingViewProvider?.syncPage(await typingResultPage());
   };
   const finishTimedPractice = async (sessionId: string): Promise<void> => {
     const session = await typingRuntimeState.sessions.get(sessionId);
@@ -423,6 +431,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     draft: typingSetupDraft,
     coordinator: typingApplication,
     preferences: typingPracticePreferences,
+    mastery: {
+      list: async () => (await typingMastery.read()).entries,
+      nextSeed: () => `mastery-${randomUUID()}`
+    },
     continuations: typingContinuations,
     active: {
       current: () => typingRuntimeState.current(),
@@ -607,10 +619,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
     },
     startPractice: typingPracticeCommands.startPractice.bind(typingPracticeCommands),
+    startMasteryPractice:
+      typingPracticeCommands.startMasteryPractice.bind(typingPracticeCommands),
+    adjustMasteryPractice:
+      typingPracticeCommands.adjustMasteryPractice.bind(typingPracticeCommands),
     resolveSessionConflict:
       typingPracticeCommands.resolveSessionConflict.bind(typingPracticeCommands),
-    controlPractice:
-      typingPracticeCommands.controlPractice.bind(typingPracticeCommands),
+    controlPractice: async (
+      action: Parameters<TypingViewPracticeCommands['controlPractice']>[0]
+    ) => {
+      const destination = await typingPracticeCommands.controlPractice(action);
+      return destination === 'result'
+        ? typingResultPage()
+        : destination;
+    },
     recoverPractice: () => typingSessionRecovery.recover(),
     dismissRecovery: () => typingSessionRecovery.dismiss(),
     resumeLegacyPractice: () => resumeLegacyPractice(),

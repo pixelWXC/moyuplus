@@ -3,7 +3,6 @@ import type { MasteryEntry } from './index';
 
 export const MASTERY_ALGORITHM_VERSION = 'mastery-v1';
 const MASTERY_HALF_LIFE_MS = 30 * 24 * 60 * 60 * 1_000;
-const REINFORCEMENT_FACTOR = 0.8;
 
 export function projectMasteryResults(results: readonly PracticeResult[]): MasteryEntry[] {
   return applyMasteryResults([], results);
@@ -24,7 +23,16 @@ export function applyMasteryResults(
   );
   for (const result of ordered) {
     for (const observation of result.masteryObservations) {
+      if (observation.kind === 'grapheme') continue;
       const mapKey = `${observation.kind}\u0000${observation.key}`;
+      if (
+        result.contentProfile.kind === 'mastery'
+        && observation.wrongCount === 0
+        && observation.reinforcementCorrectCount > 0
+      ) {
+        entries.delete(mapKey);
+        continue;
+      }
       let entry = entries.get(mapKey);
       if (!entry) {
         if (observation.wrongCount === 0) {
@@ -54,7 +62,6 @@ export function applyMasteryResults(
       }
       if (observation.reinforcementCorrectCount > 0) {
         entry.reinforcementCorrectStreak += observation.reinforcementCorrectCount;
-        entry.score *= REINFORCEMENT_FACTOR ** observation.reinforcementCorrectCount;
       }
       entry.lastPracticedAt = result.endedAt;
       entries.set(mapKey, entry);
@@ -62,7 +69,11 @@ export function applyMasteryResults(
   }
   return [...entries.values()]
     .map(entry => structuredClone(entry))
-    .sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));
+    .sort((left, right) => (
+      left.lastPracticedAt - right.lastPracticedAt
+        || right.score - left.score
+        || left.key.localeCompare(right.key)
+    ));
 }
 
 export function decayMasteryEntry(entry: MasteryEntry, at: number): MasteryEntry {

@@ -28,7 +28,7 @@ MoyuPlus 是一个离线优先的 VS Code 阅读与打字练习扩展，支持 T
 
 ## 打字练习
 
-- Activity Bar 中的 **MoyuPlus Typing** 提供素材、最近、设置、进行中、结果、历史和强化七个页面。
+- Activity Bar 中的 **MoyuPlus Typing** 默认提供素材、最近、进行中、结果、历史和强化六个常驻页面；选择有效素材后，“本次设置”才会作为末尾的上下文步骤显示。
 - 素材可来自自定义 TXT/EPUB、自由粘贴，以及 Reader 书架中的 TXT 或 EPUB。
 - 导入素材可以从列表移除，并提供 10 秒撤销；撤销期结束后会永久删除 MoyuPlus 内部正文副本和旧版本，但不会删除用户原始文件或已有成绩。
 - 练习会打开独立的 Webview 面板，以浏览器原生 composition 事件区分输入法预编辑和最终提交；候选切换不推进，确认候选只提交一次。
@@ -36,6 +36,7 @@ MoyuPlus 是一个离线优先的 VS Code 阅读与打字练习扩展，支持 T
 - 限时练习按活动时长自动结束；当前速度、准确率、练习时长和目标剩余在练习窗口实时更新，完成后再把结果同步到侧栏。
 - Backspace、Delete、Undo、Redo、Enter 和 Tab 由面板中的可见输入框处理；旧版练习文档、语言贡献、Inline Completion、状态栏和全局 Tab 路由已移除。
 - 面板跟随 VS Code 字体和主题令牌，并为当前、正确、错误和未输入状态提供颜色之外的可识别样式。
+- 强化页把历史错词按每批最多 20 词组成待练队列；一个错词在强化中完整正确一次即稳定，本批仍然出错则排入下一轮。
 - Result 是不可变事实；历史、每日统计和强化列表由 Result 增量投影，可在投影损坏时从事实重建。
 
 详细说明见 [打字练习设置](docs/typing-practice-settings.md)、[旧版迁移说明](docs/typing-practice-migration.md) 和 [验收追踪](docs/typing-practice-verification.md)。

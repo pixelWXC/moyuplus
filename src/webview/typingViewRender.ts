@@ -2,7 +2,8 @@ import type {
   TypingViewMaterialSummary,
   TypingViewLegacyResumeHint,
   TypingViewPageContent,
-  TypingViewRecoverySnapshot
+  TypingViewRecoverySnapshot,
+  TypingViewSessionStatus
 } from '../typing/adapters/view/typingViewProtocol';
 
 const profileLabels: Readonly<Record<string, string>> = {
@@ -90,7 +91,10 @@ export function renderTypingLegacyResumeHintBanner(
     </aside>`;
 }
 
-export function renderTypingPageContent(content: TypingViewPageContent): string {
+export function renderTypingPageContent(
+  content: TypingViewPageContent,
+  activeSessionStatus: TypingViewSessionStatus | null = null
+): string {
   if (content.kind === 'unavailable') {
     return '<p class="empty-guidance">该页面的数据查询尚未加载。</p>';
   }
@@ -119,13 +123,16 @@ export function renderTypingPageContent(content: TypingViewPageContent): string 
     return renderHistory(content);
   }
   if (content.kind === 'mastery') {
-    return renderMastery(content);
+    return renderMastery(content, activeSessionStatus);
   }
   if (content.kind === 'setup') {
     return renderSetup(content);
   }
   return `
     <section class="materials-page" aria-label="练习素材">
+      ${content.notice
+        ? `<p class="empty-guidance materials-guidance" role="status">${escapeHtml(content.notice)}</p>`
+        : ''}
       ${renderPendingMaterialRemovals(content.pendingRemovals ?? [])}
       ${renderMaterialActions(content.actions)}
       ${renderMaterialSection(
@@ -284,24 +291,77 @@ function renderHistory(
 }
 
 function renderMastery(
-  content: Extract<TypingViewPageContent, { kind: 'mastery' }>
+  content: Extract<TypingViewPageContent, { kind: 'mastery' }>,
+  activeSessionStatus: TypingViewSessionStatus | null
 ): string {
   if (content.totalEntries === 0) {
-    return '<p class="empty-guidance">还没有需要强化的错字或错词。</p>';
+    const message = content.hasPracticeHistory
+      ? '当前错词已全部稳定。新的练习中再次出错时，它们会重新进入强化队列。'
+      : '完成一次包含错词的练习后，这里会自动生成强化队列。';
+    const action = content.hasPracticeHistory ? '再练一组' : '选择练习内容';
+    const latest = renderLatestMasteryBatch(content.latestBatch);
+    return `
+      <section class="mastery-page mastery-empty" aria-label="专项强化">
+        ${latest}
+        <p class="empty-guidance">${message}</p>
+        <button class="material-action is-primary" type="button" data-page="materials">${action}</button>
+      </section>`;
   }
+  const active = activeSessionStatus !== null
+    && activeSessionStatus !== 'completed'
+    && activeSessionStatus !== 'abandoned';
+  const visibleEntries = content.entries.slice(0, content.batchSize);
+  const remaining = content.remainingAfterBatch > 0
+    ? `另有 ${content.remainingAfterBatch} 词待练`
+    : '本批覆盖当前全部错词';
   return `
-    <section class="mastery-page" aria-label="错字与错词强化">
-      <p class="fact-note">按当前掌握度分数排列，共 ${content.totalEntries} 项。</p>
-      <ol class="mastery-list">${content.entries.map(entry => `
+    <section class="mastery-page" aria-label="专项强化">
+      ${renderLatestMasteryBatch(content.latestBatch)}
+      <div class="mastery-summary">
+        <strong>本轮待练 ${content.totalEntries} 词</strong>
+        <span>本批 ${content.batchSize} 词 · ${remaining}</span>
+      </div>
+      <div class="material-actions mastery-actions" role="group" aria-label="强化练习操作">
+        <button class="material-action is-primary" type="button" data-mastery-action="start">
+          ${active ? '返回当前练习' : `开始本批 · ${content.batchSize} 词`}
+        </button>
+        ${active
+          ? ''
+          : '<button class="material-action" type="button" data-mastery-action="adjust">调整本次练习</button>'}
+      </div>
+      ${active
+        ? '<p class="fact-note">已有活动练习，MoyuPlus 不会自动覆盖它。</p>'
+        : '<p class="fact-note">默认必须修正、自动推进、逐词聚焦；本次设置可以单独调整。</p>'}
+      <div class="mastery-queue-heading">
+        <h3>本批待练</h3>
+        <span>${visibleEntries.length} 词</span>
+      </div>
+      <ol class="mastery-list">${visibleEntries.map(entry => `
         <li>
           <div>
             <strong>${escapeHtml(entry.key)}</strong>
             <span>${escapeHtml(masteryKindLabel(entry.kind))}</span>
           </div>
-          <span>错误 ${entry.wrongCount} 次 · 强化连续正确 ${entry.reinforcementCorrectStreak} 次</span>
+          <span>累计错误 ${entry.wrongCount} 次 · 最近 ${formatDateTime(entry.lastErrorAt)}</span>
         </li>`
       ).join('')}</ol>
     </section>`;
+}
+
+function renderLatestMasteryBatch(
+  batch: Extract<
+    TypingViewPageContent,
+    { kind: 'mastery' }
+  >['latestBatch']
+): string {
+  if (!batch) return '';
+  return `
+    <aside class="mastery-batch-result" aria-label="最近强化结果">
+      <strong>最近一批：已稳定 ${batch.stableCount} 词</strong>
+      <span>${batch.retryCount > 0
+        ? `${batch.retryCount} 词进入下一轮`
+        : '没有错词进入下一轮'} · ${formatDateTime(batch.endedAt)}</span>
+    </aside>`;
 }
 
 function renderSetup(
@@ -663,8 +723,7 @@ function outcomeLabel(
   return '已结束';
 }
 
-function masteryKindLabel(kind: 'grapheme' | 'word' | 'codeToken'): string {
-  if (kind === 'grapheme') return '字符';
+function masteryKindLabel(kind: 'word' | 'codeToken'): string {
   if (kind === 'word') return '词语';
   return '代码词元';
 }

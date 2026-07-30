@@ -5,7 +5,9 @@ import {
 import {
   TypingPracticeInputStateMachine,
   createTypingPracticeInputState,
+  resolveSmartQuoteInput,
   restoreTypingPracticeInputState,
+  type PendingSmartQuoteProbe,
   type TypingPracticeInputEffect,
   type TypingPracticeInputState
 } from './typingPracticeInputState';
@@ -38,10 +40,18 @@ let localActiveElapsedMs = 0;
 let localActiveStartedAt: number | undefined;
 let domChangeSequence = 0;
 let observedValue = '';
+let compositionBaseValue = '';
+let quoteProbe: PendingSmartQuoteProbe | undefined;
+let activeQuoteKey = false;
+let trailingClosingSuppression: PendingSmartQuoteProbe['closing'] | undefined;
+let nativeLineStartIndex: number | undefined;
 let lastEndedCompositionId: string | undefined;
 let transactionSequence = 0;
 let compositionSequence = 0;
 let controlSequence = 1;
+const inputGraphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: 'grapheme'
+});
 const showVirtualKeyboard = document.body.dataset.showVirtualKeyboard !== 'false';
 
 const machine = new TypingPracticeInputStateMachine({
@@ -62,8 +72,7 @@ document.addEventListener('visibilitychange', () => {
       ...inputState,
       composition: { kind: 'idle' }
     };
-    elements.input.value = '';
-    observedValue = '';
+    setNativeInputValue(compositionBaseValue);
     persistAndRender();
   }
 });
@@ -88,6 +97,7 @@ function receive(value: unknown): void {
       status: snapshot.status,
       blockedAttemptId: snapshot.blockedAttempt?.attemptId
     });
+    reconcileNativeInputContext(snapshot.status === 'blockedOnError');
     restoreFocusAfterResume();
     requestFocusPause();
     return;
@@ -112,6 +122,7 @@ function receive(value: unknown): void {
       currentRevision: value.currentRevision,
       blockedAttemptId: snapshot.blockedAttempt?.attemptId
     });
+    reconcileNativeInputContext(value.outcome === 'blocked');
     restoreFocusAfterResume();
     requestFocusPause();
   }
@@ -131,13 +142,14 @@ function bindInput(): void {
     requestFocusPause();
   });
   input.addEventListener('compositionstart', () => {
+    compositionBaseValue = input.value;
     transition({ type: 'compositionStart' });
   });
   input.addEventListener('compositionupdate', event => {
     observeInputValue();
     transition({
       type: 'compositionUpdate',
-      text: input.value || event.data || ''
+      text: insertedText(compositionBaseValue, input.value, event.data)
     });
   });
   input.addEventListener('compositionend', event => {
@@ -146,40 +158,74 @@ function bindInput(): void {
       ? composition.compositionId
       : undefined;
     const sequence = observeInputValue();
+    const text = insertedText(compositionBaseValue, input.value, event.data);
+    const canCapture = canCaptureLiveInput();
+    const submitText = canCapture
+      ? resolveLiveSmartQuote(text)
+      : undefined;
+    if (!canCapture) {
+      setNativeInputValue(compositionBaseValue);
+    }
     transition({
       type: 'compositionEnd',
-      text: input.value || event.data || '',
+      text: submitText ?? '',
       domChangeSequence: sequence
     });
     lastEndedCompositionId = compositionId;
-    input.value = '';
-    observedValue = '';
+    compositionBaseValue = input.value;
     render();
   });
   input.addEventListener('input', event => {
     const inputEvent = event as InputEvent;
+    const previousValue = observedValue;
     const sequence = observeInputValue();
     if (inputEvent.isComposing || inputState.composition.kind === 'composing') {
-      transition({ type: 'compositionUpdate', text: input.value });
+      transition({
+        type: 'compositionUpdate',
+        text: insertedText(compositionBaseValue, input.value, inputEvent.data)
+      });
       return;
     }
+    const text = insertedText(previousValue, input.value, inputEvent.data);
+    if (consumeTrailingAutoClose(text)) {
+      lastEndedCompositionId = undefined;
+      render();
+      return;
+    }
+    if (lastEndedCompositionId && text.length === 0) {
+      transition({
+        type: 'directInput',
+        text: '',
+        compositionId: lastEndedCompositionId,
+        domChangeSequence: sequence
+      });
+      lastEndedCompositionId = undefined;
+      return;
+    }
+    if (!canCaptureLiveInput()) {
+      setNativeInputValue(previousValue);
+      lastEndedCompositionId = undefined;
+      render();
+      return;
+    }
+    const submitText = resolveLiveSmartQuote(text);
     transition({
       type: 'directInput',
-      text: input.value,
+      text: submitText ?? '',
       compositionId: lastEndedCompositionId,
       domChangeSequence: sequence
     });
     lastEndedCompositionId = undefined;
-    input.value = '';
-    observedValue = '';
     render();
   });
   input.addEventListener('paste', event => {
     event.preventDefault();
     const text = event.clipboardData?.getData('text/plain') ?? '';
+    cancelSmartQuoteProbe();
+    if (canCaptureLiveInput()) {
+      appendNativeInputText(text);
+    }
     transition({ type: 'paste', text });
-    input.value = '';
-    observedValue = '';
   });
   input.addEventListener('beforeinput', event => {
     const inputEvent = event as InputEvent;
@@ -188,7 +234,7 @@ function bindInput(): void {
       && inputState.composition.kind !== 'composing'
     ) {
       event.preventDefault();
-      transition({ type: 'backspace' });
+      handleBackspace();
       return;
     }
     if (
@@ -200,6 +246,21 @@ function bindInput(): void {
     }
   });
   input.addEventListener('keydown', event => {
+    if (event.code === 'Quote') {
+      trailingClosingSuppression = undefined;
+      activeQuoteKey = true;
+    } else if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+      activeQuoteKey = false;
+      trailingClosingSuppression = undefined;
+    }
+    if (
+      event.key === 'Backspace'
+      && inputState.composition.kind !== 'composing'
+    ) {
+      event.preventDefault();
+      handleBackspace();
+      return;
+    }
     if (event.key === 'Tab' || event.key === 'F6' || event.key === 'Escape') {
       return;
     }
@@ -219,6 +280,13 @@ function bindInput(): void {
       input.setSelectionRange(input.value.length, input.value.length);
     }
   });
+  input.addEventListener('keyup', event => {
+    if (event.code !== 'Quote') return;
+    window.setTimeout(() => {
+      activeQuoteKey = false;
+      trailingClosingSuppression = undefined;
+    }, 0);
+  });
   elements.focusPrompt.addEventListener('click', () => {
     if (focusPauseRequested || snapshot?.status === 'paused') {
       focusPauseRequested = false;
@@ -234,6 +302,204 @@ function bindInput(): void {
     }
     input.focus();
   });
+}
+
+function canCaptureLiveInput(): boolean {
+  return !inputState.transport.resyncing
+    && (
+      inputState.authority.kind === 'ready'
+      || (
+        inputState.authority.kind === 'blocked'
+        && inputState.transport.pending.some(value => value.type === 'correct')
+      )
+    );
+}
+
+function resolveLiveSmartQuote(text: string): string | undefined {
+  const previousProbe = quoteProbe;
+  const expected = currentExpectedTexts();
+  const resolution = resolveSmartQuoteInput(
+    expected.current,
+    expected.following,
+    text,
+    previousProbe
+  );
+  applyNativeQuoteDiscard(resolution.discard, text, previousProbe);
+  quoteProbe = resolution.probe;
+  trailingClosingSuppression = activeQuoteKey
+    ? resolution.suppressTrailingClosing
+    : undefined;
+  return resolution.submitText;
+}
+
+function consumeTrailingAutoClose(text: string): boolean {
+  const closing = trailingClosingSuppression;
+  trailingClosingSuppression = undefined;
+  if (!activeQuoteKey || !closing || text !== closing) return false;
+  const value = elements.input.value;
+  if (value.endsWith(text)) {
+    setNativeInputValue(value.slice(0, -text.length));
+  }
+  return true;
+}
+
+function cancelSmartQuoteProbe(): boolean {
+  const probe = quoteProbe;
+  if (!probe) return false;
+  quoteProbe = undefined;
+  const value = elements.input.value;
+  if (value.endsWith(probe.opening)) {
+    setNativeInputValue(value.slice(0, -probe.opening.length));
+  }
+  return true;
+}
+
+function applyNativeQuoteDiscard(
+  discard:
+    | 'none'
+    | 'previousOpening'
+    | 'insertedOpening'
+    | 'insertedClosing',
+  inserted: string,
+  previousProbe: PendingSmartQuoteProbe | undefined
+): void {
+  if (discard === 'none') return;
+  const value = elements.input.value;
+  const opening = previousProbe?.opening
+    ?? (inserted.startsWith('“') ? '“' : inserted.startsWith('‘') ? '‘' : '');
+  const closing = inserted.endsWith('”')
+    ? '”'
+    : inserted.endsWith('’') ? '’' : '';
+  const suffix = discard === 'previousOpening'
+    ? `${opening}${inserted}`
+    : inserted;
+  const replacement = discard === 'previousOpening'
+    ? inserted
+    : discard === 'insertedOpening'
+      ? inserted.slice(opening.length)
+      : inserted.slice(0, -closing.length);
+  if (value.endsWith(suffix)) {
+    setNativeInputValue(value.slice(0, -suffix.length) + replacement);
+  }
+}
+
+function handleBackspace(): void {
+  if (cancelSmartQuoteProbe()) {
+    persistAndRender();
+    return;
+  }
+  if (
+    inputState.authority.kind === 'blocked'
+    && !inputState.transport.pending.some(value => value.type === 'correct')
+  ) {
+    removeLastNativeGrapheme();
+  }
+  transition({ type: 'backspace' });
+}
+
+function removeLastNativeGrapheme(): void {
+  const graphemes = segmentInputGraphemes(elements.input.value);
+  graphemes.pop();
+  setNativeInputValue(graphemes.join(''));
+}
+
+function currentExpectedTexts(): {
+  current: string;
+  following: string | undefined;
+} {
+  if (!snapshot) return { current: '', following: undefined };
+  let targetIndex = snapshot.targetIndex;
+  for (const pending of inputState.transport.pending) {
+    if (pending.type !== 'submit') continue;
+    targetIndex += segmentInputGraphemes(pending.text).length;
+  }
+  return {
+    current: snapshot.window.units.find(unit => unit.index === targetIndex)?.text
+      ?? snapshot.blockedAttempt?.expected
+      ?? '',
+    following: snapshot.window.units.find(unit =>
+      unit.index === targetIndex + 1
+    )?.text
+  };
+}
+
+function reconcileNativeInputContext(force: boolean): void {
+  if (!snapshot) return;
+  const projected = nativeLineContext(snapshot);
+  const lineChanged = nativeLineStartIndex === undefined
+    || (
+      projected.hasKnownLineBoundary
+      && nativeLineStartIndex !== projected.lineStartIndex
+    );
+  if (!force && nativeLineStartIndex !== undefined && !lineChanged) return;
+
+  quoteProbe = undefined;
+  trailingClosingSuppression = undefined;
+  const optimisticText = inputState.transport.pending
+    .filter(
+      (pending): pending is Extract<typeof pending, { type: 'submit' }> =>
+        pending.type === 'submit'
+    )
+    .map(pending => pending.text)
+    .join('');
+  setNativeInputValue(projected.text + optimisticText);
+  compositionBaseValue = elements.input.value;
+  nativeLineStartIndex = projected.lineStartIndex;
+}
+
+function nativeLineContext(value: PracticePanelSnapshot): {
+  lineStartIndex: number;
+  hasKnownLineBoundary: boolean;
+  text: string;
+} {
+  const units = value.window.units;
+  let anchor = units.findIndex(unit => unit.index === value.targetIndex);
+  if (anchor < 0) anchor = units.length;
+  let lineStart = anchor;
+  while (lineStart > 0 && units[lineStart - 1]?.text !== '\n') {
+    lineStart -= 1;
+  }
+  const text = units
+    .slice(lineStart, anchor)
+    .filter(unit => unit.state === 'correct')
+    .map(unit => unit.text)
+    .join('')
+    + (value.blockedAttempt?.actual ?? '');
+  return {
+    lineStartIndex: units[lineStart]?.index ?? value.targetIndex,
+    hasKnownLineBoundary: lineStart === 0
+      ? value.window.start === 0
+      : units[lineStart - 1]?.text === '\n',
+    text
+  };
+}
+
+function appendNativeInputText(text: string): void {
+  setNativeInputValue(elements.input.value + text);
+}
+
+function setNativeInputValue(value: string): void {
+  elements.input.value = value;
+  observedValue = value;
+  elements.input.setSelectionRange(value.length, value.length);
+}
+
+function insertedText(
+  previousValue: string,
+  currentValue: string,
+  eventData: string | null
+): string {
+  if (currentValue.startsWith(previousValue)) {
+    return currentValue.slice(previousValue.length);
+  }
+  return eventData ?? '';
+}
+
+function segmentInputGraphemes(value: string): string[] {
+  return Array.from(
+    inputGraphemeSegmenter.segment(value),
+    segment => segment.segment
+  );
 }
 
 function transition(action: Parameters<typeof machine.dispatch>[1]): void {

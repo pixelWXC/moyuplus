@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Uri, createWebviewView } from '../shims/vscode';
 import {
   TYPING_VIEW_PAGES,
+  TYPING_VIEW_PRIMARY_PAGES,
   TYPING_VIEW_PROTOCOL_VERSION,
   TypingViewProvider,
   type TypingViewPage,
@@ -11,7 +12,9 @@ import {
 function snapshot(activePage: TypingViewPage): TypingViewShellSnapshot {
   return {
     activePage,
-    availablePages: [...TYPING_VIEW_PAGES],
+    availablePages: activePage === 'setup'
+      ? [...TYPING_VIEW_PAGES]
+      : [...TYPING_VIEW_PRIMARY_PAGES],
     activeSessionStatus: null,
     pendingResultCount: 0,
     recovery: null,
@@ -120,6 +123,42 @@ describe('TypingViewProvider', () => {
       instanceId: 'typing-view-1',
       snapshotRevision: 2,
       snapshot: snapshot('history')
+    }));
+  });
+
+  it('adopts a guarded query fallback when setup is no longer available', async () => {
+    const fallback = snapshot('materials');
+    const query = {
+      shellSnapshot: vi.fn(async (page: TypingViewPage) => (
+        page === 'setup' ? fallback : snapshot(page)
+      ))
+    };
+    const provider = new TypingViewProvider(Uri.file('/extension'), query);
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'typingReady'
+    });
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'navigate',
+      requestId: 'navigate-stale-setup',
+      clientRevision: 1,
+      page: 'setup'
+    });
+    await provider.refreshCurrent();
+
+    expect(query.shellSnapshot.mock.calls).toEqual([
+      ['materials'],
+      ['setup'],
+      ['materials']
+    ]);
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshot: fallback
     }));
   });
 
@@ -444,6 +483,43 @@ describe('TypingViewProvider', () => {
       ['setup'],
       ['live']
     ]);
+  });
+
+  it('contains rejected commands and reports them without leaking an unhandled promise', async () => {
+    const query = {
+      shellSnapshot: vi.fn(async (page: TypingViewPage) => snapshot(page))
+    };
+    const failure = new Error('mastery provider unavailable');
+    const commands = {
+      startMasteryPractice: vi.fn(async () => {
+        throw failure;
+      })
+    };
+    const reportError = vi.fn(async () => undefined);
+    const provider = new TypingViewProvider(
+      Uri.file('/extension'),
+      query,
+      commands as never,
+      reportError
+    );
+    const view = createWebviewView();
+    provider.resolveWebviewView(view as never);
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'typingReady'
+    });
+
+    await expect(view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-1',
+      type: 'startMasteryPractice',
+      requestId: 'start-mastery-1',
+      clientRevision: 1
+    })).resolves.toBeUndefined();
+
+    expect(reportError).toHaveBeenCalledWith(failure);
+    expect(query.shellSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it('routes live controls without accepting a Webview-selected session id', async () => {

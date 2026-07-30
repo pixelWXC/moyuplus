@@ -3,9 +3,12 @@ import type {
 } from '../domain/session';
 import type {
   ContentRecipe,
+  ContentProfile,
   PracticeSnapshot,
   SourceRange
 } from '../domain/content';
+import { createDefaultPracticePlan } from '../domain/content';
+import type { MasteryEntry } from '../domain/mastery';
 import type { PracticePreferences } from '../domain/policies';
 import type {
   PracticeSetupConfiguration
@@ -40,6 +43,10 @@ export interface TypingViewPracticeCommandsOptions {
   preferences: {
     save(preferences: PracticePreferences): PromiseLike<void>;
   };
+  mastery?: {
+    list(): PromiseLike<readonly MasteryEntry[]>;
+    nextSeed(): string;
+  };
   continuations?: {
     get(
       recipe: ContentRecipe,
@@ -58,6 +65,7 @@ export type TypingViewConflictResolution =
   | 'cancel';
 
 export type TypingViewPracticeDestination = 'setup' | 'live';
+export type TypingViewMasteryDestination = 'mastery' | 'setup' | 'live';
 export type TypingViewLiveAction = 'pause' | 'resume' | 'restart' | 'finish';
 export type TypingViewControlDestination = 'materials' | 'live' | 'result';
 
@@ -82,6 +90,20 @@ export class TypingViewPracticeCommands {
     }
     this.conflict = undefined;
     return this.startConfiguredDraft();
+  }
+
+  async startMasteryPractice(): Promise<TypingViewMasteryDestination> {
+    const active = await this.options.active.current();
+    if (active) {
+      await this.options.active.focus(active.id);
+      return 'live';
+    }
+    if (!await this.prepareMasteryDraft()) return 'mastery';
+    return this.startConfiguredDraft();
+  }
+
+  async adjustMasteryPractice(): Promise<TypingViewMasteryDestination> {
+    return await this.prepareMasteryDraft() ? 'setup' : 'mastery';
   }
 
   conflictSnapshot(): TypingViewPracticeConflictSnapshot | undefined {
@@ -209,6 +231,65 @@ export class TypingViewPracticeCommands {
     return 'live';
   }
 
+  private async prepareMasteryDraft(): Promise<boolean> {
+    const mastery = this.options.mastery;
+    if (!mastery) return false;
+    const entries = (await mastery.list())
+      .filter(entry => (
+        entry.key.length > 0
+        && (entry.kind === 'word' || entry.kind === 'codeToken')
+      ))
+      .sort(compareMasteryQueueEntries);
+    const first = entries[0];
+    if (!first) return false;
+    const batch = entries
+      .filter(entry => entry.kind === first.kind)
+      .slice(0, 20);
+    const contentRecipe = {
+      kind: 'mastery',
+      seed: mastery.nextSeed(),
+      length: batch.length
+    } as const;
+    const contentProfile: ContentProfile = {
+      kind: 'mastery',
+      category: first.kind
+    };
+    const plan = createDefaultPracticePlan({
+      contentRecipe,
+      contentProfile,
+      completion: { kind: 'free' }
+    });
+    const isCode = first.kind === 'codeToken';
+    plan.textPolicy = {
+      punctuation: isCode
+        ? { mode: 'strict', mappingVersion: 'strict-v1' }
+        : { mode: 'equivalent', mappingVersion: 'zh-punctuation-v1' },
+      whitespace: isCode ? { mode: 'strict' } : { mode: 'trimLineEdges' },
+      caseSensitive: true
+    };
+    plan.flowPolicy = {
+      lineAdvance: 'automatic',
+      presentation: 'lineFocus'
+    };
+    plan.displayPolicy = {
+      showLiveMetrics: false,
+      showWhitespace: false
+    };
+    this.options.draft.selectContent(contentRecipe, { kind: 'whole' });
+    this.options.draft.configure({
+      selectedRange: { kind: 'whole' },
+      startPosition: { kind: 'beginning' },
+      plan: {
+        completion: structuredClone(plan.completion),
+        evaluation: structuredClone(plan.evaluation),
+        textPolicy: structuredClone(plan.textPolicy),
+        flowPolicy: structuredClone(plan.flowPolicy),
+        displayPolicy: structuredClone(plan.displayPolicy)
+      }
+    });
+    return true;
+  }
+
   private async resolveStartTarget(
     draft: NonNullable<ReturnType<PracticeSetupDraft['snapshot']>>,
     snapshot: PracticeSnapshot
@@ -236,6 +317,15 @@ export class TypingViewPracticeCommands {
     }
     return continuation.targetIndex;
   }
+}
+
+function compareMasteryQueueEntries(
+  left: MasteryEntry,
+  right: MasteryEntry
+): number {
+  return left.lastPracticedAt - right.lastPracticedAt
+    || right.score - left.score
+    || left.key.localeCompare(right.key);
 }
 
 function printableTargetAt(

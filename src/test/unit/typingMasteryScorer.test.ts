@@ -12,59 +12,61 @@ import {
 } from '../../typing';
 
 describe('mastery scoring', () => {
-  it('keeps historical wrong counts while reinforcement and time decay lower score', () => {
+  it('removes a word after one clean reinforcement pass and requeues any failed pass', () => {
     const errorResult = createResult({
-      text: '你好你好',
-      actual: '你号你号',
+      text: '你好',
+      actual: '你号',
       contentProfile: { kind: 'chinese', category: 'adHoc' },
       errorPolicy: 'allowSkip',
       endedAt: 10_000
     });
     const reinforcementResult = createResult({
-      text: '好好',
-      actual: '好好',
-      contentProfile: { kind: 'mastery', category: 'grapheme' },
+      text: '你好',
+      actual: '你好',
+      contentProfile: { kind: 'mastery', category: 'word' },
       errorPolicy: 'block',
       endedAt: 20_000
     });
+    const failedReinforcement = createResult({
+      text: '你好',
+      actual: '你号',
+      contentProfile: { kind: 'mastery', category: 'word' },
+      errorPolicy: 'block',
+      endedAt: 30_000
+    });
 
     const afterErrors = projectMasteryResults([errorResult]);
-    const afterReinforcement = projectMasteryResults([
+    const afterCleanPass = projectMasteryResults([
       reinforcementResult,
       errorResult
     ]);
+    const afterFailedPass = projectMasteryResults([
+      errorResult,
+      failedReinforcement
+    ]);
 
-    const errorGrapheme = afterErrors.find(entry =>
-      entry.kind === 'grapheme' && entry.key === '好'
-    );
-    const reinforcedGrapheme = afterReinforcement.find(entry =>
-      entry.kind === 'grapheme' && entry.key === '好'
-    );
-    expect(afterErrors).toHaveLength(2);
-    expect(errorGrapheme).toMatchObject({
-      key: '好',
-      kind: 'grapheme',
-      wrongCount: 2,
+    expect(afterErrors).toHaveLength(1);
+    expect(afterErrors[0]).toMatchObject({
+      key: '你好',
+      kind: 'word',
+      wrongCount: 1,
       reinforcementCorrectStreak: 0,
       lastErrorAt: 10_000,
       algorithmVersion: 'mastery-v1'
     });
-    expect(afterErrors).toContainEqual(expect.objectContaining({
+    expect(afterCleanPass).toEqual([]);
+    expect(afterFailedPass).toContainEqual(expect.objectContaining({
       key: '你好',
       kind: 'word',
       wrongCount: 2
     }));
-    expect(errorGrapheme?.score).toBeGreaterThan(2);
-    expect(reinforcedGrapheme?.wrongCount).toBe(2);
-    expect(reinforcedGrapheme?.reinforcementCorrectStreak).toBe(2);
-    expect(reinforcedGrapheme!.score).toBeLessThan(errorGrapheme!.score);
 
     const decayed = decayMasteryEntry(
-      reinforcedGrapheme!,
-      20_000 + (30 * 24 * 60 * 60 * 1_000)
+      afterFailedPass[0],
+      30_000 + (30 * 24 * 60 * 60 * 1_000)
     );
     expect(decayed.wrongCount).toBe(2);
-    expect(decayed.score).toBeLessThan(reinforcedGrapheme!.score);
+    expect(decayed.score).toBeLessThan(afterFailedPass[0].score);
   });
 });
 

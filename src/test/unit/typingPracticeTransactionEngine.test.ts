@@ -113,6 +113,39 @@ describe('PracticeTransactionEngine', () => {
     expect(calculation.receipt.outcome).toBe('completed');
   });
 
+  it('keeps opposite smart quotes distinct in strict authoritative results', () => {
+    const snapshot = createSnapshot('”', plan => ({
+      ...plan,
+      textPolicy: {
+        ...plan.textPolicy,
+        punctuation: { mode: 'strict', mappingVersion: 'strict-v1' }
+      }
+    }));
+    const calculation = new PracticeTransactionEngine().calculate({
+      session: start(snapshot),
+      snapshot,
+      transaction: {
+        type: 'submit',
+        transactionId: 'strict-quote',
+        baseRevision: 0,
+        kind: 'direct',
+        text: '“'
+      },
+      wallTime: 1_100,
+      nextAttemptId: sequence('input')
+    });
+
+    if (calculation.kind !== 'delta') throw new Error('Expected a delta.');
+    expect(calculation.receipt.outcome).toBe('blocked');
+    expect(calculation.delta.attemptAdditions[0]).toMatchObject({
+      expected: '”',
+      actual: '“',
+      normalizedExpected: '”',
+      normalizedActual: '“',
+      correct: false
+    });
+  });
+
   it('corrects only the active blocked error and returns stable duplicate receipts', () => {
     const snapshot = createSnapshot('a');
     const session = start(snapshot);

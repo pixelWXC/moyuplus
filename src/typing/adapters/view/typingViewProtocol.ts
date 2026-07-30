@@ -1,17 +1,22 @@
 export const TYPING_VIEW_ID = 'moyuplus.typingView';
-export const TYPING_VIEW_PROTOCOL_VERSION = 13 as const;
+export const TYPING_VIEW_PROTOCOL_VERSION = 15 as const;
 
 export const TYPING_VIEW_PAGES = [
   'materials',
   'recent',
-  'setup',
   'live',
   'result',
   'history',
-  'mastery'
+  'mastery',
+  'setup'
 ] as const;
 
 export type TypingViewPage = typeof TYPING_VIEW_PAGES[number];
+
+export const TYPING_VIEW_PRIMARY_PAGES:
+readonly Exclude<TypingViewPage, 'setup'>[] = TYPING_VIEW_PAGES.filter(
+  (page): page is Exclude<TypingViewPage, 'setup'> => page !== 'setup'
+);
 
 export interface TypingViewLegacyResumeHint {
   sourceTitle: string;
@@ -268,14 +273,20 @@ export interface TypingViewHistoryContent {
 
 export interface TypingViewMasteryContent {
   kind: 'mastery';
+  hasPracticeHistory: boolean;
   totalEntries: number;
+  batchSize: number;
+  remainingAfterBatch: number;
+  latestBatch: {
+    endedAt: number;
+    stableCount: number;
+    retryCount: number;
+  } | null;
   entries: readonly {
     key: string;
-    kind: 'grapheme' | 'word' | 'codeToken';
+    kind: 'word' | 'codeToken';
     wrongCount: number;
-    reinforcementCorrectStreak: number;
     lastErrorAt: number;
-    score: number;
   }[];
 }
 
@@ -284,6 +295,7 @@ export type TypingViewPageContent =
     kind: 'materials';
     library: readonly TypingViewMaterialSummary[];
     pendingRemovals?: readonly TypingViewPendingMaterialRemoval[];
+    notice?: string;
     actions: {
       paste: boolean;
       importTxt: boolean;
@@ -393,6 +405,12 @@ export type TypingViewToHostMessage =
   })
   | (TypingViewRequestEnvelope & {
     type: 'clearPracticeHistory';
+  })
+  | (TypingViewRequestEnvelope & {
+    type: 'startMasteryPractice';
+  })
+  | (TypingViewRequestEnvelope & {
+    type: 'adjustMasteryPractice';
   });
 
 export type HostToTypingViewMessage = TypingViewEnvelope & {
@@ -496,6 +514,8 @@ export function isTypingViewToHostMessage(value: unknown): value is TypingViewTo
     || value.type === 'dismissLegacyResumeHint'
     || value.type === 'openPracticeEditorSettings'
     || value.type === 'clearPracticeHistory'
+    || value.type === 'startMasteryPractice'
+    || value.type === 'adjustMasteryPractice'
   ) {
     return hasOnlyKeys(value, requestKeys);
   }
@@ -711,8 +731,26 @@ function isTypingViewPageContent(
   }
   if (value.kind === 'mastery') {
     return activePage === 'mastery'
-      && hasOnlyKeys(value, ['kind', 'totalEntries', 'entries'])
+      && hasOnlyKeys(value, [
+        'kind',
+        'hasPracticeHistory',
+        'totalEntries',
+        'batchSize',
+        'remainingAfterBatch',
+        'latestBatch',
+        'entries'
+      ])
+      && typeof value.hasPracticeHistory === 'boolean'
       && isNonNegativeSafeInteger(value.totalEntries)
+      && isNonNegativeSafeInteger(value.batchSize)
+      && value.batchSize <= 20
+      && value.batchSize <= value.totalEntries
+      && isNonNegativeSafeInteger(value.remainingAfterBatch)
+      && value.remainingAfterBatch === value.totalEntries - value.batchSize
+      && (
+        value.latestBatch === null
+        || isTypingViewLatestMasteryBatch(value.latestBatch)
+      )
       && Array.isArray(value.entries)
       && value.entries.length <= value.totalEntries
       && value.entries.every(isTypingViewMasteryEntry);
@@ -726,9 +764,13 @@ function isTypingViewPageContent(
     return value.kind === 'materials'
     && hasOnlyKeys(
       value,
-      value.pendingRemovals === undefined
-        ? ['kind', 'library', 'actions']
-        : ['kind', 'library', 'pendingRemovals', 'actions']
+      [
+        'kind',
+        'library',
+        'actions',
+        ...(value.pendingRemovals === undefined ? [] : ['pendingRemovals']),
+        ...(value.notice === undefined ? [] : ['notice'])
+      ]
     )
     && Array.isArray(value.library)
     && value.library.every(isTypingViewMaterialSummary)
@@ -739,6 +781,7 @@ function isTypingViewPageContent(
         && value.pendingRemovals.every(isTypingViewPendingMaterialRemoval)
       )
     )
+    && (value.notice === undefined || isNonEmptyString(value.notice))
     && isRecord(value.actions)
     && hasOnlyKeys(value.actions, ['paste', 'importTxt', 'importEpub'])
     && typeof value.actions.paste === 'boolean'
@@ -1160,20 +1203,27 @@ function isTypingViewMasteryEntry(value: unknown): boolean {
       'key',
       'kind',
       'wrongCount',
-      'reinforcementCorrectStreak',
-      'lastErrorAt',
-      'score'
+      'lastErrorAt'
     ])
     && isNonEmptyString(value.key)
     && (
-      value.kind === 'grapheme'
-      || value.kind === 'word'
+      value.kind === 'word'
       || value.kind === 'codeToken'
     )
     && isNonNegativeSafeInteger(value.wrongCount)
-    && isNonNegativeSafeInteger(value.reinforcementCorrectStreak)
-    && isNonNegativeFinite(value.lastErrorAt)
-    && isNonNegativeFinite(value.score);
+    && isNonNegativeFinite(value.lastErrorAt);
+}
+
+function isTypingViewLatestMasteryBatch(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnlyKeys(value, [
+      'endedAt',
+      'stableCount',
+      'retryCount'
+    ])
+    && isNonNegativeFinite(value.endedAt)
+    && isNonNegativeSafeInteger(value.stableCount)
+    && isNonNegativeSafeInteger(value.retryCount);
 }
 
 function isPracticeOutcome(value: unknown): boolean {

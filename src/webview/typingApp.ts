@@ -1,6 +1,5 @@
 import './typingStyles.css';
 import {
-  TYPING_VIEW_PAGES,
   TYPING_VIEW_PROTOCOL_VERSION,
   type TypingViewMaterialOrigin,
   type TypingViewPage,
@@ -36,6 +35,7 @@ let state = createTypingViewState(instanceId);
 let clientRevision = 0;
 let pasteComposerOpen = false;
 let pasteDraft = '';
+let shouldFocusActiveHeading = false;
 
 const pageCopy: Record<TypingViewPage, {
   label: string;
@@ -53,7 +53,7 @@ const pageCopy: Record<TypingViewPage, {
     description: '最近结果和使用过的来源会按时间排列。'
   },
   setup: {
-    label: '设置',
+    label: '本次设置',
     title: '设置本次练习',
     description: '选择范围、完成条件、判定方式和推进策略。'
   },
@@ -74,8 +74,8 @@ const pageCopy: Record<TypingViewPage, {
   },
   mastery: {
     label: '强化',
-    title: '错字与错词',
-    description: '从反复出错的内容生成可复现的强化练习。'
+    title: '专项强化',
+    description: '每个错词正确通过一次即稳定，仍然出错则进入下一轮。'
   }
 };
 
@@ -98,6 +98,7 @@ render();
 window.addEventListener('message', event => {
   const next = reduceTypingViewMessage(state, event.data);
   if (next === state) return;
+  shouldFocusActiveHeading = next.activePage !== state.activePage;
   state = next;
   if (state.activePage !== 'materials') {
     pasteComposerOpen = false;
@@ -122,13 +123,29 @@ function render(): void {
     ? '<p class="loading-state" role="status">正在读取练习状态…</p>'
     : '';
   const content = state.content
-    ? renderTypingPageContent(state.content)
+    ? renderTypingPageContent(state.content, state.activeSessionStatus)
     : '<p class="empty-guidance">正在准备页面内容…</p>';
   const recovery = state.recovery
     ? renderTypingRecoveryBanner(state.recovery)
     : '';
   const legacyResume = state.legacyResumeHint
     ? renderTypingLegacyResumeHintBanner(state.legacyResumeHint)
+    : '';
+  const primaryNavigation = state.availablePages
+    .filter(page => page !== 'setup')
+    .map(page => {
+      const current = page === state.activePage;
+      return `<button
+        class="page-tab${current ? ' is-current' : ''}"
+        type="button"
+        data-page="${page}"
+        ${current ? 'aria-current="page"' : ''}
+      >${pageCopy[page].label}</button>`;
+    })
+    .join('');
+  const setupNavigation = state.activePage === 'setup'
+    && state.availablePages.includes('setup')
+    ? `<span class="setup-context" aria-current="page">${pageCopy.setup.label}</span>`
     : '';
 
   app.innerHTML = `
@@ -141,22 +158,13 @@ function render(): void {
         ${session}
       </header>
       <nav class="page-navigation" aria-label="打字练习页面">
-        ${TYPING_VIEW_PAGES.map(page => {
-          const available = state.availablePages.includes(page);
-          const current = page === state.activePage;
-          return `<button
-            class="page-tab${current ? ' is-current' : ''}"
-            type="button"
-            data-page="${page}"
-            ${current ? 'aria-current="page"' : ''}
-            ${available ? '' : 'disabled'}
-          >${pageCopy[page].label}</button>`;
-        }).join('')}
+        ${primaryNavigation}
+        ${setupNavigation}
       </nav>
-      <main class="typing-content" id="typing-content" tabindex="-1">
+      <main class="typing-content" id="typing-content" aria-labelledby="typing-page-title">
         ${loading}
         <p class="page-kicker">${copy.label}</p>
-        <h2>${copy.title}</h2>
+        <h2 id="typing-page-title" tabindex="-1">${copy.title}</h2>
         <p class="page-description">${copy.description}</p>
         <div class="content-rule" aria-hidden="true"></div>
         ${recovery}
@@ -462,11 +470,26 @@ function render(): void {
       postRequest({ type: 'clearPracticeHistory' });
     });
 
+  app.querySelectorAll<HTMLButtonElement>('[data-mastery-action]')
+    .forEach(button => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.masteryAction;
+        if (action === 'start') {
+          postRequest({ type: 'startMasteryPractice' });
+        } else if (action === 'adjust') {
+          postRequest({ type: 'adjustMasteryPractice' });
+        }
+      });
+    });
+
   if (focusedPage) {
     app.querySelector<HTMLButtonElement>(
       `.page-tab[data-page="${focusedPage}"]`
     )?.focus();
+  } else if (shouldFocusActiveHeading) {
+    app.querySelector<HTMLElement>('#typing-page-title')?.focus();
   }
+  shouldFocusActiveHeading = false;
 }
 
 function postRequest(
@@ -525,6 +548,9 @@ function postRequest(
     }
     | {
       type: 'clearPracticeHistory';
+    }
+    | {
+      type: 'startMasteryPractice' | 'adjustMasteryPractice';
     }
 ): void {
   vscode?.postMessage({

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -335,6 +335,77 @@ describe('extension activation', () => {
         })
       }));
     }
+  });
+
+  it('starts a mastery batch through the registered mastery content provider', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'moyuplus-typing-mastery-'));
+    temporaryRoots.push(root);
+    const globalStorage = path.join(root, 'global-storage');
+    const projectionDirectory = path.join(globalStorage, 'projections');
+    await mkdir(projectionDirectory, { recursive: true });
+    await writeFile(
+      path.join(projectionDirectory, 'mastery.v1.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        sourceResultIds: [],
+        entries: [{
+          schemaVersion: 1,
+          key: '错词',
+          kind: 'word',
+          contentProfile: { kind: 'chinese', category: 'adHoc' },
+          wrongCount: 1,
+          reinforcementCorrectStreak: 0,
+          lastErrorAt: 1_000,
+          lastPracticedAt: 1_000,
+          score: 1,
+          algorithmVersion: 'mastery-v2'
+        }]
+      }, undefined, 2)}\n`,
+      'utf8'
+    );
+    await activate({
+      globalState: new MemoryMemento(),
+      workspaceState: new MemoryMemento(),
+      globalStorageUri: {
+        fsPath: globalStorage
+      } as Uri,
+      storageUri: {
+        fsPath: path.join(root, 'workspace-storage')
+      } as Uri,
+      extensionUri: Uri.file('D:/moyuplus-test-extension'),
+      subscriptions: [] as Disposable[]
+    });
+    const view = createWebviewView();
+    await window.registeredWebviewViewProvider(TYPING_VIEW_ID)
+      ?.resolveWebviewView(view);
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-mastery',
+      type: 'typingReady'
+    });
+
+    await view.webview.receiveMessage({
+      protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
+      instanceId: 'typing-view-mastery',
+      type: 'startMasteryPractice',
+      requestId: 'start-mastery',
+      clientRevision: 1
+    });
+
+    expect(window.errorMessages).toEqual([]);
+    expect(view.webview.postedMessages.at(-1)).toEqual(expect.objectContaining({
+      snapshot: expect.objectContaining({
+        activePage: 'live',
+        activeSessionStatus: 'running',
+        content: expect.objectContaining({
+          kind: 'live',
+          status: 'running'
+        })
+      })
+    }));
+    expect(window.createdWebviewPanels.some(
+      panel => panel.viewType === TYPING_PRACTICE_PANEL_VIEW_TYPE
+    )).toBe(true);
   });
 
   it('inspects pasted text into an authoritative setup snapshot', async () => {

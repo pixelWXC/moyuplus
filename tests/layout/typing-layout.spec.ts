@@ -77,14 +77,18 @@ test('expands Typing actions to 44px for coarse pointers', async ({ browser }) =
   }
 });
 
-test('renders all seven pages and exposes labelled native setup controls', async ({ page }) => {
+test('keeps setup contextual and exposes labelled native setup controls', async ({ page }) => {
+  await expect(page.getByRole('button', { name: '本次设置', exact: true }))
+    .toHaveCount(0);
+  await expect(page.locator('.setup-context')).toHaveCount(0);
+  await expect(page.locator('.page-tab')).toHaveCount(6);
+
   for (const [label, title] of [
     ['最近', '继续最近练习'],
-    ['设置', '设置本次练习'],
     ['进行中', '练习进行中'],
     ['结果', '本次结果'],
     ['历史', '练习历史'],
-    ['强化', '错字与错词'],
+    ['强化', '专项强化'],
     ['素材', '选择练习内容']
   ] as const) {
     await page.getByRole('button', { name: label, exact: true }).click();
@@ -93,7 +97,18 @@ test('renders all seven pages and exposes labelled native setup controls', async
       .toHaveAttribute('aria-current', 'page');
   }
 
-  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.locator('.material-select').click();
+  await expect(page.getByRole('heading', { name: '设置本次练习' }))
+    .toBeFocused();
+  const setupContext = page.locator('.setup-context');
+  await expect(setupContext).toHaveText('本次设置');
+  await expect(setupContext).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.page-navigation > :last-child'))
+    .toHaveClass(/setup-context/);
+  expect(await setupContext.evaluate(element =>
+    getComputedStyle(element).gridColumnEnd
+  )).toBe('-1');
+
   for (const [name, label] of [
     ['range', /^练习哪一部分/],
     ['startKind', /^从哪里开始/],
@@ -110,6 +125,48 @@ test('renders all seven pages and exposes labelled native setup controls', async
   }
   await expect(page.getByRole('button', { name: '保存并开始练习' }))
     .toBeVisible();
+
+  await page.getByRole('button', { name: '素材', exact: true }).click();
+  await expect(page.locator('.setup-context')).toHaveCount(0);
+});
+
+test('balances six persistent pages before the full-width setup row', async ({ page }) => {
+  await page.locator('.material-select').click();
+
+  for (const [width, expectedRows] of [
+    [220, 3],
+    [400, 2],
+    [600, 1]
+  ] as const) {
+    await page.setViewportSize({ width, height: 720 });
+    const geometry = await page.locator('.page-navigation').evaluate(element => {
+      const tabs = [...element.querySelectorAll<HTMLElement>('.page-tab')];
+      const context = element.querySelector<HTMLElement>('.setup-context');
+      const tabRows = new Set(tabs.map(tab =>
+        Math.round(tab.getBoundingClientRect().top)
+      ));
+      const lastTabBottom = Math.max(...tabs.map(tab =>
+        tab.getBoundingClientRect().bottom
+      ));
+      const contextRect = context?.getBoundingClientRect();
+      return {
+        rows: tabRows.size,
+        contextBelowTabs: Boolean(contextRect && contextRect.top >= lastTabBottom),
+        contextWidth: contextRect?.width ?? 0,
+        firstRowWidth: tabs
+          .filter(tab => Math.round(tab.getBoundingClientRect().top)
+            === Math.min(...tabs.map(item =>
+              Math.round(item.getBoundingClientRect().top)
+            )))
+          .reduce((sum, tab) => sum + tab.getBoundingClientRect().width, 0)
+      };
+    });
+
+    expect(geometry.rows).toBe(expectedRows);
+    expect(geometry.contextBelowTabs).toBe(true);
+    expect(Math.abs(geometry.contextWidth - geometry.firstRowWidth))
+      .toBeLessThanOrEqual(1);
+  }
 });
 
 test('withholds hidden live facts, announces pending results and follows dark theme tokens', async ({ page }) => {
@@ -144,6 +201,28 @@ test('loads the Typing bundle without external network resources', async ({ page
   expect(external).toEqual([]);
 });
 
+test('starts the recommended mastery batch without overflowing a narrow sidebar', async ({ page }) => {
+  await page.setViewportSize({ width: 220, height: 720 });
+  await page.evaluate(() => window.typingHarness.sendMastery());
+
+  await expect(page.getByRole('heading', { name: '专项强化' })).toBeVisible();
+  await expect(page.locator('[data-mastery-action="start"]'))
+    .toHaveText(/开始本批 · 20 词/);
+  await expect(page.getByText('最近一批：已稳定 16 词')).toBeVisible();
+
+  await page.locator('[data-mastery-action="start"]').click();
+  const sent = await page.evaluate(() => window.typingHarness.sent());
+  expect(sent.at(-1)).toEqual(expect.objectContaining({
+    type: 'startMasteryPractice'
+  }));
+
+  const geometry = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth
+  }));
+  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+});
+
 declare global {
   interface Window {
     typingHarness: {
@@ -151,6 +230,7 @@ declare global {
       send(page: string, content?: unknown, options?: Record<string, unknown>): void;
       sendLongRecent(): void;
       sendPending(): void;
+      sendMastery(): void;
       setTheme(theme: 'light' | 'dark'): void;
     };
   }

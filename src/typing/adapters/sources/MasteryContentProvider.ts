@@ -7,7 +7,6 @@ import type {
   SourceRange
 } from '../../domain/content';
 import { preparePracticeContent } from '../../domain/content';
-import { createDeterministicRandom } from '../../domain/generators';
 import type { MasteryEntry } from '../../domain/mastery';
 
 export interface MasteryEntrySource {
@@ -48,13 +47,24 @@ export class MasteryContentProvider implements ContentProvider {
       throw new Error('Mastery practice content requires a positive target length.');
     }
     const entries = (await this.source.list())
-      .filter(entry => entry.key.length > 0)
+      .filter(entry => (
+        entry.key.length > 0
+        && (entry.kind === 'word' || entry.kind === 'codeToken')
+      ))
       .map(entry => structuredClone(entry))
-      .sort((left, right) => left.key.localeCompare(right.key));
+      .sort((left, right) => (
+        left.lastPracticedAt - right.lastPracticedAt
+          || right.score - left.score
+          || left.key.localeCompare(right.key)
+      ));
     if (entries.length === 0) {
       throw new Error('No mastery entries are available yet. Complete a practice first.');
     }
-    const text = selectWeightedEntries(entries, recipe.seed, recipe.length);
+    const selectedKind = entries[0].kind;
+    const selectedEntries = entries
+      .filter(entry => entry.kind === selectedKind)
+      .slice(0, recipe.length);
+    const text = selectedEntries.map(entry => entry.key).join('\n');
     const revisionInput = entries.map(entry => ({
       key: entry.key,
       kind: entry.kind,
@@ -66,9 +76,9 @@ export class MasteryContentProvider implements ContentProvider {
       .update(JSON.stringify(revisionInput), 'utf8')
       .digest('hex')
       .slice(0, 16);
-    const categories = new Set(entries.map(entry => entry.kind));
+    const categories = new Set(selectedEntries.map(entry => entry.kind));
     const category = categories.size === 1
-      ? entries[0].kind
+      ? selectedEntries[0].kind
       : 'mixed';
     return preparePracticeContent(text, {
       sourceRevision: `mastery-v1-${digest}`,
@@ -77,30 +87,4 @@ export class MasteryContentProvider implements ContentProvider {
       range
     });
   }
-}
-
-function selectWeightedEntries(
-  entries: readonly MasteryEntry[],
-  seed: string,
-  targetUnits: number
-): string {
-  const random = createDeterministicRandom(`mastery:${seed}`);
-  const weights = entries.map(entry => Math.max(1, entry.score + entry.wrongCount));
-  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
-  const output: string[] = [];
-  let length = 0;
-  while (length < targetUnits) {
-    let point = random() * totalWeight;
-    let selected = entries[entries.length - 1];
-    for (let index = 0; index < entries.length; index += 1) {
-      point -= weights[index];
-      if (point < 0) {
-        selected = entries[index];
-        break;
-      }
-    }
-    output.push(selected.key);
-    length += Array.from(selected.key).length + (output.length > 1 ? 1 : 0);
-  }
-  return output.join('\n');
 }

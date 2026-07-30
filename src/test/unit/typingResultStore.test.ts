@@ -76,8 +76,8 @@ describe('result projections', () => {
     const restarted = result('result-2', Date.UTC(2026, 6, 24, 10), {
       outcome: 'restarted',
       masteryObservations: [{
-        key: '你',
-        kind: 'grapheme',
+        key: '你好',
+        kind: 'word',
         wrongCount: 1,
         reinforcementCorrectCount: 0
       }]
@@ -100,7 +100,7 @@ describe('result projections', () => {
       { date: '2026-07-24', resultIds: ['result-2'] }
     ]);
     expect((await mastery.refresh()).entries).toEqual([
-      expect.objectContaining({ key: '你', wrongCount: 1 })
+      expect.objectContaining({ key: '你好', wrongCount: 1 })
     ]);
 
     const later = result('result-3', Date.UTC(2026, 6, 25, 10), {
@@ -136,7 +136,10 @@ describe('result projections', () => {
     ]);
     expect((await history.read()).sourceResultIds).toHaveLength(3);
     expect((await daily.read()).days).toHaveLength(3);
-    expect((await mastery.read()).entries[0]).toMatchObject({ key: '你', wrongCount: 1 });
+    expect((await mastery.read()).entries[0]).toMatchObject({
+      key: '你好',
+      wrongCount: 1
+    });
   });
 
   it('commits the immutable result before refreshing derived projections', async () => {

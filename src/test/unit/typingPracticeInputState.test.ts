@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TypingPracticeInputStateMachine,
   createTypingPracticeInputState,
+  resolveSmartQuoteInput,
   restoreTypingPracticeInputState
 } from '../../webview/typingPracticeInputState';
 
@@ -186,6 +187,56 @@ describe('TypingPracticeInputStateMachine', () => {
     }).effects).toEqual([]);
   });
 
+  it('queues replacement input typed while a blocked correction is in flight', () => {
+    const machine = createMachine();
+    let state = machine.dispatch(createTypingPracticeInputState('panel-1'), {
+      type: 'snapshot',
+      revision: 1,
+      status: 'blockedOnError',
+      blockedAttemptId: 'input-1'
+    }).state;
+
+    const correction = machine.dispatch(state, { type: 'backspace' });
+    state = correction.state;
+    const replacement = machine.dispatch(state, {
+      type: 'directInput',
+      text: '”',
+      domChangeSequence: 2
+    });
+    state = replacement.state;
+
+    expect(correction.effects[0]).toMatchObject({
+      message: {
+        type: 'practice/correct',
+        baseRevision: 1,
+        sequence: 1
+      }
+    });
+    expect(replacement.effects).toEqual([]);
+    expect(state.transport.pending).toMatchObject([
+      { type: 'correct', transactionId: 'transaction-1' },
+      { type: 'submit', transactionId: 'transaction-2', text: '”' }
+    ]);
+
+    const corrected = machine.dispatch(state, {
+      type: 'ack',
+      panelInstanceId: 'panel-1',
+      sequence: 1,
+      transactionId: 'transaction-1',
+      outcome: 'applied',
+      currentRevision: 2
+    });
+
+    expect(corrected.effects[0]).toMatchObject({
+      message: {
+        type: 'practice/submit',
+        text: '”',
+        baseRevision: 2,
+        sequence: 2
+      }
+    });
+  });
+
   it('restores transaction ids for a new panel but rebuilds envelopes and sequence', () => {
     const machine = createMachine();
     const sent = machine.dispatch(readyState(machine), {
@@ -203,6 +254,96 @@ describe('TypingPracticeInputStateMachine', () => {
       envelope: undefined
     });
     expect(restored.authority).toEqual({ kind: 'loading' });
+  });
+});
+
+describe('resolveSmartQuoteInput', () => {
+  it('holds an opening probe until the matching closing quote arrives', () => {
+    const opening = resolveSmartQuoteInput('”', '云', '“');
+
+    expect(opening).toEqual({
+      probe: { opening: '“', closing: '”' },
+      discard: 'none'
+    });
+    expect(resolveSmartQuoteInput('”', '云', '”', opening.probe)).toEqual({
+      submitText: '”',
+      discard: 'previousOpening',
+      suppressTrailingClosing: '”'
+    });
+  });
+
+  it('accepts an IME-inserted quote pair as one closing quote', () => {
+    expect(resolveSmartQuoteInput('’', '云', '‘’')).toEqual({
+      submitText: '’',
+      discard: 'insertedOpening',
+      suppressTrailingClosing: '’'
+    });
+  });
+
+  it('drops an auto-closing quote unless it is also the next target', () => {
+    expect(resolveSmartQuoteInput('“', '云', '“”')).toEqual({
+      submitText: '“',
+      discard: 'insertedClosing'
+    });
+    expect(resolveSmartQuoteInput('“', '”', '“”')).toEqual({
+      submitText: '“”',
+      discard: 'none'
+    });
+  });
+
+  it('arms trailing-close suppression for split IME pair events', () => {
+    expect(resolveSmartQuoteInput('“', '云', '“')).toEqual({
+      submitText: '“',
+      discard: 'none',
+      suppressTrailingClosing: '”'
+    });
+    expect(resolveSmartQuoteInput('“', '”', '“')).toEqual({
+      submitText: '“',
+      discard: 'none'
+    });
+  });
+
+  it('does not reinterpret an opening target or unrelated input', () => {
+    expect(resolveSmartQuoteInput('“', '云', 'X')).toEqual({
+      submitText: 'X',
+      discard: 'none'
+    });
+    expect(resolveSmartQuoteInput('云', undefined, '云')).toEqual({
+      submitText: '云',
+      discard: 'none'
+    });
+  });
+
+  it('does not probe an exact closing target', () => {
+    expect(resolveSmartQuoteInput('”', '云', '”')).toEqual({
+      submitText: '”',
+      discard: 'none',
+      suppressTrailingClosing: '”'
+    });
+  });
+
+  it('keeps opening and unrelated targets authoritative', () => {
+    expect(resolveSmartQuoteInput('“', '云', '“')).toEqual({
+      submitText: '“',
+      discard: 'none',
+      suppressTrailingClosing: '”'
+    });
+    expect(resolveSmartQuoteInput('”', '云', 'X')).toEqual({
+      submitText: 'X',
+      discard: 'none'
+    });
+  });
+
+  it('discards a stale probe but preserves the newly typed text', () => {
+    expect(resolveSmartQuoteInput(
+      '云',
+      undefined,
+      '云',
+      { opening: '“', closing: '”' }
+    )).toEqual({
+      submitText: '云',
+      discard: 'previousOpening'
+    });
   });
 });
 

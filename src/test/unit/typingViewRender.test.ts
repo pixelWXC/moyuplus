@@ -45,6 +45,7 @@ describe('Typing View page rendering', () => {
         deleteAfter: Date.now() + 10_000,
         waitingForPractice: false
       }],
+      notice: '请先选择有效的练习素材，再设置本次练习。',
       actions: {
         paste: true,
         importTxt: true,
@@ -66,6 +67,8 @@ describe('Typing View page rendering', () => {
     expect(html).toContain('data-remove-material-id="mine-1"');
     expect(html).toContain('data-undo-material-id="removed-1"');
     expect(html).toContain('已移除“旧素材”');
+    expect(html).toContain('class="empty-guidance materials-guidance" role="status"');
+    expect(html).toContain('请先选择有效的练习素材，再设置本次练习。');
     expect(html).toContain('TXT 导入');
   });
 
@@ -417,19 +420,22 @@ describe('Typing View page rendering', () => {
 
     const masteryHtml = renderTypingPageContent({
       kind: 'mastery',
+      hasPracticeHistory: true,
       totalEntries: 1,
+      batchSize: 1,
+      remainingAfterBatch: 0,
+      latestBatch: null,
       entries: [{
         key: '<script>',
         kind: 'word',
         wrongCount: 4,
-        reinforcementCorrectStreak: 1,
-        lastErrorAt: Date.UTC(2026, 6, 24, 12),
-        score: 3.5
+        lastErrorAt: Date.UTC(2026, 6, 24, 12)
       }]
     });
     expect(masteryHtml).toContain('&lt;script&gt;');
     expect(masteryHtml).not.toContain('<script>');
-    expect(masteryHtml).toContain('错误 4 次');
+    expect(masteryHtml).toContain('累计错误 4 次');
+    expect(masteryHtml).toContain('开始本批 · 1 词');
 
     expect(renderTypingPageContent({
       kind: 'result',

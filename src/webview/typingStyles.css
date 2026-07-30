@@ -223,6 +223,22 @@ h1 {
   cursor: default;
 }
 
+.setup-context {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  min-height: var(--typing-control-height);
+  margin-top: var(--space-2);
+  padding: 5px 7px;
+  border-top: 1px solid var(--typing-border);
+  border-bottom: 1px solid var(--typing-border);
+  color: var(--typing-active-foreground);
+  background: var(--typing-surface-raised);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .typing-content {
   min-width: 0;
   min-height: 240px;
@@ -268,6 +284,10 @@ h1 {
   border-top: 1px solid var(--typing-border);
   border-bottom: 1px solid var(--typing-border);
   overflow-wrap: anywhere;
+}
+
+.materials-guidance {
+  margin-bottom: var(--space-3);
 }
 
 .loading-state {
@@ -775,6 +795,63 @@ h1 {
   text-align: right;
 }
 
+.mastery-summary {
+  display: grid;
+  gap: 3px;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--typing-border);
+}
+
+.mastery-summary > strong {
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mastery-summary > span,
+.mastery-batch-result > span,
+.mastery-queue-heading > span {
+  color: var(--typing-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.mastery-actions {
+  margin-bottom: var(--space-2);
+}
+
+.mastery-batch-result {
+  display: grid;
+  gap: 3px;
+  margin-bottom: var(--space-4);
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--typing-border);
+}
+
+.mastery-batch-result > strong {
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mastery-queue-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.mastery-queue-heading h3 {
+  margin-bottom: var(--space-2);
+  font-size: 11px;
+}
+
+.mastery-empty .empty-guidance {
+  margin-bottom: var(--space-3);
+}
+
 .history-toolbar {
   display: grid;
   gap: var(--space-3);
@@ -921,7 +998,7 @@ h1 {
   }
 
   .page-navigation {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .history-toolbar {
@@ -936,7 +1013,7 @@ h1 {
 
 @container (min-width: 520px) {
   .page-navigation {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .typing-content {
@@ -986,6 +1063,11 @@ h1 {
 
 @media (forced-colors: active) {
   .page-tab.is-current {
+    outline: 1px solid ButtonText;
+    outline-offset: -2px;
+  }
+
+  .setup-context {
     outline: 1px solid ButtonText;
     outline-offset: -2px;
   }

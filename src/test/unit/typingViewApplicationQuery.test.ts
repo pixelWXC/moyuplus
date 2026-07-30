@@ -68,7 +68,6 @@ describe('TypingViewApplicationQuery', () => {
       availablePages: [
         'materials',
         'recent',
-        'setup',
         'live',
         'result',
         'history',
@@ -105,18 +104,58 @@ describe('TypingViewApplicationQuery', () => {
     expect('upsert' in catalog).toBe(false);
   });
 
-  it('returns an explicit placeholder for pages whose query slice is not loaded yet', async () => {
+  it('returns to materials with guidance when setup has no valid draft', async () => {
     const query = new TypingViewApplicationQuery({
       catalog: { list: async () => [] }
     });
 
     await expect(query.shellSnapshot('setup')).resolves.toEqual(expect.objectContaining({
-      activePage: 'setup',
+      activePage: 'materials',
+      availablePages: [
+        'materials',
+        'recent',
+        'live',
+        'result',
+        'history',
+        'mastery'
+      ],
       content: {
-        kind: 'unavailable',
-        page: 'setup'
+        kind: 'materials',
+        library: [],
+        pendingRemovals: [],
+        notice: '请先选择有效的练习素材，再设置本次练习。',
+        actions: {
+          paste: true,
+          importTxt: true,
+          importEpub: true
+        }
       }
     }));
+  });
+
+  it('contains stale setup inspection failures as material guidance', async () => {
+    const draft = new PracticeSetupDraft();
+    draft.selectContent({
+      kind: 'custom',
+      materialId: 'missing-material'
+    });
+    const query = new TypingViewApplicationQuery({
+      catalog: { list: async () => [] },
+      setupDraft: draft,
+      inspectContent: async () => {
+        throw new Error('material is missing');
+      }
+    });
+
+    await expect(query.shellSnapshot('setup')).resolves.toEqual(
+      expect.objectContaining({
+        activePage: 'materials',
+        content: expect.objectContaining({
+          kind: 'materials',
+          notice: '请先选择有效的练习素材，再设置本次练习。'
+        })
+      })
+    );
   });
 
   it('projects the selected setup draft through content inspection and preference defaults', async () => {
@@ -476,8 +515,8 @@ describe('TypingViewApplicationQuery', () => {
           sourceResultIds: ['result-latest'],
           entries: [{
             schemaVersion: 1,
-            key: '的',
-            kind: 'grapheme',
+            key: '练习',
+            kind: 'word',
             contentProfile: { kind: 'chinese', category: 'modernArticle' },
             wrongCount: 4,
             reinforcementCorrectStreak: 1,
@@ -550,14 +589,16 @@ describe('TypingViewApplicationQuery', () => {
     await expect(query.shellSnapshot('mastery')).resolves.toEqual(expect.objectContaining({
       content: {
         kind: 'mastery',
+        hasPracticeHistory: true,
         totalEntries: 1,
+        batchSize: 1,
+        remainingAfterBatch: 0,
+        latestBatch: null,
         entries: [{
-          key: '的',
-          kind: 'grapheme',
+          key: '练习',
+          kind: 'word',
           wrongCount: 4,
-          reinforcementCorrectStreak: 1,
-          lastErrorAt: endedAt,
-          score: 3.5
+          lastErrorAt: endedAt
         }]
       }
     }));
@@ -617,7 +658,11 @@ describe('TypingViewApplicationQuery', () => {
     await expect(query.shellSnapshot('mastery')).resolves.toEqual(expect.objectContaining({
       content: {
         kind: 'mastery',
+        hasPracticeHistory: false,
         totalEntries: 0,
+        batchSize: 0,
+        remainingAfterBatch: 0,
+        latestBatch: null,
         entries: []
       }
     }));

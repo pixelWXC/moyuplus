@@ -43,6 +43,8 @@ export interface TypingViewCommandPort {
     startPosition?: TypingViewStartPosition;
     plan: TypingViewSetupPlan;
   }): PromiseLike<TypingViewPage>;
+  startMasteryPractice(): PromiseLike<TypingViewPage>;
+  adjustMasteryPractice(): PromiseLike<TypingViewPage>;
   resolveSessionConflict(
     resolution: 'returnCurrent' | 'finishAndStart' | 'cancel'
   ): PromiseLike<TypingViewPage>;
@@ -56,6 +58,8 @@ export interface TypingViewCommandPort {
   clearPracticeHistory(): PromiseLike<boolean>;
 }
 
+export type TypingViewErrorReporter = (error: Error) => void | PromiseLike<void>;
+
 const NOOP_COMMANDS: TypingViewCommandPort = {
   selectMaterial: async () => undefined,
   removeMaterial: async () => undefined,
@@ -67,6 +71,8 @@ const NOOP_COMMANDS: TypingViewCommandPort = {
   saveSetupAsDefault: async () => undefined,
   openPracticeEditorSettings: async () => undefined,
   startPractice: async () => 'setup',
+  startMasteryPractice: async () => 'mastery',
+  adjustMasteryPractice: async () => 'mastery',
   resolveSessionConflict: async () => 'setup',
   controlPractice: async () => 'materials',
   recoverPractice: async () => false,
@@ -88,7 +94,10 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly query: TypingViewQueryPort,
-    private readonly commands: TypingViewCommandPort = NOOP_COMMANDS
+    private readonly commands: TypingViewCommandPort = NOOP_COMMANDS,
+    private readonly reportError: TypingViewErrorReporter = async error => {
+      await vscode.window.showErrorMessage(`无法完成打字练习操作：${error.message}`);
+    }
   ) {}
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -103,7 +112,7 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
       enableScripts: true,
       localResourceRoots: [mediaRoot]
     };
-    view.webview.onDidReceiveMessage(value => this.handleMessage(value, view));
+    view.webview.onDidReceiveMessage(value => this.handleMessageSafely(value, view));
     view.onDidDispose(() => {
       if (this.view === view) {
         this.view = undefined;
@@ -179,6 +188,27 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     await this.executeCommand(value, view);
   }
 
+  private async handleMessageSafely(
+    value: unknown,
+    view: vscode.WebviewView
+  ): Promise<void> {
+    try {
+      await this.handleMessage(value, view);
+    } catch (error) {
+      const normalized = error instanceof Error
+        ? error
+        : new Error(String(error));
+      try {
+        await this.reportError(normalized);
+      } catch (reportError) {
+        console.error(
+          'MoyuPlus failed to report a Typing View command error.',
+          reportError
+        );
+      }
+    }
+  }
+
   private async navigate(
     message: Extract<TypingViewToHostMessage, { type: 'navigate' }>,
     view: vscode.WebviewView
@@ -206,6 +236,12 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
         startPosition: message.startPosition,
         plan: message.plan
       });
+      applied = true;
+    } else if (message.type === 'startMasteryPractice') {
+      page = await this.commands.startMasteryPractice();
+      applied = true;
+    } else if (message.type === 'adjustMasteryPractice') {
+      page = await this.commands.adjustMasteryPractice();
       applied = true;
     } else if (message.type === 'resolveSessionConflict') {
       page = await this.commands.resolveSessionConflict(message.resolution);
@@ -289,6 +325,7 @@ export class TypingViewProvider implements vscode.WebviewViewProvider, vscode.Di
     ) {
       return;
     }
+    this.activePage = snapshot.activePage;
     await view.webview.postMessage({
       protocolVersion: TYPING_VIEW_PROTOCOL_VERSION,
       instanceId,

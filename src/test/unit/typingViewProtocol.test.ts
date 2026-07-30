@@ -3,6 +3,7 @@ import {
   TYPING_VIEW_ID,
   TYPING_VIEW_PROTOCOL_VERSION,
   TYPING_VIEW_PAGES,
+  TYPING_VIEW_PRIMARY_PAGES,
   isHostToTypingViewMessage,
   isTypingViewToHostMessage
 } from '../../typing/adapters/view';
@@ -15,11 +16,19 @@ const envelope = {
 describe('Typing View protocol', () => {
   it('owns a distinct view id, protocol version and complete page set', () => {
     expect(TYPING_VIEW_ID).toBe('moyuplus.typingView');
-    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(13);
+    expect(TYPING_VIEW_PROTOCOL_VERSION).toBe(15);
     expect(TYPING_VIEW_PAGES).toEqual([
       'materials',
       'recent',
-      'setup',
+      'live',
+      'result',
+      'history',
+      'mastery',
+      'setup'
+    ]);
+    expect(TYPING_VIEW_PRIMARY_PAGES).toEqual([
+      'materials',
+      'recent',
       'live',
       'result',
       'history',
@@ -273,6 +282,27 @@ describe('Typing View protocol', () => {
     })).toBe(false);
   });
 
+  it('accepts only argument-free mastery start and adjustment requests', () => {
+    for (const [type, revision] of [
+      ['startMasteryPractice', 11],
+      ['adjustMasteryPractice', 12]
+    ] as const) {
+      expect(isTypingViewToHostMessage({
+        ...envelope,
+        type,
+        requestId: `${type}-1`,
+        clientRevision: revision
+      })).toBe(true);
+      expect(isTypingViewToHostMessage({
+        ...envelope,
+        type,
+        requestId: `${type}-unsafe`,
+        clientRevision: revision + 10,
+        batchSize: 200
+      })).toBe(false);
+    }
+  });
+
   it('accepts explicit start and conflict decisions without trusting a client session id', () => {
     const start = {
       ...envelope,
@@ -394,7 +424,7 @@ describe('Typing View protocol', () => {
       snapshotRevision: 4,
       snapshot: {
         activePage: 'live',
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus: 'running',
         pendingResultCount: 0,
         recovery: null,
@@ -576,13 +606,14 @@ describe('Typing View protocol', () => {
       snapshotRevision: 1,
       snapshot: {
         activePage: 'materials',
-        availablePages: [...TYPING_VIEW_PAGES],
+        availablePages: [...TYPING_VIEW_PRIMARY_PAGES],
         activeSessionStatus: null,
         pendingResultCount: 0,
         recovery: null,
         content: {
           kind: 'materials',
           library: [],
+          notice: '请先选择有效的练习素材，再设置本次练习。',
           actions: {
             paste: true,
             importTxt: true,
