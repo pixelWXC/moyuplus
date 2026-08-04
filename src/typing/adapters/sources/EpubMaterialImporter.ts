@@ -10,6 +10,7 @@ import {
   BOOK_SCHEMA_VERSION,
   type BookRecord
 } from '../../../domain/books';
+import { stripImmersiveResourceAnchors } from '../../../domain/immersiveProjection';
 import {
   TYPING_SCHEMA_VERSION,
   inferAdHocContentProfile,
@@ -218,7 +219,7 @@ async function extractPracticeChapter(
 ): Promise<{ text: string; sourceRevision: string }> {
   const safe = await handle.getSection(section.id);
   return {
-    text: normalizeMaterialText(safe.immersiveProjection.text),
+    text: normalizeMaterialText(stripImmersiveResourceAnchors(safe.immersiveProjection)),
     sourceRevision: safe.sourceRevision
   };
 }

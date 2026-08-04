@@ -3,11 +3,22 @@ import { createDefaultImmersiveReaderPreferences } from '../../domain/immersiveR
 import { ImmersiveDecorationPresenter, type ImmersiveDecorationHost } from '../../reader/ImmersiveDecorationPresenter';
 import type { SafeSectionDocument } from '../../adapters/bookAdapter';
 
-function section(text: string): SafeSectionDocument {
+function section(
+  text: string,
+  resource?: { id: string; label: string; startOffset: number; endOffset: number }
+): SafeSectionDocument {
   return {
-    sectionId: 'section', sanitizedHtml: '', localResources: [], sourceRevision: 'revision',
+    sectionId: 'section', sanitizedHtml: '',
+    localResources: resource ? [{ id: resource.id, label: resource.label, mimeType: 'image/png' }] : [],
+    sourceRevision: 'revision',
     immersiveProjection: {
       text, projectionRevision: 'projection',
+      resourceAnchors: resource ? [{
+        resourceId: resource.id,
+        label: resource.label,
+        startOffset: resource.startOffset,
+        endOffset: resource.endOffset
+      }] : [],
       segments: [{ kind: 'identity', sourceStart: 0, sourceEnd: text.length, immersiveStart: 0, immersiveEnd: text.length, safeSourceFloor: 0, safeImmersiveFloor: 0 }]
     },
     locatorSpace: { kind: 'txt', sectionStart: 0, sectionEnd: text.length }
@@ -64,6 +75,39 @@ describe('ImmersiveDecorationPresenter', () => {
     expect(harness.disposedTypes).toBe(1);
   });
 
+  it('keeps image labels in the normal immersive decoration and attaches a correlated hover action', async () => {
+    const harness = createHost();
+    const label = '查看图片：Cover';
+    const text = `正文 ${label} 继续`;
+    const startOffset = text.indexOf(label);
+    const presenter = new ImmersiveDecorationPresenter(
+      { ...createDefaultImmersiveReaderPreferences(), visualLines: 1, graphemesPerLine: 100 },
+      harness.host
+    );
+    const editor = harness.editor(['const x = 1;'], 0);
+    await presenter.activate({
+      bookId: 'book', format: 'epub', sections: [],
+      section: section(text, {
+        id: 'image-opaque-id', label,
+        startOffset, endOffset: startOffset + label.length
+      }),
+      localOffset: 0
+    });
+
+    harness.activate(editor);
+    await harness.settle();
+
+    expect(editor.applied.at(-1)).toEqual([{
+      text,
+      hover: {
+        actions: [{
+          label,
+          request: { bookId: 'book', sectionId: 'section', resourceId: 'image-opaque-id' }
+        }]
+      }
+    }]);
+  });
+
 });
 
 function createHost() {
@@ -92,6 +136,7 @@ function createHost() {
     },
     themeColor: id => id,
     createRange: (line, character) => ({ line, character }),
+    createImageHover: actions => ({ actions }),
     onDidChangeActiveTextEditor: callback => disposable(activeCallbacks, callback as Callback<TestEditor | undefined>),
     onDidChangeTextEditorSelection: callback => disposable(selectionCallbacks, callback as Callback<{ textEditor: TestEditor }>),
     onDidChangeTextDocument: callback => disposable(documentCallbacks, callback as Callback<{ document: object }>),
@@ -114,7 +159,7 @@ class TestEditor {
     lineCount: number;
     lineAt(line: number): { text: string };
   };
-  readonly applied: Array<Array<{ text: string }>> = [];
+  readonly applied: Array<Array<{ text: string; hover?: unknown }>> = [];
   clearCalls = 0;
 
   constructor(
@@ -130,8 +175,11 @@ class TestEditor {
     };
   }
 
-  setDecorations(_type: unknown, options: Array<{ renderOptions?: { after?: { contentText?: string } } }>): void {
+  setDecorations(_type: unknown, options: Array<{ hoverMessage?: unknown; renderOptions?: { after?: { contentText?: string } } }>): void {
     if (options.length === 0) this.clearCalls += 1;
-    this.applied.push(options.map(option => ({ text: option.renderOptions?.after?.contentText ?? '' })));
+    this.applied.push(options.map(option => ({
+      text: option.renderOptions?.after?.contentText ?? '',
+      ...(option.hoverMessage ? { hover: option.hoverMessage } : {})
+    })));
   }
 }

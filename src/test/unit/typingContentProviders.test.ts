@@ -138,7 +138,11 @@ describe('typing content providers and imports', () => {
         { id: 'chapter-1', title: '一', order: 0, progressionWeight: 3 },
         { id: 'chapter-2', title: '二', order: 1, progressionWeight: 3 }
       ]),
-      getSection: vi.fn(async (id: string) => safeSection(id, id === 'chapter-1' ? '第一章' : '第二章')),
+      getSection: vi.fn(async (id: string) => safeSection(
+        id,
+        id === 'chapter-1' ? '第一章查看图片：Cover' : '第二章',
+        id === 'chapter-1' ? '查看图片：Cover' : undefined
+      )),
       dispose
     } as unknown as BookHandle;
     const adapter = {
@@ -307,7 +311,8 @@ function material(id: string, revision: string): PracticeMaterialRecord {
   };
 }
 
-function safeSection(id: string, text: string) {
+function safeSection(id: string, text: string, resourceLabel?: string) {
+  const resourceStart = resourceLabel ? text.indexOf(resourceLabel) : -1;
   return {
     sectionId: id,
     sanitizedHtml: '<p>ignored</p>',
@@ -316,6 +321,10 @@ function safeSection(id: string, text: string) {
     immersiveProjection: {
       text,
       projectionRevision: 'fixture-v1',
+      resourceAnchors: resourceStart >= 0 && resourceLabel ? [{
+        resourceId: 'image-id', label: resourceLabel,
+        startOffset: resourceStart, endOffset: resourceStart + resourceLabel.length
+      }] : [],
       segments: [{
         kind: 'identity',
         sourceStart: 0,

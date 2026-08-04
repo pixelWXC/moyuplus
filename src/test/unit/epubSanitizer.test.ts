@@ -16,8 +16,11 @@ describe('sanitizeEpubSection', () => {
     expect(result.html).toContain('class="moyuplus-image-link"');
     expect(result.resources).toEqual([{ id: 'image-opaque-id', mimeType: 'image/png', label: 'Cover' }]);
     expect(result.immersiveProjection.text).toContain('Hi');
-    expect(result.immersiveProjection.text).not.toContain('查看图片');
-    expect(result.immersiveProjection.segments.some(segment => segment.kind === 'hole')).toBe(true);
+    expect(result.immersiveProjection.text).toContain('查看图片：Cover');
+    expect(result.immersiveProjection.resourceAnchors).toEqual([
+      expect.objectContaining({ resourceId: 'image-opaque-id', label: '查看图片：Cover' })
+    ]);
+    expect(result.immersiveProjection.segments.some(segment => segment.kind === 'anchor')).toBe(true);
   });
 
   it('keeps semantic structure, navigation metadata and UTF-16 text order', () => {
@@ -50,7 +53,7 @@ describe('sanitizeEpubSection', () => {
     expect(result.immersiveProjection.text).toContain('• 条目');
     expect(result.immersiveProjection.text).toContain("const 值 = '😀';");
     expect(result.immersiveProjection.text).toMatch(/列\s*\|\s*值/);
-    expect(result.immersiveProjection.projectionRevision).toBe('immersive-projection-v1');
+    expect(result.immersiveProjection.projectionRevision).toBe('immersive-projection-v2');
   });
 
   it('rewrites internal targets structurally and leaves unsafe or unknown links inert', () => {

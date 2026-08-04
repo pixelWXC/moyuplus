@@ -24,7 +24,7 @@ function section(id: string, start = 0, text = 'abcdefgh'): SafeSectionDocument 
     localResources: [],
     sourceRevision: 'txt-revision',
     immersiveProjection: {
-      text, projectionRevision: 'txt-identity-v1',
+      text, projectionRevision: 'txt-identity-v1', resourceAnchors: [],
       segments: [{ kind: 'identity', sourceStart: 0, sourceEnd: text.length, immersiveStart: 0, immersiveEnd: text.length, safeSourceFloor: 0, safeImmersiveFloor: 0 }]
     },
     locatorSpace: { kind: 'txt', sectionStart: start, sectionEnd: start + text.length }
@@ -109,6 +109,51 @@ describe('ReaderSessionCoordinator', () => {
     expect(saved.at(-1)?.locator).toEqual({
       kind: 'txt', sectionId: 'second', progression: 0.2, offset: 12, offsetSpace: 'book'
     });
+  });
+
+  it('opens only a current immersive image through the existing preview service', async () => {
+    const value = section('a-section', 0, '查看图片：Cover');
+    value.localResources = [{ id: 'image-opaque-id', mimeType: 'image/png', label: 'Cover' }];
+    const readResource = vi.fn(async () => ({
+      bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png', label: 'Cover'
+    }));
+    const customHandle: BookHandle = { ...handle('a'), getSection: async () => value, readResource };
+    const openImagePreview = vi.fn(async () => true);
+    const coordinator = createCoordinator(async () => customHandle, [], presenter(), { openImagePreview });
+    await coordinator.openImmersiveBook('a');
+
+    await expect(coordinator.openImmersiveImage({
+      bookId: 'a', sectionId: 'a-section', resourceId: 'image-opaque-id'
+    })).resolves.toBe(true);
+    await expect(coordinator.openImmersiveImage({
+      bookId: 'a', sectionId: 'a-section', resourceId: 'unknown-image'
+    })).resolves.toBe(false);
+
+    expect(readResource).toHaveBeenCalledOnce();
+    expect(openImagePreview).toHaveBeenCalledOnce();
+    await coordinator.dispose();
+  });
+
+  it('drops an immersive image response after the session has stopped', async () => {
+    const pending = deferred<{ bytes: Uint8Array; mimeType: string; label: string }>();
+    const value = section('a-section', 0, '查看图片：Cover');
+    value.localResources = [{ id: 'image-opaque-id', mimeType: 'image/png', label: 'Cover' }];
+    const readResource = vi.fn(() => pending.promise);
+    const customHandle: BookHandle = { ...handle('a'), getSection: async () => value, readResource };
+    const openImagePreview = vi.fn(async () => true);
+    const coordinator = createCoordinator(async () => customHandle, [], presenter(), { openImagePreview });
+    await coordinator.openImmersiveBook('a');
+
+    const opening = coordinator.openImmersiveImage({
+      bookId: 'a', sectionId: 'a-section', resourceId: 'image-opaque-id'
+    });
+    await vi.waitFor(() => expect(readResource).toHaveBeenCalledOnce());
+    await coordinator.stopImmersive();
+    pending.resolve({ bytes: new Uint8Array([1]), mimeType: 'image/png', label: 'Cover' });
+
+    await expect(opening).resolves.toBe(false);
+    expect(openImagePreview).not.toHaveBeenCalled();
+    await coordinator.dispose();
   });
 
   it('stops immersive reading without waiting for a startup notification', async () => {

@@ -10,6 +10,10 @@ import { ReadingProgressStore } from './storage/readingProgressStore';
 import { LibraryService } from './library/libraryService';
 import { ReaderSessionCoordinator } from './reader/ReaderSessionCoordinator';
 import { ImmersiveDecorationPresenter } from './reader/ImmersiveDecorationPresenter';
+import {
+  OPEN_IMMERSIVE_IMAGE_COMMAND_ID,
+  isImmersiveImageOpenRequest
+} from './reader/immersiveImageCommand';
 import { migrateV1ToV2 } from './storage/migrations/migrateV1ToV2';
 import { ReaderPreferencesStore } from './storage/readerPreferencesStore';
 import { ImmersiveReaderPreferencesStore } from './storage/immersiveReaderPreferencesStore';
@@ -772,6 +776,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerLibraryCommands(context, library);
   context.subscriptions.push(
     settingsPanel,
+    vscode.commands.registerCommand(OPEN_IMMERSIVE_IMAGE_COMMAND_ID, async (request: unknown) => {
+      if (!isImmersiveImageOpenRequest(request)) return false;
+      return readerController.openImmersiveImage(request);
+    }),
     vscode.commands.registerCommand(OPEN_SETTINGS_COMMAND_ID, () => {
       readerController.suspendImmersive();
       settingsPanel.open(readerController.presentationMode === 'immersive' ? 'immersive' : 'reader');

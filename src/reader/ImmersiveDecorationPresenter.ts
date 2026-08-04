@@ -3,6 +3,10 @@ import { findPreviousImmersivePageStart, paginateImmersiveText, type ImmersivePa
 import { normalizeImmersiveReaderPreferences, type ImmersiveReaderPreferences } from '../domain/immersiveReaderPreferences';
 import type { SafeSectionDocument } from '../adapters/bookAdapter';
 import type { ImmersiveReaderPresenter, PresenterPageMove, ReaderPresenterActivation } from './readerPresenter';
+import {
+  OPEN_IMMERSIVE_IMAGE_COMMAND_ID,
+  type ImmersiveImageOpenRequest
+} from './immersiveImageCommand';
 
 interface DisposableLike { dispose(): void }
 interface DecorationTypeLike extends DisposableLike {}
@@ -22,6 +26,7 @@ export interface ImmersiveDecorationHost {
   createDecorationType(options: unknown): DecorationTypeLike;
   themeColor(id: string): unknown;
   createRange(line: number, character: number): unknown;
+  createImageHover(actions: readonly ImmersiveImageHoverAction[]): unknown;
   onDidChangeActiveTextEditor(callback: (editor: EditorLike | undefined) => void): DisposableLike;
   onDidChangeTextEditorSelection(callback: (event: { textEditor: EditorLike }) => void): DisposableLike;
   onDidChangeTextDocument(callback: (event: { document: object }) => void): DisposableLike;
@@ -30,9 +35,15 @@ export interface ImmersiveDecorationHost {
   cancelScheduled(token: unknown): void;
 }
 
+export interface ImmersiveImageHoverAction {
+  label: string;
+  request: ImmersiveImageOpenRequest;
+}
+
 export class ImmersiveDecorationPresenter implements ImmersiveReaderPresenter {
   readonly mode = 'immersive' as const;
   private preferences: ImmersiveReaderPreferences;
+  private bookId?: string;
   private section?: SafeSectionDocument;
   private localOffset = 0;
   private currentPage?: ImmersivePage;
@@ -52,6 +63,7 @@ export class ImmersiveDecorationPresenter implements ImmersiveReaderPresenter {
 
   async activate(snapshot: ReaderPresenterActivation): Promise<void> {
     await this.dispose();
+    this.bookId = snapshot.bookId;
     this.section = snapshot.section;
     this.localOffset = snapshot.localOffset;
     this.history = [];
@@ -129,6 +141,7 @@ export class ImmersiveDecorationPresenter implements ImmersiveReaderPresenter {
     this.decorationType?.dispose();
     this.decorationType = undefined;
     this.section = undefined;
+    this.bookId = undefined;
     this.currentPage = undefined;
     this.history = [];
     this.localOffset = 0;
@@ -187,8 +200,11 @@ export class ImmersiveDecorationPresenter implements ImmersiveReaderPresenter {
     const decorations = page.lines.map((text, index) => {
       const line = anchor + index;
       const character = editor.document.lineAt(line).text.length;
+      const lineRange = page.lineRanges[index];
+      const imageActions = lineRange ? this.imageActionsForRange(section, lineRange) : [];
       return {
         range: this.host.createRange(line, character),
+        ...(imageActions.length > 0 ? { hoverMessage: this.host.createImageHover(imageActions) } : {}),
         renderOptions: { after: { contentText: text } }
       };
     });
@@ -201,6 +217,20 @@ export class ImmersiveDecorationPresenter implements ImmersiveReaderPresenter {
       this.displayState = 'suspended';
       return undefined;
     }
+  }
+
+  private imageActionsForRange(
+    section: SafeSectionDocument,
+    range: { startOffset: number; endOffset: number }
+  ): ImmersiveImageHoverAction[] {
+    const bookId = this.bookId;
+    if (!bookId) return [];
+    return section.immersiveProjection.resourceAnchors
+      .filter(anchor => anchor.startOffset < range.endOffset && anchor.endOffset > range.startOffset)
+      .map(anchor => ({
+        label: anchor.label,
+        request: { bookId, sectionId: section.sectionId, resourceId: anchor.resourceId }
+      }));
   }
 
   private clearEditor(): void {
@@ -249,6 +279,7 @@ export function createVSCodeDecorationHost(): ImmersiveDecorationHost {
     createDecorationType: options => vscode.window.createTextEditorDecorationType(options as vscode.DecorationRenderOptions) as unknown as DecorationTypeLike,
     themeColor: id => new vscode.ThemeColor(id),
     createRange: (line, character) => new vscode.Range(line, character, line, character),
+    createImageHover: actions => createImageHover(actions),
     onDidChangeActiveTextEditor: callback => vscode.window.onDidChangeActiveTextEditor(editor => callback(editor as unknown as EditorLike | undefined)),
     onDidChangeTextEditorSelection: callback => vscode.window.onDidChangeTextEditorSelection(event => callback({ textEditor: event.textEditor as unknown as EditorLike })),
     onDidChangeTextDocument: callback => vscode.workspace.onDidChangeTextDocument(event => callback({ document: event.document })),
@@ -256,4 +287,16 @@ export function createVSCodeDecorationHost(): ImmersiveDecorationHost {
     schedule: (callback, delay) => setTimeout(callback, delay),
     cancelScheduled: token => clearTimeout(token as ReturnType<typeof setTimeout>)
   };
+}
+
+function createImageHover(actions: readonly ImmersiveImageHoverAction[]): vscode.MarkdownString {
+  const hover = new vscode.MarkdownString();
+  actions.forEach((action, index) => {
+    if (index > 0) hover.appendMarkdown('\n\n');
+    hover.appendText(action.label);
+    const argumentsJson = encodeURIComponent(JSON.stringify([action.request]));
+    hover.appendMarkdown(` · [打开图片](command:${OPEN_IMMERSIVE_IMAGE_COMMAND_ID}?${argumentsJson})`);
+  });
+  hover.isTrusted = { enabledCommands: [OPEN_IMMERSIVE_IMAGE_COMMAND_ID] };
+  return hover;
 }

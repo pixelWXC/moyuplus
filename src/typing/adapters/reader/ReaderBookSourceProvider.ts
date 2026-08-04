@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { BookAdapter, BookHandle, SectionRef } from '../../../adapters/bookAdapter';
 import type { BookFormat, BookRecord } from '../../../domain/books';
+import { stripImmersiveResourceAnchors } from '../../../domain/immersiveProjection';
 import {
   inferAdHocContentProfile,
   normalizeMaterialText,
@@ -137,7 +138,7 @@ async function readSections(
   const loaded: Array<{ id: string; revision: string; text: string }> = [];
   for (const section of sections) {
     const document = await handle.getSection(section.id);
-    const text = normalizeMaterialText(document.immersiveProjection.text);
+    const text = normalizeMaterialText(stripImmersiveResourceAnchors(document.immersiveProjection));
     if (text.length === 0) continue;
     loaded.push({
       id: section.id,

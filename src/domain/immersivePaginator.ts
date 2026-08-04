@@ -8,6 +8,7 @@ export interface ImmersivePage {
   startOffset: number;
   endOffset: number;
   lines: string[];
+  lineRanges: Array<{ startOffset: number; endOffset: number }>;
 }
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -20,13 +21,17 @@ export function paginateImmersiveText(
   const startOffset = clampBackwardToGraphemeBoundary(text, requestedStart);
   const lineLimit = clampInteger(Math.min(options.visualLines, options.availableLines), 0, 1000);
   const graphemeLimit = clampInteger(options.graphemesPerLine, 1, 10000);
-  if (startOffset >= text.length || lineLimit === 0) return { startOffset, endOffset: startOffset, lines: [] };
+  if (startOffset >= text.length || lineLimit === 0) {
+    return { startOffset, endOffset: startOffset, lines: [], lineRanges: [] };
+  }
 
   const segments = [...segmenter.segment(text.slice(startOffset))];
   const lines: string[] = [];
+  const lineRanges: ImmersivePage['lineRanges'] = [];
   let current = '';
   let count = 0;
   let consumed = 0;
+  let lineStart = 0;
   let lineEndedAtLimit = false;
 
   for (const item of segments) {
@@ -35,9 +40,13 @@ export function paginateImmersiveText(
     const isBreak = value === '\n' || value === '\r' || value === '\r\n';
     if (isBreak) {
       consumed = item.index + value.length;
-      if (current.length > 0 || !lineEndedAtLimit) lines.push(current);
+      if (current.length > 0 || !lineEndedAtLimit) {
+        lines.push(current);
+        lineRanges.push({ startOffset: startOffset + lineStart, endOffset: startOffset + item.index });
+      }
       current = '';
       count = 0;
+      lineStart = consumed;
       lineEndedAtLimit = false;
       continue;
     }
@@ -46,15 +55,25 @@ export function paginateImmersiveText(
     consumed = item.index + value.length;
     if (count >= graphemeLimit) {
       lines.push(current);
+      lineRanges.push({ startOffset: startOffset + lineStart, endOffset: startOffset + consumed });
       current = '';
       count = 0;
+      lineStart = consumed;
       lineEndedAtLimit = true;
     } else {
       lineEndedAtLimit = false;
     }
   }
-  if (lines.length < lineLimit && current.length > 0) lines.push(current);
-  return { startOffset, endOffset: startOffset + consumed, lines: lines.slice(0, lineLimit) };
+  if (lines.length < lineLimit && current.length > 0) {
+    lines.push(current);
+    lineRanges.push({ startOffset: startOffset + lineStart, endOffset: startOffset + consumed });
+  }
+  return {
+    startOffset,
+    endOffset: startOffset + consumed,
+    lines: lines.slice(0, lineLimit),
+    lineRanges: lineRanges.slice(0, lineLimit)
+  };
 }
 
 export function findPreviousImmersivePageStart(

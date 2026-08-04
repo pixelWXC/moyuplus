@@ -14,6 +14,10 @@ describe('immersive paginator', () => {
       availableLines: 2
     });
     expect(page.lines).toEqual(['Á👩‍💻', '😀中']);
+    expect(page.lineRanges).toEqual([
+      { startOffset: 0, endOffset: 'Á👩‍💻'.length },
+      { startOffset: 'Á👩‍💻'.length, endOffset: 'Á👩‍💻😀中'.length }
+    ]);
     expect(text.slice(page.startOffset, page.endOffset)).toBe('Á👩‍💻😀中');
     expect(clampBackwardToGraphemeBoundary(text, 1)).toBe(0);
   });
@@ -25,6 +29,10 @@ describe('immersive paginator', () => {
       availableLines: 2
     });
     expect(page.lines).toEqual(['abcd', 'efgh']);
+    expect(page.lineRanges).toEqual([
+      { startOffset: 0, endOffset: 4 },
+      { startOffset: 4, endOffset: 8 }
+    ]);
     expect(page.endOffset).toBe(8);
   });
 

@@ -42,6 +42,7 @@ import {
 import { BOOK_LIBRARY_KEY, READER_V2_MIGRATION_KEY, TXT_LIBRARY_KEY } from '../../storage/storageKeys';
 import { TOGGLE_GIT_LOG_COMMAND_ID } from '../../git/gitLogModeCoordinator';
 import { IMAGE_PREVIEW_VIEW_TYPE } from '../../reader/imagePreviewService';
+import { OPEN_IMMERSIVE_IMAGE_COMMAND_ID } from '../../reader/immersiveImageCommand';
 import { OPEN_SETTINGS_COMMAND_ID, SETTINGS_PANEL_VIEW_TYPE } from '../../settings/MoyuPlusSettingsPanel';
 import {
   TYPING_VIEW_ID,
@@ -105,6 +106,7 @@ describe('extension activation', () => {
       IMPORT_BOOK_COMMAND_ID,
       REMOVE_BOOK_COMMAND_ID,
       RELOCATE_BOOK_COMMAND_ID,
+      OPEN_IMMERSIVE_IMAGE_COMMAND_ID,
       OPEN_SETTINGS_COMMAND_ID,
       NEXT_READER_PAGE_COMMAND_ID,
       PREVIOUS_READER_PAGE_COMMAND_ID,

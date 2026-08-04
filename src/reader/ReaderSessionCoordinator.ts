@@ -10,6 +10,7 @@ import type { BookLibraryStore } from '../storage/bookLibraryStore';
 import type { ReadingProgressStore } from '../storage/readingProgressStore';
 import { READER_PROTOCOL_VERSION, type ExtensionToReaderV2Message } from './readerMessages';
 import type { ImmersiveReaderPresenter, ReaderPresentationMode } from './readerPresenter';
+import type { ImmersiveImageOpenRequest } from './immersiveImageCommand';
 
 export interface ReaderSessionCoordinatorOptions {
   createRequestId?: () => string;
@@ -219,6 +220,24 @@ export class ReaderSessionCoordinator {
       const opened = await this.options.openImagePreview?.(payload);
       if (opened !== true) await this.emitImageFailure(request);
     } catch { await this.emitImageFailure(request); }
+  }
+
+  async openImmersiveImage(request: ImmersiveImageOpenRequest): Promise<boolean> {
+    const handle = this.handle;
+    const section = this.currentSection;
+    if (!handle || !section || this.mode !== 'immersive'
+      || request.bookId !== this.book?.id || request.sectionId !== section.sectionId
+      || !this.activeResources.has(request.resourceId)) return false;
+    try {
+      const payload = await handle.readResource(request.sectionId, request.resourceId);
+      if (handle !== this.handle || section !== this.currentSection || this.mode !== 'immersive') return false;
+      const opened = await this.options.openImagePreview?.(payload);
+      if (opened === true) return true;
+    } catch {
+      if (handle !== this.handle || section !== this.currentSection || this.mode !== 'immersive') return false;
+    }
+    await this.options.showInformation?.('图片无法打开');
+    return false;
   }
 
   reportLayout(locator: ReadingLocator, _bookProgression: number): void {

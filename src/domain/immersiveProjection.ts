@@ -12,10 +12,33 @@ export interface ProjectionSegment {
   safeImmersiveFloor: number;
 }
 
+export interface ImmersiveResourceAnchor {
+  resourceId: string;
+  label: string;
+  startOffset: number;
+  endOffset: number;
+}
+
 export interface ImmersiveTextProjection {
   text: string;
   segments: ProjectionSegment[];
+  resourceAnchors: ImmersiveResourceAnchor[];
   projectionRevision: string;
+}
+
+export function stripImmersiveResourceAnchors(projection: ImmersiveTextProjection): string {
+  if (projection.resourceAnchors.length === 0) return projection.text;
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const anchor of [...projection.resourceAnchors].sort((left, right) => left.startOffset - right.startOffset)) {
+    const start = clampOffset(anchor.startOffset, projection.text.length);
+    const end = clampOffset(anchor.endOffset, projection.text.length);
+    if (end <= cursor || end <= start) continue;
+    if (start > cursor) chunks.push(projection.text.slice(cursor, start));
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < projection.text.length) chunks.push(projection.text.slice(cursor));
+  return chunks.join('');
 }
 
 export function mapSourceOffsetToImmersive(

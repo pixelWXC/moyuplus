@@ -2,6 +2,25 @@ export interface Disposable {
   dispose(): void;
 }
 
+export class MarkdownString {
+  value: string;
+  isTrusted?: boolean | { enabledCommands: readonly string[] };
+
+  constructor(value = '') {
+    this.value = value;
+  }
+
+  appendText(value: string): this {
+    this.value += value.replace(/[\\`*_{}\[\]()<>#+.!|\-]/g, '\\$&');
+    return this;
+  }
+
+  appendMarkdown(value: string): this {
+    this.value += value;
+    return this;
+  }
+}
+
 export const FileType = {
   Unknown: 0,
   File: 1,

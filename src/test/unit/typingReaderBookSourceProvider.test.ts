@@ -76,7 +76,8 @@ function createProvider() {
       sectionId,
       sectionId === 'chapter-1'
         ? '第一章 Reader bridge'
-        : '第二章 Typing practice'
+        : '第二章 Typing practice查看图片：Cover',
+      sectionId === 'chapter-2' ? '查看图片：Cover' : undefined
     )),
     dispose
   } as unknown as BookHandle & {
@@ -116,7 +117,8 @@ function book(): BookRecord {
   };
 }
 
-function safeSection(sectionId: string, text: string) {
+function safeSection(sectionId: string, text: string, resourceLabel?: string) {
+  const resourceStart = resourceLabel ? text.indexOf(resourceLabel) : -1;
   return {
     sectionId,
     title: sectionId,
@@ -126,6 +128,10 @@ function safeSection(sectionId: string, text: string) {
     immersiveProjection: {
       text,
       projectionRevision: 'fixture-v1',
+      resourceAnchors: resourceStart >= 0 && resourceLabel ? [{
+        resourceId: 'image-id', label: resourceLabel,
+        startOffset: resourceStart, endOffset: resourceStart + resourceLabel.length
+      }] : [],
       segments: []
     },
     locatorSpace: {

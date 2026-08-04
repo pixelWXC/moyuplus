@@ -33,7 +33,12 @@ const BLOCKS = new Set(['article', 'section', 'header', 'footer', 'h1', 'h2', 'h
 function createImmersiveProjection(body: any): ImmersiveTextProjection {
   const builder = new ProjectionBuilder();
   for (const child of body?.childNodes ?? []) projectNode(child, builder, false);
-  return { text: builder.text, segments: builder.segments, projectionRevision: 'immersive-projection-v1' };
+  return {
+    text: builder.text,
+    segments: builder.segments,
+    resourceAnchors: builder.resourceAnchors,
+    projectionRevision: 'immersive-projection-v2'
+  };
 }
 
 function projectNode(node: any, builder: ProjectionBuilder, inPre: boolean): void {
@@ -47,7 +52,10 @@ function projectNode(node: any, builder: ProjectionBuilder, inPre: boolean): voi
     return;
   }
   if (tag === 'button' && (attr(node, 'class') ?? '').split(/\s+/).includes('moyuplus-image-link')) {
-    builder.skipSourceText(nodeText(node));
+    const resourceId = attr(node, 'data-moyuplus-resource-id');
+    const label = nodeText(node);
+    if (resourceId && label) builder.appendResource(label, resourceId);
+    else builder.skipSourceText(label);
     return;
   }
   if (tag === 'nav' || (tag === 'a' && /^[↩↪←↑#\s]+$/u.test(nodeText(node)))) {
@@ -63,6 +71,7 @@ function projectNode(node: any, builder: ProjectionBuilder, inPre: boolean): voi
 
 class ProjectionBuilder {
   readonly segments: ProjectionSegment[] = [];
+  readonly resourceAnchors: ImmersiveTextProjection['resourceAnchors'] = [];
   private chunks: string[] = [];
   private sourceOffset = 0;
   private immersiveOffset = 0;
@@ -89,6 +98,19 @@ class ProjectionBuilder {
     const start = this.sourceOffset;
     this.sourceOffset += value.length;
     this.pushEmpty('hole', start, this.sourceOffset, start, this.immersiveOffset);
+  }
+
+  appendResource(value: string, resourceId: string): void {
+    const sourceStart = this.sourceOffset;
+    const immersiveStart = this.immersiveOffset;
+    this.sourceOffset += value.length;
+    this.push('anchor', sourceStart, this.sourceOffset, value, sourceStart, immersiveStart);
+    this.resourceAnchors.push({
+      resourceId,
+      label: value,
+      startOffset: immersiveStart,
+      endOffset: this.immersiveOffset
+    });
   }
 
   appendSourceText(value: string, preserveWhitespace: boolean): void {

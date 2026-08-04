@@ -133,7 +133,7 @@ MoyuPlus 默认遵循以下边界：
 项目根目录提供了已构建的 VSIX。可在 VS Code 中打开扩展视图，选择 **Views and More Actions → Install from VSIX...**，然后选择对应文件；也可以使用命令行：
 
 ```bash
-code --install-extension ./moyuplus-0.3.1.vsix
+code --install-extension ./moyuplus-0.3.2.vsix
 ```
 
 MoyuPlus 要求 VS Code `1.92.0` 或更高版本。
